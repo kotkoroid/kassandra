@@ -1,0 +1,18 @@
+# Operating System
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+tsbuild/
+
+# Nx
+.nx/
+
+# Alchemy
+.alchemy/
+
+# Agents
+.claude/

@@ -1,5 +1,7 @@
 # Kassandra
 
+A browser-based game built with [Svelte](https://svelte.dev/), [Threlte](https://threlte.xyz/), and [Three.js](https://threejs.org/).
+
 ## License
 
 Kassandra is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later).
