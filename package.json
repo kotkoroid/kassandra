@@ -10,7 +10,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "alchemy dev",
+    "dev": "bun scripts/dev.ts",
     "graph": "nx graph",
     "types:check": "nx run-many -t types:check",
     "format": "vp fmt",

@@ -1,6 +1,7 @@
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
+import { Assets } from './Assets';
 
 const mime: Record<string, string> = {
   html: 'text/html; charset=utf-8',
@@ -37,19 +38,30 @@ const withContentType = (response: Response, pathname: string): Response => {
 
 export default Cloudflare.Worker(
   'Worker',
-  {
-    main: import.meta.path,
-    assets: {
-      directory: './applications/game/dist',
-      config: {
-        htmlHandling: 'auto-trailing-slash',
-        notFoundHandling: 'single-page-application',
+  // Yielding Assets here ties the Worker's asset manifest to the
+  // Build resource's output hash. When Build re-runs vite and the
+  // output hash changes, the Worker's plan re-evaluates against the
+  // new directory instead of trying to upload stale filenames.
+  Effect.gen(function* () {
+    const build = yield* Assets;
+    return {
+      main: import.meta.path,
+      assets: {
+        path: build.outdir,
+        hash: build.hash,
+        config: {
+          htmlHandling: 'auto-trailing-slash' as const,
+          notFoundHandling: 'single-page-application' as const,
+        },
       },
-    },
-    bindings: {
-      ASSETS: { kind: 'Cloudflare.Workers.Assets' } satisfies Cloudflare.Assets,
-    },
-  },
+      // TODO: Comment this for successfull deploy
+      bindings: {
+        ASSETS: {
+          kind: 'Cloudflare.Workers.Assets',
+        } satisfies Cloudflare.Assets,
+      },
+    };
+  }),
   Effect.succeed({
     fetch: Effect.gen(function* () {
       const env = yield* Cloudflare.WorkerEnvironment;
@@ -64,7 +76,9 @@ export default Cloudflare.Worker(
       // Content-Type ourselves so ES modules execute.
       const fetchAsset = (target: string) =>
         Effect.promise(async () => {
-          const res = await env['ASSETS'].fetch(new Request(new URL(target, url), request));
+          const res = await env['ASSETS'].fetch(
+            new Request(new URL(target, url), request),
+          );
           return withContentType(res, target);
         });
 

@@ -1,7 +1,6 @@
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
-import { Assets } from './applications/game/src/Assets.ts';
 import Worker from './applications/game/src/Worker.ts';
 
 export default Alchemy.Stack(
@@ -11,7 +10,6 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    yield* Assets;
     const worker = yield* Worker;
 
     return {
