@@ -1,0 +1,16 @@
+// Loot tables keyed by MonsterId. Each entry maps an ItemId to its
+// independent drop chance in percent (0–100). On kill the engine
+// rolls every line of the matching table separately, so the values
+// are *not* weights — a 10/1 row gives a 10% chance for the first
+// item AND a 1% chance for the second, both rollable in the same
+// kill.
+{
+  "MONSTER000001": {
+    "ITEM000001": 10,
+    "ITEM000002": 1
+  },
+  "MONSTER000002": {
+    "ITEM000001": 50,
+    "ITEM000002": 20
+  }
+}

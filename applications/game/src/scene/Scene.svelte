@@ -2,13 +2,19 @@
   import { T, useTask } from '@threlte/core';
   import { onMount } from 'svelte';
   import {
+    AmbientLight,
+    Color,
     DirectionalLight,
+    Fog,
     MeshStandardMaterial,
     PerspectiveCamera,
     Vector3,
   } from 'three';
+  import { CITY_RADIUS, CITY_X, CITY_Z, isInCity } from '../city';
   import { death } from '../death.svelte';
-  import { player, STAMINA_MAX } from '../state.svelte';
+  import { getEffectiveAttackSpeed, player, STAMINA_MAX } from '../state.svelte';
+  import { currentHour, CYCLE_SECONDS, isNight, time } from '../time.svelte';
+  import Beasts from './Beasts.svelte';
   import Death from './Death.svelte';
   import Enemies from './Enemies.svelte';
   import Healers from './Healers.svelte';
@@ -43,8 +49,11 @@
   const pitchMin = 0.15;
   const pitchMax = Math.PI / 2 - 0.1;
 
-  let playerX = $state(0);
-  let playerZ = $state(0);
+  let playerX = $state(CITY_X);
+  let playerZ = $state(CITY_Z);
+  // Tracks death.alive transitions so we teleport the player to the
+  // city exactly once at the moment they revive.
+  let wasAlive = true;
   let playerRotation = $state(0);
   let playerMoving = $state(false);
   // Increments each time space is pressed so Player can latch onto
@@ -54,10 +63,61 @@
   let cameraPitch = $state(0.55);
   let cameraRef: PerspectiveCamera | undefined = $state();
   let lightRef: DirectionalLight | undefined = $state();
+  // Captured via oncreate so sun-driven color/intensity updates each
+  // frame mutate the existing objects instead of recreating them.
+  let ambientRef: AmbientLight | undefined = $state();
+  let fogRef: Fog | undefined = $state();
+  let bgColorRef: Color | undefined = $state();
+
+  // Sun rig constants. Distance is the radius of the arc the sun
+  // travels along, kept inside the shadow camera frustum (±80) so
+  // shadows don't pop as the light swings.
+  const SUN_DISTANCE = 40;
+  const PEAK_INTENSITY = 1.3;
+  const NIGHT_INTENSITY = 0.04;
+  const PEAK_AMBIENT = 0.55;
+  const NIGHT_AMBIENT = 0.18;
+
+  // Color stops sampled along the day. Allocated once, copied into
+  // the live objects each frame to avoid per-tick allocations.
+  const COLOR_MIDDAY = new Color('#fff4d6');
+  const COLOR_HORIZON = new Color('#ffb56e');
+  const COLOR_NIGHT = new Color('#5a7fc0');
+  const SKY_MIDDAY = new Color('#d8e5b0');
+  const SKY_HORIZON = new Color('#e89a72');
+  const SKY_NIGHT = new Color('#1c2238');
+  const tmpColor = new Color();
+  const tmpColor2 = new Color();
+
+  // Map sun height (-1..1) to a light tint. White at noon, warm at
+  // the horizons, cool blue when the sun has set.
+  function sampleSunColor(sunY: number, out: Color) {
+    if (sunY >= 0.35) out.copy(COLOR_MIDDAY);
+    else if (sunY >= 0)
+      out.copy(COLOR_HORIZON).lerp(COLOR_MIDDAY, sunY / 0.35);
+    else if (sunY >= -0.2)
+      out.copy(COLOR_HORIZON).lerp(COLOR_NIGHT, -sunY / 0.2);
+    else out.copy(COLOR_NIGHT);
+  }
+
+  // Same shape but on the sky palette so fog/background track sun
+  // height without coupling to the light tint exactly.
+  function sampleSkyColor(sunY: number, out: Color) {
+    if (sunY >= 0.35) out.copy(SKY_MIDDAY);
+    else if (sunY >= 0)
+      out.copy(SKY_HORIZON).lerp(SKY_MIDDAY, sunY / 0.35);
+    else if (sunY >= -0.15)
+      out.copy(SKY_HORIZON).lerp(SKY_NIGHT, -sunY / 0.15);
+    else out.copy(SKY_NIGHT);
+  }
 
   // Exhaustion lock: once stamina hits 0, regen stays slow until the
   // bar is fully refilled, regardless of how the player picks back up.
   let exhausted = false;
+  // Wall-clock timestamp (ms) of the last accepted slash. We compare
+  // against performance.now() in the key handler so attack-speed
+  // gating doesn't depend on useTask having ticked yet.
+  let lastSlashAt = -Infinity;
 
   const visibleProps = $derived(getVisibleProps(playerX, playerZ));
   const visibleWaters = $derived(getVisibleWaters(playerX, playerZ));
@@ -74,7 +134,15 @@
         // Stop the page from scrolling and only count fresh presses
         // as new slashes — holding space shouldn't spam-trigger.
         e.preventDefault();
-        if (!e.repeat) slashTrigger++;
+        if (!e.repeat) {
+          // Reject the press if attack-speed cooldown hasn't elapsed.
+          const now = performance.now();
+          const minGapMs = 1000 / Math.max(getEffectiveAttackSpeed(), 0.0001);
+          if (now - lastSlashAt >= minGapMs) {
+            slashTrigger++;
+            lastSlashAt = now;
+          }
+        }
       }
       if (e.repeat) return;
       keys.add(e.key.toLowerCase());
@@ -127,6 +195,16 @@
     if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
     if (keys.has('d') || keys.has('arrowright')) dx += 1;
 
+    // Advance the day/night clock. Wraps cleanly at cycle end.
+    time.elapsed = (time.elapsed + delta) % CYCLE_SECONDS;
+
+    // On dead → alive transition, teleport back to the city.
+    if (death.alive && !wasAlive) {
+      playerX = CITY_X;
+      playerZ = CITY_Z;
+    }
+    wasAlive = death.alive;
+
     // Mirror player position into the shared state so the minimap
     // can render it without prop plumbing.
     player.x = playerX;
@@ -145,12 +223,13 @@
         lookAtTarget.set(playerX, cameraTargetHeight, playerZ);
         cameraRef.lookAt(lookAtTarget);
       }
-      if (lightRef) {
-        lightRef.position.set(playerX + 10, 20, playerZ + 8);
-        lightRef.target.position.set(playerX, 0, playerZ);
-        lightRef.target.updateMatrixWorld();
-      }
+      updateSunRig();
       return;
+    }
+
+    // Passive Health Regen: hp/sec, capped at 100. Runs only while alive.
+    if (player.health < 100 && player.healthRegen > 0) {
+      player.health = Math.min(100, player.health + player.healthRegen * delta);
     }
 
     const empty = player.stamina <= 0;
@@ -176,8 +255,20 @@
       // Right (D) = (cosY, 0, -sinY). Map (nx, nz) onto those axes.
       const worldX = nx * cosY + nz * sinY;
       const worldZ = -nx * sinY + nz * cosY;
-      playerX += worldX * speed * delta;
-      playerZ += worldZ * speed * delta;
+      const stepX = worldX * speed * delta;
+      const stepZ = worldZ * speed * delta;
+      const newX = playerX + stepX;
+      const newZ = playerZ + stepZ;
+      // At night the city is sealed: monsters can't enter (already)
+      // and the player can't cross in from outside either. Stepping
+      // from inside outward is still fine, so an already-inside
+      // player isn't trapped if they want to leave.
+      const cityClosed =
+        isNight() && !isInCity(playerX, playerZ) && isInCity(newX, newZ);
+      if (!cityClosed) {
+        playerX = newX;
+        playerZ = newZ;
+      }
       // Player model is authored with its face on +Z (head + horns
       // sit slightly forward, hair slab behind), so the rotation
       // needs to align +Z with the velocity direction.
@@ -237,15 +328,57 @@
       cameraRef.lookAt(lookAtTarget);
     }
 
-    // Keep the directional light + its shadow frustum centered on the
-    // player so the shadow map always covers the visible area instead
-    // of clipping at the world's default 10-unit frustum.
+    updateSunRig();
+  });
+
+  // Drives the sun's east→up→west arc, plus matching ambient, fog
+  // and sky colors. Called once per frame from useTask (alive *and*
+  // dead branches) so the world keeps darkening on the death screen.
+  function updateSunRig() {
+    const hour = currentHour();
+    // alpha = 0 at sunrise (hour 6, east), pi at sunset (hour 18,
+    // west). Night hours produce alpha outside [0, pi] which puts
+    // the sun below the horizon — exactly what we want.
+    const alpha = ((hour - 6) / 12) * Math.PI;
+    const sunX = Math.cos(alpha);
+    const sunY = Math.sin(alpha);
+
     if (lightRef) {
-      lightRef.position.set(playerX + 10, 20, playerZ + 8);
+      // Keep the directional light following the player so the
+      // shadow frustum (set wide at create time) stays centered on
+      // the visible area. The Y is clamped to a small positive value
+      // when the sun is below the horizon, otherwise the shadow
+      // camera ends up underground and shadows invert.
+      lightRef.position.set(
+        playerX + sunX * SUN_DISTANCE,
+        Math.max(2, sunY * SUN_DISTANCE),
+        // Slight north tilt so the sun never sits exactly on the
+        // camera-target axis (which would zero the shadow stretch).
+        playerZ - SUN_DISTANCE * 0.15,
+      );
       lightRef.target.position.set(playerX, 0, playerZ);
       lightRef.target.updateMatrixWorld();
+
+      const dayWeight = Math.max(0, sunY);
+      lightRef.intensity = NIGHT_INTENSITY + dayWeight * PEAK_INTENSITY;
+      sampleSunColor(sunY, tmpColor);
+      lightRef.color.copy(tmpColor);
     }
-  });
+
+    if (ambientRef) {
+      const dayWeight = Math.max(0, sunY);
+      ambientRef.intensity =
+        NIGHT_AMBIENT + dayWeight * (PEAK_AMBIENT - NIGHT_AMBIENT);
+      sampleSkyColor(sunY, tmpColor2);
+      ambientRef.color.copy(tmpColor2);
+    }
+
+    if (fogRef || bgColorRef) {
+      sampleSkyColor(sunY, tmpColor2);
+      if (fogRef) fogRef.color.copy(tmpColor2);
+      if (bgColorRef) bgColorRef.copy(tmpColor2);
+    }
+  }
 
   // Minecraft Superflat: a single grass-block-thick ground layer.
   // BoxGeometry face order is +X, -X, +Y, -Y, +Z, -Z, so the third
@@ -256,8 +389,20 @@
   const groundMaterials = [dirt, dirt, grass, dirt, dirt, dirt];
 </script>
 
-<T.Color attach="background" args={['#d8e5b0']} />
-<T.Fog attach="fog" args={['#d8e5b0', 20, 50]} />
+<T.Color
+  attach="background"
+  args={['#d8e5b0']}
+  oncreate={(ref) => {
+    bgColorRef = ref;
+  }}
+/>
+<T.Fog
+  attach="fog"
+  args={['#d8e5b0', 20, 50]}
+  oncreate={(ref) => {
+    fogRef = ref;
+  }}
+/>
 
 <T.PerspectiveCamera
   makeDefault
@@ -267,7 +412,12 @@
   }}
 />
 
-<T.AmbientLight intensity={0.55} />
+<T.AmbientLight
+  intensity={0.55}
+  oncreate={(light) => {
+    ambientRef = light;
+  }}
+/>
 <T.DirectionalLight
   intensity={1.1}
   castShadow
@@ -296,6 +446,18 @@
   <T.BoxGeometry args={[200, 1, 200]} />
 </T.Mesh>
 
+<!-- City plaza: gray cobble disc sitting just above the grass so it
+     reads as a paved hub. Lifted slightly so z-fighting with the
+     ground-block top face doesn't shimmer. -->
+<T.Mesh
+  position={[CITY_X, 0.01, CITY_Z]}
+  rotation={[-Math.PI / 2, 0, 0]}
+  receiveShadow
+>
+  <T.CircleGeometry args={[CITY_RADIUS, 48]} />
+  <T.MeshStandardMaterial color="#9a9a9a" />
+</T.Mesh>
+
 <Player
   position={[playerX, 0, playerZ]}
   rotation={playerRotation}
@@ -312,6 +474,12 @@
 />
 <Healers {playerX} {playerZ} />
 <Spiders
+  {playerX}
+  {playerZ}
+  {playerRotation}
+  {slashTrigger}
+/>
+<Beasts
   {playerX}
   {playerZ}
   {playerRotation}

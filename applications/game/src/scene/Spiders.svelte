@@ -1,8 +1,13 @@
 <script lang="ts">
   import { useTask } from '@threlte/core';
+  import { addToBag } from '../bag.svelte';
+  import { isInCity } from '../city';
   import { healers } from '../healers.svelte';
-  import { SPIDER_CONFIGS, spiders, type SpiderSize } from '../spiders.svelte';
-  import { player } from '../state.svelte';
+  import { rollLoot } from '../loot';
+  import { getMonster } from '../monsters';
+  import { SPIDER_VISUALS, spiders, type SpiderSize } from '../spiders.svelte';
+  import { getEffectiveDamage, player } from '../state.svelte';
+  import { nightStatMultiplier } from '../time.svelte';
   import Spider from './Spider.svelte';
   import { getVisibleProps, getVisibleWaters } from './world';
 
@@ -19,10 +24,7 @@
   const SPAWN_INTERVAL = 7; // sec between tree-spawn attempts
   const TREE_SPAWN_OFFSET = 1.5;
   const ATTACK_RANGE = 0.6;
-  const ATTACK_INTERVAL = 1; // sec between bites
   const DESPAWN_DISTANCE = 40;
-  // Sword hit settings — match the values used for human enemies.
-  const SWORD_DAMAGE = 10;
   const SWORD_REACH = 1.6;
   const SWORD_DOT_THRESHOLD = 0.5;
 
@@ -46,13 +48,19 @@
     z: number,
     rotation = 0,
   ) {
+    const monster = getMonster(SPIDER_VISUALS[size].monsterId);
+    // Health is locked in at spawn so existing spiders don't gain or
+    // lose hp when the cycle flips — only night-spawned ones get the
+    // boost.
+    const maxHp = monster.attributes.health * nightStatMultiplier();
     spiders.push({
       id: `s${nextId++}`,
       size,
       x,
       z,
       rotation,
-      hp: SPIDER_CONFIGS[size].hp,
+      hp: maxHp,
+      maxHp,
       attackCooldown: 0,
     });
   }
@@ -60,14 +68,15 @@
   function killSpider(index: number) {
     const s = spiders[index];
     if (!s) return;
-    const config = SPIDER_CONFIGS[s.size];
+    const visual = SPIDER_VISUALS[s.size];
+    for (const drop of rollLoot(visual.monsterId)) addToBag(drop);
     spiders.splice(index, 1);
-    if (config.childSize && config.childCount) {
-      for (let i = 0; i < config.childCount; i++) {
-        const angle = (i / config.childCount) * Math.PI * 2;
+    if (visual.childSize && visual.childCount) {
+      for (let i = 0; i < visual.childCount; i++) {
+        const angle = (i / visual.childCount) * Math.PI * 2;
         const dist = 0.4;
         spawnSpider(
-          config.childSize,
+          visual.childSize,
           s.x + Math.cos(angle) * dist,
           s.z + Math.sin(angle) * dist,
           angle,
@@ -79,10 +88,13 @@
   useTask((delta) => {
     if (delta <= 0) return;
 
-    // Periodic "big" spawn from a random visible tree.
     spawnTimer += delta;
     if (spawnTimer >= SPAWN_INTERVAL && spiders.length < MAX_SPIDERS) {
-      const trees = visibleProps.filter((p) => p.type === 'tree');
+      // Skip trees inside the city — spiders spawning there would
+      // immediately be unable to move (the city blocks every step).
+      const trees = visibleProps.filter(
+        (p) => p.type === 'tree' && !isInCity(p.x, p.z),
+      );
       if (trees.length > 0) {
         spawnTimer = 0;
         const tree = trees[Math.floor(Math.random() * trees.length)]!;
@@ -94,11 +106,11 @@
       }
     }
 
-    // Sword hit detection. Iterate backwards because we splice.
     if (slashTrigger !== lastSlashTrigger) {
       lastSlashTrigger = slashTrigger;
       const fwdX = Math.sin(playerRotation);
       const fwdZ = Math.cos(playerRotation);
+      const damage = getEffectiveDamage();
       for (let i = spiders.length - 1; i >= 0; i--) {
         const s = spiders[i];
         if (!s) continue;
@@ -108,33 +120,38 @@
         if (dist > SWORD_REACH || dist < 0.001) continue;
         const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
         if (dot < SWORD_DOT_THRESHOLD) continue;
-        s.hp -= SWORD_DAMAGE;
+        s.hp -= damage;
         if (s.hp <= 0) killSpider(i);
       }
     }
 
-    // AI: each spider picks nearest target (player or healer), moves
-    // toward it, melees on contact when the per-spider cooldown is up.
     for (let i = spiders.length - 1; i >= 0; i--) {
       const s = spiders[i];
       if (!s) continue;
-      const config = SPIDER_CONFIGS[s.size];
+      const visual = SPIDER_VISUALS[s.size];
+      const monster = getMonster(visual.monsterId);
 
-      // Despawn anything that wandered too far.
       if (Math.hypot(s.x - playerX, s.z - playerZ) > DESPAWN_DISTANCE) {
         spiders.splice(i, 1);
         continue;
       }
 
-      // Find nearest target, skipping anyone standing in water —
-      // spiders won't pursue or attack a target the water protects.
+      // Passive health regen from catalog, boosted at night.
+      const mul = nightStatMultiplier();
+      if (s.hp < s.maxHp && monster.attributes.healthRegen > 0) {
+        s.hp = Math.min(
+          s.maxHp,
+          s.hp + monster.attributes.healthRegen * mul * delta,
+        );
+      }
+
       let bestX = 0;
       let bestZ = 0;
       let bestDist = Infinity;
       let bestHealerIndex = -1;
       let hasTarget = false;
 
-      if (!isInWater(playerX, playerZ)) {
+      if (!isInWater(playerX, playerZ) && !isInCity(playerX, playerZ)) {
         const d = Math.hypot(s.x - playerX, s.z - playerZ);
         bestX = playerX;
         bestZ = playerZ;
@@ -154,37 +171,35 @@
         }
       }
 
-      // No reachable target → idle (and lose aggro implicitly).
       if (!hasTarget) {
         s.attackCooldown = Math.max(0, s.attackCooldown - delta);
         continue;
       }
 
-      // Move toward target. Block the step if it would put the spider
-      // inside water — they stop at the shoreline.
       const dx = bestX - s.x;
       const dz = bestZ - s.z;
       const norm = Math.max(bestDist, 0.0001);
-      const step = config.speed * delta;
+      const step = visual.speed * delta;
       if (bestDist > ATTACK_RANGE) {
         const newX = s.x + (dx / norm) * step;
         const newZ = s.z + (dz / norm) * step;
-        if (!isInWater(newX, newZ)) {
+        if (!isInWater(newX, newZ) && !isInCity(newX, newZ)) {
           s.x = newX;
           s.z = newZ;
         }
       }
       s.rotation = Math.atan2(dx, dz);
 
-      // Bite on contact when cooldown elapsed.
       s.attackCooldown -= delta;
       if (bestDist <= ATTACK_RANGE && s.attackCooldown <= 0) {
-        s.attackCooldown = ATTACK_INTERVAL;
+        s.attackCooldown =
+          1 / Math.max(monster.attributes.attackSpeed * mul, 0.0001);
+        const dmg = monster.attributes.damage * mul;
         if (bestHealerIndex < 0) {
-          player.health = Math.max(0, player.health - config.damage);
+          player.health = Math.max(0, player.health - dmg);
         } else {
           const target = healers[bestHealerIndex]!;
-          target.hp -= config.damage;
+          target.hp -= dmg;
           if (target.hp <= 0) healers.splice(bestHealerIndex, 1);
         }
       }
@@ -193,9 +208,13 @@
 </script>
 
 {#each spiders as spider (spider.id)}
+  {@const monster = getMonster(SPIDER_VISUALS[spider.size].monsterId)}
   <Spider
     position={[spider.x, 0, spider.z]}
     rotation={spider.rotation}
-    scale={SPIDER_CONFIGS[spider.size].scale}
+    scale={SPIDER_VISUALS[spider.size].scale}
+    name={monster.name}
+    level={monster.level}
+    hpPercent={spider.hp / spider.maxHp}
   />
 {/each}

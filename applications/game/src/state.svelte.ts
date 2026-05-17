@@ -2,9 +2,17 @@
 // gives every importer the same proxy — mutating a field from Scene
 // (e.g. stamina drain) re-renders the HUD without prop plumbing.
 
+import { getItem, type ItemId, STARTING_WEAPON_ID } from './items';
+
 // Max stamina exposed so the HUD bar and combat restorations stay in
 // sync with the simulation in Scene.svelte.
 export const STAMINA_MAX = 300;
+
+// Base player stats — the values a freshly created character starts
+// with before any progression or equipment modifiers apply.
+export const BASE_ATTACK_SPEED = 1; // hits per second
+export const BASE_HEALTH_REGEN = 1; // hp per second
+export const BASE_DAMAGE = 0; // flat damage before weapon
 
 export const HAIR_COLORS = {
   black: '#1a1a1a',
@@ -43,6 +51,15 @@ export const player = $state({
   mana: 100,
   stamina: STAMINA_MAX,
   experience: 0,
+  // Base stats. The *effective* values used in combat are these plus
+  // any contributions from the equipped weapon — see
+  // getEffectiveAttackSpeed / getEffectiveDamage below.
+  attackSpeed: BASE_ATTACK_SPEED,
+  healthRegen: BASE_HEALTH_REGEN,
+  damage: BASE_DAMAGE,
+  // Currently equipped weapon id. Defaults to the wooden sword every
+  // new character spawns with.
+  equippedWeaponId: STARTING_WEAPON_ID as ItemId,
   // Increments once per level-up so visuals (pillar of light, HUD
   // banner) can latch onto the transition without polling.
   levelUpTrigger: 0,
@@ -51,3 +68,18 @@ export const player = $state({
   x: 0,
   z: 0,
 });
+
+// Effective-stat helpers: equipped-weapon attributes are *added* to
+// the player's base stats, never overwriting. Callers read these each
+// frame so reactivity falls out of the underlying $state proxy.
+export function getEquippedWeapon() {
+  return getItem(player.equippedWeaponId);
+}
+
+export function getEffectiveAttackSpeed(): number {
+  return player.attackSpeed + (getEquippedWeapon()?.attributes.attackSpeed ?? 0);
+}
+
+export function getEffectiveDamage(): number {
+  return player.damage + (getEquippedWeapon()?.attributes.damage ?? 0);
+}

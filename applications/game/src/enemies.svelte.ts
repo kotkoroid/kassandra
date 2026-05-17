@@ -8,8 +8,16 @@ export interface Enemy {
   x: number;
   z: number;
   rotation: number;
+  // Seconds until this enemy's next shot.
   cooldown: number;
+  // Attack Speed: shots per second this enemy can fire.
+  attackSpeed: number;
   hp: number;
+  maxHp: number;
+  // Per-shot damage locked in at spawn so a night-spawned Swain
+  // keeps its boost even after dawn.
+  damage: number;
+  healthRegen: number;
 }
 
 export interface Projectile {
@@ -19,6 +27,10 @@ export interface Projectile {
   vx: number;
   vz: number;
   traveled: number;
+  // Damage carried by this projectile; captured from the firing
+  // enemy at launch so a daytime orb can't gain night damage in
+  // flight (and vice versa).
+  damage: number;
 }
 
 export const enemies = $state<Enemy[]>([]);

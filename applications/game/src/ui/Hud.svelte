@@ -3,6 +3,7 @@
   import { death } from '../death.svelte';
   import { player, STAMINA_MAX } from '../state.svelte';
   import Minimap from './Minimap.svelte';
+  import TimeStrip from './TimeStrip.svelte';
 
   let fps = $state(0);
   let frames = 0;
@@ -49,6 +50,7 @@
 </div>
 
 <Minimap />
+<TimeStrip />
 
 {#if !death.alive}
   <div

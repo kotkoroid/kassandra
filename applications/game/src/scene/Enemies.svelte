@@ -1,8 +1,13 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
+  import { addToBag } from '../bag.svelte';
+  import { isInCity } from '../city';
   import { enemies, projectiles } from '../enemies.svelte';
   import { healers } from '../healers.svelte';
-  import { player, STAMINA_MAX } from '../state.svelte';
+  import { rollLoot } from '../loot';
+  import { getMonster, MONSTER_SWAIN } from '../monsters';
+  import { getEffectiveDamage, player, STAMINA_MAX } from '../state.svelte';
+  import { nightStatMultiplier } from '../time.svelte';
   import Enemy from './Enemy.svelte';
 
   interface Props {
@@ -18,15 +23,11 @@
   const SPAWN_DISTANCE_MIN = 12;
   const SPAWN_DISTANCE_MAX = 22;
   const DESPAWN_DISTANCE = 35;
-  const SHOT_COOLDOWN = 3; // sec between an enemy's shots
   const PROJECTILE_SPEED = 8;
   // Max world distance an orb can fly before fizzling out.
   const PROJECTILE_MAX_DISTANCE = 10;
-  const PROJECTILE_DAMAGE = 10;
   const HIT_RADIUS = 0.5;
   const PROJECTILE_HEIGHT = 1.2;
-  const ENEMY_MAX_HP = 50;
-  const SWORD_DAMAGE = 10;
   const SWORD_REACH = 1.6;
   // Forward-cone width: dot product with player forward must exceed
   // this. 0.5 ≈ 60° half-angle, so the slash sweeps a ~120° arc.
@@ -39,6 +40,8 @@
   let lastSlashTrigger = 0;
 
   useTask((delta) => {
+    const swain = getMonster(MONSTER_SWAIN);
+
     // Periodic spawn: drop a new enemy at a random angle around the
     // player, between the min and max ring distance.
     spawnTimer += delta;
@@ -50,15 +53,22 @@
         Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
       const ex = playerX + Math.cos(angle) * dist;
       const ez = playerZ + Math.sin(angle) * dist;
+      // Lock in night-boosted stats at spawn so the enemy carries its
+      // night strength even if dawn breaks mid-fight.
+      const mul = nightStatMultiplier();
+      const attackSpeed = swain.attributes.attackSpeed * mul;
+      const maxHp = swain.attributes.health * mul;
       enemies.push({
         id: `e${nextId++}`,
         x: ex,
         z: ez,
-        // Face the player at spawn.
         rotation: Math.atan2(-(playerX - ex), -(playerZ - ez)),
-        // Stagger initial cooldowns so spawns don't all fire together.
-        cooldown: Math.random() * SHOT_COOLDOWN,
-        hp: ENEMY_MAX_HP,
+        cooldown: Math.random() / attackSpeed,
+        attackSpeed,
+        hp: maxHp,
+        maxHp,
+        damage: swain.attributes.damage * mul,
+        healthRegen: swain.attributes.healthRegen * mul,
       });
     }
 
@@ -74,11 +84,22 @@
         enemies.splice(i, 1);
         continue;
       }
-      // Always face the player.
+      // Passive regen toward this enemy's locked-in max hp.
+      if (e.hp < e.maxHp && e.healthRegen > 0) {
+        e.hp = Math.min(e.maxHp, e.hp + e.healthRegen * delta);
+      }
+
+      // Don't fire — or even look at — a player standing in the
+      // city. They're safe and Swain loses interest until they step
+      // back out, so the rotation freezes instead of tracking.
+      if (isInCity(playerX, playerZ)) continue;
+
+      // Track the player while engaged.
       e.rotation = Math.atan2(-toPlayerX, -toPlayerZ);
+
       e.cooldown -= delta;
       if (e.cooldown <= 0) {
-        e.cooldown = SHOT_COOLDOWN;
+        e.cooldown = 1 / Math.max(e.attackSpeed, 0.0001);
         const norm = Math.max(dist, 0.001);
         projectiles.push({
           id: `p${nextId++}`,
@@ -87,6 +108,7 @@
           vx: (toPlayerX / norm) * PROJECTILE_SPEED,
           vz: (toPlayerZ / norm) * PROJECTILE_SPEED,
           traveled: 0,
+          damage: e.damage,
         });
       }
     }
@@ -101,6 +123,7 @@
       // (sin(rotation), cos(rotation)).
       const fwdX = Math.sin(playerRotation);
       const fwdZ = Math.cos(playerRotation);
+      const damage = getEffectiveDamage();
       for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
         if (!e) continue;
@@ -110,8 +133,9 @@
         if (dist > SWORD_REACH || dist < 0.001) continue;
         const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
         if (dot < SWORD_DOT_THRESHOLD) continue;
-        e.hp -= SWORD_DAMAGE;
+        e.hp -= damage;
         if (e.hp <= 0) {
+          for (const drop of rollLoot(MONSTER_SWAIN)) addToBag(drop);
           enemies.splice(i, 1);
           player.experience += EXP_PER_KILL;
           while (player.experience >= EXP_PER_LEVEL) {
@@ -144,7 +168,7 @@
         const h = healers[j];
         if (!h) continue;
         if (Math.hypot(p.x - h.x, p.z - h.z) < HIT_RADIUS) {
-          h.hp -= PROJECTILE_DAMAGE;
+          h.hp -= p.damage;
           if (h.hp <= 0) healers.splice(j, 1);
           projectiles.splice(i, 1);
           consumed = true;
@@ -154,7 +178,7 @@
       if (consumed) continue;
 
       if (Math.hypot(p.x - playerX, p.z - playerZ) < HIT_RADIUS) {
-        player.health = Math.max(0, player.health - PROJECTILE_DAMAGE);
+        player.health = Math.max(0, player.health - p.damage);
         projectiles.splice(i, 1);
         continue;
       }
@@ -167,10 +191,13 @@
 </script>
 
 {#each enemies as enemy (enemy.id)}
+  {@const swain = getMonster(MONSTER_SWAIN)}
   <Enemy
     position={[enemy.x, 0, enemy.z]}
     rotation={enemy.rotation}
-    hpPercent={enemy.hp / ENEMY_MAX_HP}
+    name={swain.name}
+    level={swain.level}
+    hpPercent={enemy.hp / enemy.maxHp}
   />
 {/each}
 

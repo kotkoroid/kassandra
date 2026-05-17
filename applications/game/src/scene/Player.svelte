@@ -3,7 +3,12 @@
   import { HTML } from '@threlte/extras';
   import { DoubleSide } from 'three';
   import { death } from '../death.svelte';
-  import { ARMOR_COLORS, HAIR_COLORS, player } from '../state.svelte';
+  import {
+    ARMOR_COLORS,
+    HAIR_COLORS,
+    getEffectiveAttackSpeed,
+    player,
+  } from '../state.svelte';
 
   interface Props {
     position: [number, number, number];
@@ -51,7 +56,9 @@
       lastSlashTrigger = slashTrigger;
     }
     if (slashPhase >= 0) {
-      slashPhase += delta * 2.5;
+      // Animation length = 1 / attackSpeed seconds, so the visible
+      // swing plays at exactly the rate the stat advertises.
+      slashPhase += delta * Math.max(getEffectiveAttackSpeed(), 0.0001);
       if (slashPhase >= 1) slashPhase = -1;
     }
 

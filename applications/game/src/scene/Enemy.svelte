@@ -5,9 +5,11 @@
   interface Props {
     position: [number, number, number];
     rotation: number;
+    name: string;
+    level: number;
     hpPercent: number;
   }
-  let { position, rotation, hpPercent }: Props = $props();
+  let { position, rotation, name, level, hpPercent }: Props = $props();
 
   const skin = '#dcc7b8';
   const hair = '#bcbcbc';
@@ -27,9 +29,9 @@
       <div
         class="flex items-baseline gap-1 text-xs font-semibold whitespace-nowrap"
       >
-        <span class="text-amber-400">Level 1</span>
+        <span class="text-amber-400">Level {level}</span>
         <span class="text-white/50">|</span>
-        <span class="text-white">Enemy</span>
+        <span class="text-white">{name}</span>
       </div>
       <div class="h-1.5 w-16 border border-red-950 bg-black/70">
         <div

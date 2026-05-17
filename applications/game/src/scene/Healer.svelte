@@ -10,7 +10,9 @@
   let { position, rotation, hpPercent }: Props = $props();
 
   const skin = '#f0d8c3';
-  const hair = '#f5edc8';
+  // Long blonde hair — saturated gold rather than the previous pale
+  // cream so it reads clearly as "blonde" at a glance.
+  const hair = '#e6c25a';
   const outfit = '#e8eaf0';
   const boot = '#c8cad0';
   const belt = '#d0a838';
@@ -26,9 +28,9 @@
       <div
         class="flex items-baseline gap-1 text-xs font-semibold whitespace-nowrap"
       >
-        <span class="text-amber-400">Level 1</span>
+        <span class="text-amber-400">Level 10</span>
         <span class="text-white/50">|</span>
-        <span class="text-white">Ally</span>
+        <span class="text-white">Janna</span>
       </div>
       <div class="h-1.5 w-16 border border-red-950 bg-black/70">
         <div
@@ -77,6 +79,17 @@
     <T.MeshStandardMaterial color={outfit} />
   </T.Mesh>
 
+  <!-- Breast bumps molded into the chest piece. Matched to the
+       player's female silhouette so Janna reads consistently. -->
+  <T.Mesh position={[-0.09, 1.3, 0.12]} castShadow>
+    <T.SphereGeometry args={[0.085, 10, 10]} />
+    <T.MeshStandardMaterial color={outfit} />
+  </T.Mesh>
+  <T.Mesh position={[0.09, 1.3, 0.12]} castShadow>
+    <T.SphereGeometry args={[0.085, 10, 10]} />
+    <T.MeshStandardMaterial color={outfit} />
+  </T.Mesh>
+
   <!-- Arms -->
   <T.Mesh position={[-0.27, 1.15, 0]} castShadow>
     <T.CylinderGeometry args={[0.065, 0.065, 0.45, 8]} />
@@ -97,9 +110,14 @@
     <T.MeshStandardMaterial color={outfit} />
   </T.Mesh>
 
-  <!-- Long flowing hair (taller slab behind head) -->
-  <T.Mesh position={[0, 1.55, -0.08]} castShadow>
-    <T.BoxGeometry args={[0.38, 0.5, 0.22]} />
+  <!-- Long flowing hair: a tall slab down the back plus a wider
+       top-of-head cap so the blonde reads from any angle. -->
+  <T.Mesh position={[0, 1.35, -0.1]} castShadow>
+    <T.BoxGeometry args={[0.42, 0.95, 0.2]} />
+    <T.MeshStandardMaterial color={hair} />
+  </T.Mesh>
+  <T.Mesh position={[0, 1.78, -0.02]} castShadow>
+    <T.BoxGeometry args={[0.36, 0.16, 0.34]} />
     <T.MeshStandardMaterial color={hair} />
   </T.Mesh>
 

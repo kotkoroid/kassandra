@@ -1,5 +1,6 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
+  import { isInCity } from '../city';
   import { healers, healingCircles } from '../healers.svelte';
   import { player } from '../state.svelte';
   import Healer from './Healer.svelte';
@@ -37,6 +38,9 @@
         Math.random() * (SPAWN_DISTANCE_MAX - SPAWN_DISTANCE_MIN);
       const hx = playerX + Math.cos(angle) * dist;
       const hz = playerZ + Math.sin(angle) * dist;
+      // Skip this spawn if the rolled position lands in the city —
+      // Janna only appears out in the wilds with the player.
+      if (isInCity(hx, hz)) return;
       healers.push({
         id: `h${nextId++}`,
         x: hx,

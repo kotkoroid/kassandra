@@ -4,6 +4,8 @@
 // The chunk cache lives at module scope so both consumers hit the same
 // memoised results — a chunk is only generated once per session.
 
+import { isInCity } from '../city';
+
 export const CHUNK_SIZE = 10;
 export const RENDER_RADIUS = 2;
 
@@ -39,14 +41,13 @@ function generateChunk(cx: number, cz: number): PropInstance[] {
     const r = random();
     const type: PropType =
       r < 0.3 ? 'tree' : r < 0.8 ? 'grass' : 'rock';
-    props.push({
-      id: `${cx},${cz},${i}`,
-      type,
-      x: cx * CHUNK_SIZE + random() * CHUNK_SIZE,
-      z: cz * CHUNK_SIZE + random() * CHUNK_SIZE,
-      scale: 0.8 + random() * 0.5,
-      rotation: random() * Math.PI * 2,
-    });
+    const x = cx * CHUNK_SIZE + random() * CHUNK_SIZE;
+    const z = cz * CHUNK_SIZE + random() * CHUNK_SIZE;
+    const scale = 0.8 + random() * 0.5;
+    const rotation = random() * Math.PI * 2;
+    // The city is paved over — no trees, grass or rocks inside.
+    if (isInCity(x, z)) continue;
+    props.push({ id: `${cx},${cz},${i}`, type, x, z, scale, rotation });
   }
   return props;
 }
@@ -95,14 +96,12 @@ function generateWaterChunk(cx: number, cz: number): WaterPatch[] {
   );
   // ~35% of chunks contain a single small water patch.
   if (random() > 0.35) return [];
-  return [
-    {
-      id: `w${cx},${cz}`,
-      x: cx * CHUNK_SIZE + random() * CHUNK_SIZE,
-      z: cz * CHUNK_SIZE + random() * CHUNK_SIZE,
-      radius: 1.5 + random() * 2,
-    },
-  ];
+  const x = cx * CHUNK_SIZE + random() * CHUNK_SIZE;
+  const z = cz * CHUNK_SIZE + random() * CHUNK_SIZE;
+  const radius = 1.5 + random() * 2;
+  // No water inside the city either — the plaza stays dry.
+  if (isInCity(x, z)) return [];
+  return [{ id: `w${cx},${cz}`, x, z, radius }];
 }
 
 const waterCache = new Map<string, WaterPatch[]>();
