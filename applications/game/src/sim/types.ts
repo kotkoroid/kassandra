@@ -32,6 +32,48 @@ export type HairColor =
 export type ArmorColor =
   | 'silver' | 'gold' | 'black' | 'brown' | 'red' | 'green' | 'blue' | 'white';
 
+export type PlayerClass = 'warrior' | 'assassin' | 'mage' | 'bruiser';
+
+// --- Quests -----------------------------------------------------
+
+// A "quest envelope" — what shows up as a row in the Quests tab
+// and (eventually) as a pickup item in the world. `timeLimitSec`
+// null = no time limit; otherwise the entry should display a
+// countdown and auto-expire from the log.
+export type QuestId = string;
+
+export interface Quest {
+  id: QuestId;
+  title: string;
+  description: string;
+  // Null = open-ended. Number = seconds from `acceptedAt`.
+  timeLimitSec: number | null;
+  // World time at which the player picked up the envelope. Used to
+  // drive the countdown for time-limited quests.
+  acceptedAt: number;
+  // Optional running progress (e.g. "Remaining: 3"). Quest systems
+  // increment this directly; the UI just displays it.
+  progress?: { current: number; goal: number; label: string };
+}
+
+// --- Abilities --------------------------------------------------
+
+// Active = triggered (consumes SP, has cooldown). Passive = always
+// on. Kept as a discriminator so the abilities panel can group them
+// without a parallel lookup.
+export type AbilityKind = 'active' | 'passive';
+
+export interface Ability {
+  id: string;
+  name: string;
+  description: string;
+  kind: AbilityKind;
+  // Current investment level; 0 = unlocked-but-untrained slot, which
+  // still renders distinctly from a locked/empty slot.
+  level: number;
+  maxLevel: number;
+}
+
 // --- Player -----------------------------------------------------
 
 export interface Player {
@@ -40,6 +82,7 @@ export interface Player {
   sex: Sex;
   hairColor: HairColor;
   armor: ArmorColor;
+  playerClass: PlayerClass;
 
   // Progression
   level: number;
@@ -65,6 +108,21 @@ export interface Player {
 
   // Inventory: item ids acquired from world loot bags.
   bag: ItemId[];
+
+  // Trained abilities. Empty on a fresh character — populated as
+  // ability books are consumed or as class skills unlock at level.
+  abilities: Ability[];
+  // Unspent skill points awarded on level-up; spent to raise an
+  // ability's level in the Abilities panel.
+  skillPoints: number;
+  // Separate pool spent only on the six per-class signature spells.
+  // Kept distinct from skillPoints so the class kit can level on its
+  // own cadence (e.g. one classSpellPoint per class-quest reward).
+  classSpellPoints: number;
+
+  // Active quest envelopes — every quest the player has accepted
+  // and not yet completed/abandoned. Rendered in the Quests tab.
+  activeQuests: Quest[];
 
   // Auto-attack mode: when true the player keeps swinging the
   // selected hostile until either dies; when false they swing once

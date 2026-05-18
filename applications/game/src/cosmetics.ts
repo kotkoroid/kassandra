@@ -1,7 +1,7 @@
 // Character cosmetic palettes shared by CharacterCreation, the
 // Player view, and any future portrait UI. Pure data — no state.
 
-import type { ArmorColor, HairColor } from './sim/types';
+import type { ArmorColor, HairColor, PlayerClass } from './sim/types';
 
 export const HAIR_COLORS: Record<HairColor, string> = {
   black: '#1a1a1a',
@@ -26,4 +26,15 @@ export const ARMOR_COLORS: Record<ArmorColor, { skirt: string; boot: string }> =
   white: { skirt: '#e8e8ea', boot: '#b5b5bb' },
 };
 
-export type { ArmorColor, HairColor };
+// Player classes. Each class will eventually get its own 3D model;
+// for now they share the procedural model in scene/Player.svelte
+// and only differ as a stored identity tag. The `label` field is
+// what the creation UI renders.
+export const PLAYER_CLASSES: Record<PlayerClass, { label: string }> = {
+  warrior: { label: 'Warrior' },
+  assassin: { label: 'Assassin' },
+  mage: { label: 'Mage' },
+  bruiser: { label: 'Bruiser' },
+};
+
+export type { ArmorColor, HairColor, PlayerClass };

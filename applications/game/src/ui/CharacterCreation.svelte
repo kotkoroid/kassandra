@@ -6,6 +6,8 @@
     type ArmorColor,
     HAIR_COLORS,
     type HairColor,
+    PLAYER_CLASSES,
+    type PlayerClass,
   } from '../cosmetics';
   import Player from '../scene/Player.svelte';
   import { resetWorld, world } from '../sim/world.svelte';
@@ -54,6 +56,11 @@
     return ARMOR_KEYS[Math.floor(Math.random() * ARMOR_KEYS.length)]!;
   }
 
+  const CLASS_KEYS = Object.keys(PLAYER_CLASSES) as PlayerClass[];
+  function randomClass(): PlayerClass {
+    return CLASS_KEYS[Math.floor(Math.random() * CLASS_KEYS.length)]!;
+  }
+
   // Bind form controls directly to world.player so the preview
   // canvas re-renders the model live as fields change. A blank
   // name signals a fresh creation flow — seed with random defaults.
@@ -63,6 +70,7 @@
       player.sex = Math.random() < 0.5 ? 'male' : 'female';
       player.hairColor = randomHair();
       player.armor = randomArmor();
+      player.playerClass = randomClass();
     }
   });
 
@@ -71,6 +79,7 @@
     player.sex = Math.random() < 0.5 ? 'male' : 'female';
     player.hairColor = randomHair();
     player.armor = randomArmor();
+    player.playerClass = randomClass();
   }
 
   function create() {
@@ -79,12 +88,13 @@
     // Snapshot the chosen identity, reset the world to start a fresh
     // run (clearing any leftover entities/bags/messages), then write
     // the identity onto the new world.player before flipping views.
-    const { sex, hairColor, armor } = player;
+    const { sex, hairColor, armor, playerClass } = player;
     resetWorld();
     world.player.name = trimmed;
     world.player.sex = sex;
     world.player.hairColor = hairColor;
     world.player.armor = armor;
+    world.player.playerClass = playerClass;
     onCreate();
   }
 
@@ -160,9 +170,9 @@
           <T.Color attach="background" args={['#0d0d0d']} />
           <T.PerspectiveCamera
             makeDefault
-            fov={32}
-            position={[0, 1.3, 4]}
-            oncreate={(c) => c.lookAt(0, 1, 0)}
+            fov={26}
+            position={[0, 0.9, 5.5]}
+            oncreate={(c) => c.lookAt(0, 0.9, 0)}
           />
           <T.AmbientLight intensity={0.65} />
           <T.DirectionalLight position={[3, 5, 3]} intensity={1.1} />
@@ -248,6 +258,29 @@
             >
               ♀
             </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <span
+            class="w-16 text-sm font-semibold tracking-widest text-amber-300/80 uppercase"
+          >
+            Class
+          </span>
+          <div class="flex flex-wrap gap-2">
+            {#each CLASS_KEYS as key (key)}
+              <button
+                type="button"
+                aria-label={PLAYER_CLASSES[key].label}
+                onclick={() => (player.playerClass = key)}
+                class="border-2 px-3 py-1.5 text-xs font-semibold tracking-widest uppercase transition {player.playerClass ===
+                key
+                  ? 'border-amber-400 bg-amber-400/15 text-amber-200'
+                  : 'border-amber-700/30 text-white/50 hover:border-amber-500'}"
+              >
+                {PLAYER_CLASSES[key].label}
+              </button>
+            {/each}
           </div>
         </div>
 

@@ -13,8 +13,33 @@
     dispatch(world, { kind: 'request_respawn' });
   }
   import { bagOpen } from '../bag.svelte';
+  import { characterOpen } from '../character.svelte';
+  import { lootBagOpen } from '../lootBagOpen.svelte';
+  import { socialOpen } from '../social.svelte';
+  import { BAG_PICKUP_RADIUS } from '../sim/constants';
   import BagPanel from './BagPanel.svelte';
+  import CharacterPanel from './CharacterPanel.svelte';
   import Chat from './Chat.svelte';
+  import SocialPanel from './SocialPanel.svelte';
+
+  // Auto-open watcher: once the player walks into pickup range of
+  // the bag whose timer was clicked, flip the panel open and clear
+  // the pending mark. Also clears if the bag expired mid-walk.
+  $effect(() => {
+    const pendingId = lootBagOpen.pendingArrival;
+    if (!pendingId) return;
+    const bag = world.lootBags.find((b) => b.id === pendingId);
+    if (!bag) {
+      lootBagOpen.pendingArrival = null;
+      return;
+    }
+    const dx = world.player.x - bag.x;
+    const dz = world.player.z - bag.z;
+    if (dx * dx + dz * dz <= BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS) {
+      lootBagOpen.value = pendingId;
+      lootBagOpen.pendingArrival = null;
+    }
+  });
   import LootBagPanel from './LootBagPanel.svelte';
   import Minimap from './Minimap.svelte';
   import QuickBar from './QuickBar.svelte';
@@ -156,7 +181,7 @@
           class="relative h-6 w-6 overflow-hidden rounded-full bg-neutral-800 ring-1 ring-amber-900"
         >
           <div
-            class="absolute right-0 bottom-0 left-0 bg-amber-500"
+            class="absolute right-0 bottom-0 left-0 bg-amber-500 transition-[height] duration-500 ease-out"
             style:height="{fill}%"
           ></div>
         </div>
@@ -183,6 +208,8 @@
         onclick={() => {
           if (label === 'Settings') settingsOpen = true;
           if (label === 'Inventory') bagOpen.value = !bagOpen.value;
+          if (label === 'Character') characterOpen.value = !characterOpen.value;
+          if (label === 'Social') socialOpen.value = !socialOpen.value;
         }}
       >
         {label}
@@ -197,5 +224,7 @@
 
 <LootBagPanel />
 <BagPanel />
+<CharacterPanel />
+<SocialPanel />
 <Chat />
 </div>

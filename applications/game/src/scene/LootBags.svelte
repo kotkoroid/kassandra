@@ -2,7 +2,27 @@
   import { T, useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
   import { lootBagOpen } from '../lootBagOpen.svelte';
+  import { BAG_PICKUP_RADIUS } from '../sim/constants';
+  import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
+
+  function onTimerClick(e: MouseEvent, bagId: string, x: number, z: number) {
+    // Stop the click from reaching the ground raycaster behind the
+    // HTML overlay, which would otherwise navigate the player toward
+    // the camera-ray's far hit-point instead of the bag.
+    e.stopPropagation();
+    const dx = world.player.x - x;
+    const dz = world.player.z - z;
+    if (dx * dx + dz * dz <= BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS) {
+      // Already on top of the bag — open immediately.
+      lootBagOpen.value = bagId;
+      lootBagOpen.pendingArrival = null;
+      return;
+    }
+    // Route the player to the bag and defer the open until arrival.
+    dispatch(world, { kind: 'click_ground', x, z });
+    lootBagOpen.pendingArrival = bagId;
+  }
 
   // Visual-only pulse driver — the simulation ticks the actual TTL.
   let pulse = $state(0);
@@ -53,7 +73,7 @@
     <button
       type="button"
       class="pointer-events-auto cursor-pointer border border-amber-700/70 bg-black/85 px-2 py-0.5 text-xs font-semibold text-amber-200 hover:border-amber-400 hover:text-amber-100 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.85)]"
-      onclick={() => (lootBagOpen.value = b.id)}
+      onclick={(e) => onTimerClick(e, b.id, b.x, b.z)}
     >
       {format(b.ttl)}
     </button>

@@ -6,7 +6,10 @@ node_modules/
 
 # Build
 dist/
+
+# TypeScript
 tsbuild/
+tsconfig.tsbuildinfo
 
 # Nx
 .nx/
