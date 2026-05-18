@@ -28,14 +28,13 @@ import {
   BUG_SPEED,
   BUG_WANDER_RADIUS,
   EXP_PER_LEVEL,
-  PLAYER_MAX_HP,
-  PLAYER_MAX_MANA,
-  STAMINA_MAX,
   TROLLER_COLLECT_TIME,
   TROLLER_LEAVE_DISTANCE,
   TROLLER_SPEED,
 } from '../constants';
+import { getEffectiveStat } from '../stats';
 import { spawnTroller } from '../spawn';
+import { removeEntity } from '../util';
 import type { Entity, World } from '../types';
 
 export function tickDeath(world: World, dt: number) {
@@ -79,6 +78,7 @@ function triggerDeath(world: World) {
   p.attackSpeed = BASE_ATTACK_SPEED;
   p.healthRegen = BASE_HEALTH_REGEN;
   p.damage = BASE_DAMAGE;
+  p.modifiers = [];
 
   // Detach anything that was tracking the live body.
   p.engageTargetId = null;
@@ -102,9 +102,9 @@ function triggerDeath(world: World) {
 function respawn(world: World) {
   const p = world.player;
   world.death.alive = true;
-  p.health = PLAYER_MAX_HP;
-  p.mana = PLAYER_MAX_MANA;
-  p.stamina = STAMINA_MAX;
+  p.health = getEffectiveStat(p, 'maxHealth');
+  p.mana = getEffectiveStat(p, 'maxMana');
+  p.stamina = getEffectiveStat(p, 'maxStamina');
   p.x = CITY_X;
   p.z = CITY_Z;
   p.rotation = 0;
@@ -153,7 +153,7 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
     } else if (phase === 'leave') {
       // Drop the bag and despawn the troller.
       dropPlayerDeathBag(world, e.x, e.z);
-      world.entities.splice(index, 1);
+      removeEntity(world, index);
     }
     return;
   }

@@ -8,6 +8,20 @@ import type { ItemId } from '../items';
 import type { MonsterId } from '../monsters';
 import type { Rng } from './rng';
 
+// --- Stat modifier stack ----------------------------------------
+
+export type StatKey =
+  | 'damage' | 'attackSpeed' | 'healthRegen'
+  | 'maxHealth' | 'maxMana' | 'maxStamina';
+
+export interface Modifier {
+  stat: StatKey;
+  kind: 'add' | 'mul';
+  value: number;
+  // World time (seconds) at which this modifier expires. Absent = permanent.
+  expiresAt?: number;
+}
+
 // --- Identity / cosmetics ---------------------------------------
 
 export type Sex = 'male' | 'female';
@@ -41,12 +55,16 @@ export interface Player {
   z: number;
   rotation: number;
 
-  // Stats. Base values; effective values fold in the equipped
-  // weapon's attributes at read time (see sim helpers).
+  // Base stats. Effective values fold in weapon + modifier stack at
+  // read time via getEffectiveStat() in sim/stats.ts.
   attackSpeed: number;
   healthRegen: number;
   damage: number;
   equippedWeaponId: ItemId;
+  modifiers: Modifier[];
+
+  // Inventory: item ids acquired from world loot bags.
+  bag: ItemId[];
 
   // Auto-attack mode: when true the player keeps swinging the
   // selected hostile until either dies; when false they swing once
@@ -102,6 +120,7 @@ export interface Entity {
   damage: number;
   attackSpeed: number;
   healthRegen: number;
+  experience: number;
 
   // Per-instance attack cooldown in seconds.
   attackCooldown: number;
@@ -189,7 +208,8 @@ export type SimEvent =
   | { kind: 'send_chat'; text: string; channel: ChatChannel }
   | { kind: 'request_respawn' }
   | { kind: 'set_auto_attack'; on: boolean }
-  | { kind: 'kill_player' };
+  | { kind: 'kill_player' }
+  | { kind: 'pickup_loot'; bagId: string };
 
 export interface FrameInputs {
   // World-space WASD (already camera-transformed by the client).
@@ -212,6 +232,9 @@ export interface World {
 
   player: Player;
   entities: Entity[];
+  // O(1) entity lookup by id. Mirrors `entities` — kept in sync by
+  // spawn.ts (add) and removeEntity() in util.ts (remove).
+  entityById: Map<string, Entity>;
   projectiles: Projectile[];
   healingCircles: HealingCircle[];
   lootBags: WorldLootBag[];

@@ -2,7 +2,7 @@
 // imported as raw text so authors can keep `//` comments alongside
 // each entry; the same naive stripper handles `//` + `/* */`.
 
-import rawCatalog from './monsters.jsonc?raw';
+import rawCatalog from './data/monsters.jsonc?raw';
 
 export type MonsterType = 'ANIMAL' | 'ALLY';
 

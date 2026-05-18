@@ -63,7 +63,6 @@
   let lightRef: DirectionalLight | undefined = $state();
   let ambientRef: AmbientLight | undefined = $state();
   let fogRef: Fog | undefined = $state();
-  let bgColorRef: Color | undefined = $state();
 
   // Visual moving flag for the walk cycle. True iff the player
   // actually translated this frame; tracked separately because the
@@ -129,10 +128,9 @@
       ambientRef.color.copy(tmpColor2);
     }
 
-    if (fogRef || bgColorRef) {
+    if (fogRef) {
       sampleSkyColor(sunY, tmpColor2);
-      if (fogRef) fogRef.color.copy(tmpColor2);
-      if (bgColorRef) bgColorRef.copy(tmpColor2);
+      fogRef.color.copy(tmpColor2);
     }
   }
 
@@ -269,13 +267,7 @@
   const groundMaterials = [dirt, dirt, grass, dirt, dirt, dirt];
 </script>
 
-<T.Color
-  attach="background"
-  args={['#d8e5b0']}
-  oncreate={(ref) => {
-    bgColorRef = ref;
-  }}
-/>
+<T.Color attach="background" args={['#d8e5b0']} />
 <T.Fog
   attach="fog"
   args={['#d8e5b0', 20, 50]}

@@ -12,7 +12,7 @@ import {
   PROJECTILE_SPEED,
 } from '../constants';
 import type { Entity, EntityKind, World } from '../types';
-import { isInWaterAt } from '../util';
+import { isInWaterAt, removeEntity } from '../util';
 import { genId } from '../world.svelte';
 
 // Movement / engagement profile for every entity kind. Kept here
@@ -48,7 +48,7 @@ export function tickMonsters(world: World, dt: number) {
       Math.hypot(e.x - world.player.x, e.z - world.player.z) >
       profile.despawnDist
     ) {
-      world.entities.splice(i, 1);
+      removeEntity(world, i);
       continue;
     }
 

@@ -6,7 +6,7 @@
 import { isInCity } from '../../city';
 import { getVisibleProps } from '../../scene/world';
 import { SPAWN } from '../constants';
-import { spawnBeast, spawnJanna, spawnSpider, spawnSwain } from '../spawn';
+import { spawnEntity } from '../spawn';
 import type { EntityKind, World } from '../types';
 
 export function tickSpawners(world: World, dt: number) {
@@ -64,7 +64,7 @@ function trySpiderFromTree(world: World): boolean {
   if (trees.length === 0) return false;
   const tree = trees[Math.floor(world.rng.next() * trees.length)]!;
   const offset = SPAWN.spider.treeOffset;
-  spawnSpider(
+  spawnEntity(
     world,
     'spider-big',
     tree.x + (world.rng.next() - 0.5) * offset,
@@ -90,18 +90,6 @@ function tryRingSpawn(
   const z = world.player.z + Math.sin(angle) * dist;
   if (isInCity(x, z)) return false;
 
-  switch (kind) {
-    case 'swain':
-      spawnSwain(world, x, z);
-      return true;
-    case 'wolf':
-      spawnBeast(world, 'wolf', x, z);
-      return true;
-    case 'bear':
-      spawnBeast(world, 'bear', x, z);
-      return true;
-    case 'janna':
-      spawnJanna(world, x, z);
-      return true;
-  }
+  spawnEntity(world, kind, x, z);
+  return true;
 }

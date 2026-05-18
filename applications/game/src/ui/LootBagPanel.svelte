@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getItem, type ItemId } from '../items';
   import { lootBagOpen } from '../lootBagOpen.svelte';
+  import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
 
   interface Stack {
@@ -41,6 +42,16 @@
   function close() {
     lootBagOpen.value = null;
   }
+
+  function pickUp() {
+    if (!bag) return;
+    dispatch(world, { kind: 'pickup_loot', bagId: bag.id });
+    lootBagOpen.value = null;
+  }
+
+  const hasOwnedItems = $derived(
+    !!bag && bag.items.some((item) => item.owner === world.player.name),
+  );
 </script>
 
 {#if bag}
@@ -70,14 +81,25 @@
         >
           {bag.isDeathBag ? 'Death Bag' : 'Loot Bag'}
         </h2>
-        <button
-          type="button"
-          class="text-amber-300/80 hover:text-amber-100"
-          onclick={close}
-          aria-label="Close loot bag"
-        >
-          ✕
-        </button>
+        <div class="flex items-center gap-2">
+          {#if hasOwnedItems && !bag.isDeathBag}
+            <button
+              type="button"
+              class="border border-amber-600/70 bg-amber-900/40 px-2 py-0.5 text-xs font-semibold text-amber-200 hover:border-amber-400 hover:text-amber-100"
+              onclick={pickUp}
+            >
+              Pick Up
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="text-amber-300/80 hover:text-amber-100"
+            onclick={close}
+            aria-label="Close loot bag"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div class="space-y-3 p-4">

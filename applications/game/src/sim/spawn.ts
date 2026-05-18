@@ -34,112 +34,65 @@ function snapshot(world: World, base: MonsterAttributes) {
 
 export type SpiderKind = 'spider-big' | 'spider-medium' | 'spider-tiny';
 
-const SPIDER_KIND_TO_MONSTER: Record<SpiderKind, MonsterId> = {
-  'spider-big': MONSTER_SPIDER,
-  'spider-medium': MONSTER_SMALL_SPIDER,
-  'spider-tiny': MONSTER_TINY_SPIDER,
+// 'toward' = +Z forward (beast convention); 'away' = −Z forward (swain/janna convention).
+type FacingMode = 'none' | 'toward' | 'away';
+
+type KindConfig = {
+  idPrefix: string;
+  monsterId: MonsterId;
+  facing: FacingMode;
+  staggerAttack: boolean;
 };
 
-export function spawnSpider(
+const KIND_CONFIG: Record<Exclude<EntityKind, 'troller'>, KindConfig> = {
+  'spider-big':    { idPrefix: 's', monsterId: MONSTER_SPIDER,       facing: 'none',   staggerAttack: false },
+  'spider-medium': { idPrefix: 's', monsterId: MONSTER_SMALL_SPIDER, facing: 'none',   staggerAttack: false },
+  'spider-tiny':   { idPrefix: 's', monsterId: MONSTER_TINY_SPIDER,  facing: 'none',   staggerAttack: false },
+  wolf:            { idPrefix: 'b', monsterId: MONSTER_WOLF,         facing: 'toward', staggerAttack: false },
+  bear:            { idPrefix: 'b', monsterId: MONSTER_BEAR,         facing: 'toward', staggerAttack: false },
+  swain:           { idPrefix: 'e', monsterId: MONSTER_SWAIN,        facing: 'away',   staggerAttack: true  },
+  janna:           { idPrefix: 'j', monsterId: MONSTER_JANNA,        facing: 'away',   staggerAttack: false },
+};
+
+export function spawnEntity(
   world: World,
-  kind: SpiderKind,
+  kind: Exclude<EntityKind, 'troller'>,
   x: number,
   z: number,
-  rotation = 0,
+  rotation?: number,
 ): Entity {
-  const monsterId = SPIDER_KIND_TO_MONSTER[kind];
-  const stats = snapshot(world, getMonster(monsterId).attributes);
-  const e: Entity = {
-    id: genId(world, 's'),
-    kind,
-    monsterId,
-    x,
-    z,
-    rotation,
-    hp: stats.health,
-    maxHp: stats.health,
-    damage: stats.damage,
-    attackSpeed: stats.attackSpeed,
-    healthRegen: stats.healthRegen,
-    attackCooldown: 0,
-  };
-  world.entities.push(e);
-  return e;
-}
-
-export function spawnBeast(
-  world: World,
-  kind: 'wolf' | 'bear',
-  x: number,
-  z: number,
-): Entity {
-  const monsterId = kind === 'wolf' ? MONSTER_WOLF : MONSTER_BEAR;
-  const stats = snapshot(world, getMonster(monsterId).attributes);
-  const e: Entity = {
-    id: genId(world, 'b'),
-    kind,
-    monsterId,
-    x,
-    z,
-    rotation: Math.atan2(world.player.x - x, world.player.z - z),
-    hp: stats.health,
-    maxHp: stats.health,
-    damage: stats.damage,
-    attackSpeed: stats.attackSpeed,
-    healthRegen: stats.healthRegen,
-    attackCooldown: 0,
-  };
-  world.entities.push(e);
-  return e;
-}
-
-export function spawnSwain(world: World, x: number, z: number): Entity {
-  const stats = snapshot(world, getMonster(MONSTER_SWAIN).attributes);
-  const e: Entity = {
-    id: genId(world, 'e'),
-    kind: 'swain',
-    monsterId: MONSTER_SWAIN,
-    x,
-    z,
-    // Same facing convention as the legacy Enemy view (-Z forward).
-    rotation: Math.atan2(-(world.player.x - x), -(world.player.z - z)),
-    hp: stats.health,
-    maxHp: stats.health,
-    damage: stats.damage,
-    attackSpeed: stats.attackSpeed,
-    healthRegen: stats.healthRegen,
-    // Stagger first shot so a clustered respawn doesn't volley.
-    attackCooldown:
-      world.rng.next() / Math.max(stats.attackSpeed, 0.0001),
-  };
-  world.entities.push(e);
-  return e;
-}
-
-export function spawnJanna(world: World, x: number, z: number): Entity {
-  const monster = getMonster(MONSTER_JANNA);
-  // Janna's catalog values are flat (no night-scaling for an ally),
-  // so we still call snapshot — at night it'd just multiply zeros.
+  const cfg = KIND_CONFIG[kind];
+  const monster = getMonster(cfg.monsterId);
   const stats = snapshot(world, monster.attributes);
+  const dx = world.player.x - x;
+  const dz = world.player.z - z;
+  const r =
+    rotation ??
+    (cfg.facing === 'toward'
+      ? Math.atan2(dx, dz)
+      : cfg.facing === 'away'
+        ? Math.atan2(-dx, -dz)
+        : 0);
   const e: Entity = {
-    id: genId(world, 'j'),
-    kind: 'janna',
-    monsterId: MONSTER_JANNA,
+    id: genId(world, cfg.idPrefix),
+    kind,
+    monsterId: cfg.monsterId,
     x,
     z,
-    rotation: Math.atan2(-(world.player.x - x), -(world.player.z - z)),
+    rotation: r,
     hp: stats.health,
     maxHp: stats.health,
     damage: stats.damage,
     attackSpeed: stats.attackSpeed,
     healthRegen: stats.healthRegen,
-    attackCooldown: 0,
-    // Initial random cooldown matches the legacy spawn behaviour so
-    // a single visible Janna doesn't drop circles in perfect lockstep
-    // with another.
-    healCooldown: world.rng.next() * 7,
+    experience: monster.attributes.experience,
+    attackCooldown: cfg.staggerAttack
+      ? world.rng.next() / Math.max(stats.attackSpeed, 0.0001)
+      : 0,
+    ...(kind === 'janna' && { healCooldown: world.rng.next() * 7 }),
   };
   world.entities.push(e);
+  world.entityById.set(e.id, e);
   return e;
 }
 
@@ -164,6 +117,7 @@ export function spawnTroller(
     damage: 0,
     attackSpeed: 0,
     healthRegen: 0,
+    experience: monster.attributes.experience,
     attackCooldown: 0,
     phase: 'approach',
     phaseTimer: 0,
@@ -172,6 +126,7 @@ export function spawnTroller(
     trollerTargetZ: world.death.deathZ,
   };
   world.entities.push(e);
+  world.entityById.set(e.id, e);
   return e;
 }
 
@@ -184,14 +139,14 @@ export function spawnByMonsterId(
   z: number,
 ): Entity | null {
   switch (monsterId) {
-    case MONSTER_WOLF: return spawnBeast(world, 'wolf', x, z);
-    case MONSTER_BEAR: return spawnBeast(world, 'bear', x, z);
-    case MONSTER_SWAIN: return spawnSwain(world, x, z);
-    case MONSTER_SPIDER: return spawnSpider(world, 'spider-big', x, z);
-    case MONSTER_SMALL_SPIDER: return spawnSpider(world, 'spider-medium', x, z);
-    case MONSTER_TINY_SPIDER: return spawnSpider(world, 'spider-tiny', x, z);
-    case MONSTER_JANNA: return spawnJanna(world, x, z);
-    case MONSTER_TROLLER: return spawnTroller(world, x, z, false);
+    case MONSTER_WOLF:         return spawnEntity(world, 'wolf', x, z);
+    case MONSTER_BEAR:         return spawnEntity(world, 'bear', x, z);
+    case MONSTER_SWAIN:        return spawnEntity(world, 'swain', x, z);
+    case MONSTER_SPIDER:       return spawnEntity(world, 'spider-big', x, z);
+    case MONSTER_SMALL_SPIDER: return spawnEntity(world, 'spider-medium', x, z);
+    case MONSTER_TINY_SPIDER:  return spawnEntity(world, 'spider-tiny', x, z);
+    case MONSTER_JANNA:        return spawnEntity(world, 'janna', x, z);
+    case MONSTER_TROLLER:      return spawnTroller(world, x, z, false);
     default: return null;
   }
 }

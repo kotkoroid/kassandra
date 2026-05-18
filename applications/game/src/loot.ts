@@ -5,7 +5,7 @@
 import type { ItemId } from './items';
 import type { MonsterId } from './monsters';
 
-import rawCatalog from './loot.jsonc?raw';
+import rawCatalog from './data/loot.jsonc?raw';
 
 export type LootTable = Record<ItemId, number>;
 

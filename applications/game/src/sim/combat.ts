@@ -4,19 +4,17 @@
 // happen in one place regardless of source.
 
 import { rollLoot } from '../loot';
-import { getMonster } from '../monsters';
 import {
   EXP_PER_LEVEL,
   LOOT_BAG_TTL,
-  PLAYER_MAX_HP,
-  PLAYER_MAX_MANA,
-  STAMINA_MAX,
   SWORD_DOT_THRESHOLD,
   SWORD_REACH,
 } from './constants';
-import { spawnSpider, type SpiderKind } from './spawn';
+import { emit } from './events';
+import { spawnEntity, type SpiderKind } from './spawn';
+import { getEffectiveStat } from './stats';
 import type { World } from './types';
-import { effectiveDamage, isHostile } from './util';
+import { isHostile, removeEntity } from './util';
 import { genId } from './world.svelte';
 
 const SPIDER_CHILD_COUNT = 3;
@@ -53,7 +51,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
         bagXp: 0,
       });
     }
-    grantExperience(world, getMonster(e.monsterId).attributes.experience);
+    grantExperience(world, e.experience);
   }
 
   // Spider split — happens regardless of who delivered the killing
@@ -74,7 +72,8 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     world.player.engageTargetId = null;
   }
 
-  world.entities.splice(index, 1);
+  emit(world, { kind: 'entity-killed', entityKind: e.kind, monsterId: e.monsterId, x: e.x, z: e.z, byPlayer });
+  removeEntity(world, index);
 }
 
 function splitSpider(
@@ -85,7 +84,7 @@ function splitSpider(
 ) {
   for (let i = 0; i < SPIDER_CHILD_COUNT; i++) {
     const angle = (i / SPIDER_CHILD_COUNT) * Math.PI * 2;
-    spawnSpider(
+    spawnEntity(
       world,
       kind,
       x + Math.cos(angle) * SPIDER_CHILD_DIST,
@@ -124,10 +123,11 @@ export function grantExperience(world: World, amount: number) {
   while (p.experience >= EXP_PER_LEVEL) {
     p.experience -= EXP_PER_LEVEL;
     p.level += 1;
-    p.health = PLAYER_MAX_HP;
-    p.mana = PLAYER_MAX_MANA;
-    p.stamina = STAMINA_MAX;
+    p.health = getEffectiveStat(p, 'maxHealth');
+    p.mana = getEffectiveStat(p, 'maxMana');
+    p.stamina = getEffectiveStat(p, 'maxStamina');
     p.levelUpTrigger += 1;
+    emit(world, { kind: 'player-level-up', level: p.level });
   }
 }
 
@@ -140,7 +140,7 @@ export function slash(world: World) {
 
   const fwdX = Math.sin(p.rotation);
   const fwdZ = Math.cos(p.rotation);
-  const damage = effectiveDamage(p);
+  const damage = getEffectiveStat(p, 'damage');
 
   for (let i = world.entities.length - 1; i >= 0; i--) {
     const e = world.entities[i];

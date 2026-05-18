@@ -10,7 +10,6 @@ import { slash } from '../combat';
 import {
   ARRIVE_RADIUS,
   ENGAGE_RANGE,
-  PLAYER_MAX_HP,
   PLAYER_RADIUS,
   SPEED_EXHAUSTED,
   SPEED_NORMAL,
@@ -22,13 +21,9 @@ import {
   TREE_RADIUS,
   WATER_SPEED_FACTOR,
 } from '../constants';
+import { getEffectiveStat } from '../stats';
 import type { FrameInputs, World } from '../types';
-import {
-  effectiveAttackSpeed,
-  findEntity,
-  isHostile,
-  isInWaterAt,
-} from '../util';
+import { findEntity, isHostile, isInWaterAt } from '../util';
 import { isNight } from './time';
 
 export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
@@ -36,12 +31,11 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
 
   // Passive health regen runs whether moving or idle, but only while
   // alive. Tied to stat, capped at PLAYER_MAX_HP.
-  if (
-    world.death.alive &&
-    p.health < PLAYER_MAX_HP &&
-    p.healthRegen > 0
-  ) {
-    p.health = Math.min(PLAYER_MAX_HP, p.health + p.healthRegen * dt);
+  if (world.death.alive && p.healthRegen > 0) {
+    const maxHp = getEffectiveStat(p, 'maxHealth');
+    if (p.health < maxHp) {
+      p.health = Math.min(maxHp, p.health + getEffectiveStat(p, 'healthRegen') * dt);
+    }
   }
 
   // Bubble expiry — once world.time crosses the threshold the chat
@@ -86,7 +80,7 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
         p.navTargetX = null;
         p.navTargetZ = null;
         p.rotation = Math.atan2(tdx, tdz);
-        const minGap = 1 / Math.max(effectiveAttackSpeed(p), 0.0001);
+        const minGap = 1 / Math.max(getEffectiveStat(p, 'attackSpeed'), 0.0001);
         if (world.time - p.lastSlashTime >= minGap) {
           slash(world);
           // One-attack mode: stop after this swing; selection stays
@@ -186,7 +180,7 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
 
   if (world.pending.manualAttack) {
     world.pending.manualAttack = false;
-    const minGap = 1 / Math.max(effectiveAttackSpeed(p), 0.0001);
+    const minGap = 1 / Math.max(getEffectiveStat(p, 'attackSpeed'), 0.0001);
     if (world.time - p.lastSlashTime >= minGap) {
       slash(world);
     }

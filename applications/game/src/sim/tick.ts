@@ -7,6 +7,7 @@
 
 import { applyChat } from './systems/chat';
 import { tickDeath } from './systems/death';
+import { tickModifiers } from './stats';
 import { tickHealingCircles } from './systems/healingCircles';
 import { tickLootBags } from './systems/loot';
 import { tickMonsters } from './systems/monsters';
@@ -25,6 +26,7 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
 
   // 1. World clock first so other systems see the new time.
   tickTime(world, dt);
+  tickModifiers(world);
 
   // 2. Drain queued events. Some set per-tick flags on world.pending
   // that downstream systems read this same tick.
@@ -87,5 +89,22 @@ function handleEvent(world: World, ev: SimEvent) {
     case 'kill_player':
       if (world.death.alive) world.player.health = 0;
       break;
+    case 'pickup_loot': {
+      const bagIdx = world.lootBags.findIndex((b) => b.id === ev.bagId);
+      if (bagIdx < 0) break;
+      const bag = world.lootBags[bagIdx]!;
+      const playerName = world.player.name;
+      const kept = bag.items.filter((item) => {
+        if (item.owner !== playerName) return true;
+        world.player.bag.push(item.itemId);
+        return false;
+      });
+      bag.items = kept;
+      // Remove empty kill bags immediately rather than waiting for TTL.
+      if (kept.length === 0 && !bag.isDeathBag) {
+        world.lootBags.splice(bagIdx, 1);
+      }
+      break;
+    }
   }
 }

@@ -1,12 +1,19 @@
 // Cross-system helpers — kept tiny and pure so anything in sim/ can
 // import without dragging system state around.
 
-import { getItem } from '../items';
 import { getVisibleWaters } from '../scene/world';
-import type { Entity, EntityKind, Player, World } from './types';
+import type { Entity, EntityKind, World } from './types';
 
 export function findEntity(world: World, id: string): Entity | null {
-  return world.entities.find((e) => e.id === id) ?? null;
+  return world.entityById.get(id) ?? null;
+}
+
+// Removes the entity at `index` from both the array and the id index.
+// All entity removals must route through here to keep the two in sync.
+export function removeEntity(world: World, index: number): void {
+  const e = world.entities[index];
+  if (e) world.entityById.delete(e.id);
+  world.entities.splice(index, 1);
 }
 
 // Janna is the only ally entity kind. Troller is hostile (the
@@ -20,19 +27,6 @@ export function isInWaterAt(x: number, z: number): boolean {
     if (Math.hypot(x - w.x, z - w.z) < w.radius) return true;
   }
   return false;
-}
-
-// Effective player stats include the equipped weapon's contribution.
-// Reading the catalog each call is fine — it's a Record lookup.
-
-export function effectiveAttackSpeed(player: Player): number {
-  const w = getItem(player.equippedWeaponId);
-  return player.attackSpeed + (w?.attributes.attackSpeed ?? 0);
-}
-
-export function effectiveDamage(player: Player): number {
-  const w = getItem(player.equippedWeaponId);
-  return player.damage + (w?.attributes.damage ?? 0);
 }
 
 // Wrap-aware angle lerp — atan2 results sit in (-π, π] so a naive

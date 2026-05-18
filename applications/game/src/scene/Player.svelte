@@ -5,7 +5,7 @@
   import { ARMOR_COLORS, HAIR_COLORS } from '../cosmetics';
   import { selection } from '../selection.svelte';
   import { settings } from '../settings.svelte';
-  import { effectiveAttackSpeed } from '../sim/util';
+  import { getEffectiveStat } from '../sim/stats';
   import { world } from '../sim/world.svelte';
 
   // Player.svelte is reused by the CharacterCreation preview, which
@@ -75,7 +75,7 @@
     if (slashPhase >= 0) {
       // Animation length = 1 / attackSpeed seconds, so the visible
       // swing plays at exactly the rate the stat advertises.
-      slashPhase += delta * Math.max(effectiveAttackSpeed(player), 0.0001);
+      slashPhase += delta * Math.max(getEffectiveStat(player, 'attackSpeed'), 0.0001);
       if (slashPhase >= 1) slashPhase = -1;
     }
 

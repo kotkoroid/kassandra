@@ -1,10 +1,7 @@
 // Janna's heal-circle auras: tick TTL, heal the player while inside.
 
-import {
-  HEAL_CIRCLE_RADIUS,
-  HEAL_CIRCLE_RATE,
-  PLAYER_MAX_HP,
-} from '../constants';
+import { HEAL_CIRCLE_RADIUS, HEAL_CIRCLE_RATE } from '../constants';
+import { getEffectiveStat } from '../stats';
 import type { World } from '../types';
 
 export function tickHealingCircles(world: World, dt: number) {
@@ -18,11 +15,9 @@ export function tickHealingCircles(world: World, dt: number) {
       continue;
     }
     if (!world.death.alive) continue;
-    if (
-      Math.hypot(c.x - p.x, c.z - p.z) < HEAL_CIRCLE_RADIUS &&
-      p.health < PLAYER_MAX_HP
-    ) {
-      p.health = Math.min(PLAYER_MAX_HP, p.health + HEAL_CIRCLE_RATE * dt);
+    const maxHp = getEffectiveStat(p, 'maxHealth');
+    if (Math.hypot(c.x - p.x, c.z - p.z) < HEAL_CIRCLE_RADIUS && p.health < maxHp) {
+      p.health = Math.min(maxHp, p.health + HEAL_CIRCLE_RATE * dt);
     }
   }
 }

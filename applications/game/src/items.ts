@@ -2,7 +2,7 @@
 // as raw text so authors can keep `//` comments next to each entry.
 // A small stripper removes line + block comments before JSON.parse.
 
-import rawCatalog from './items.jsonc?raw';
+import rawCatalog from './data/items.jsonc?raw';
 
 export type ItemType = 'WEAPON';
 export type ItemSubtype = 'SWORD';

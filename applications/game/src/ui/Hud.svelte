@@ -2,6 +2,7 @@
   import { fly } from 'svelte/transition';
   import { STAMINA_MAX } from '../sim/constants';
   import { dispatch } from '../sim/input';
+  import { getEffectiveStat } from '../sim/stats';
   import { world } from '../sim/world.svelte';
 
   // Local alias so the existing markup stays readable.
@@ -11,6 +12,8 @@
   function requestRespawn() {
     dispatch(world, { kind: 'request_respawn' });
   }
+  import { bagOpen } from '../bag.svelte';
+  import BagPanel from './BagPanel.svelte';
   import Chat from './Chat.svelte';
   import LootBagPanel from './LootBagPanel.svelte';
   import Minimap from './Minimap.svelte';
@@ -114,11 +117,11 @@
   <div class="flex items-center gap-2 justify-self-start">
     <div class="flex flex-col gap-0.5">
       <div class="group pointer-events-auto relative h-2 w-40 bg-neutral-800">
-        <div class="h-full bg-red-600" style:width="{player.health}%"></div>
+        <div class="h-full bg-red-600" style:width="{(player.health / getEffectiveStat(player, 'maxHealth')) * 100}%"></div>
         <div
           class="pointer-events-none absolute -top-7 left-0 border border-amber-700/50 bg-black/95 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity group-hover:opacity-100"
         >
-          Health: {Math.round(player.health)} ({Math.round(player.health)}%)
+          Health: {Math.round(player.health)} / {getEffectiveStat(player, 'maxHealth')} ({Math.round((player.health / getEffectiveStat(player, 'maxHealth')) * 100)}%)
         </div>
       </div>
       <div class="group pointer-events-auto relative h-2 w-40 bg-neutral-800">
@@ -179,6 +182,7 @@
         class="border border-amber-700/50 bg-neutral-900/80 px-3 py-1.5 text-xs font-semibold tracking-wider text-amber-300/90 uppercase transition hover:border-amber-400 hover:bg-amber-900/30 hover:text-amber-100"
         onclick={() => {
           if (label === 'Settings') settingsOpen = true;
+          if (label === 'Inventory') bagOpen.value = !bagOpen.value;
         }}
       >
         {label}
@@ -192,5 +196,6 @@
 {/if}
 
 <LootBagPanel />
+<BagPanel />
 <Chat />
 </div>
