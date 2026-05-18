@@ -4,8 +4,8 @@
   import CharacterCreation from './ui/CharacterCreation.svelte';
   import Hud from './ui/Hud.svelte';
 
-  // Show character creation first; mount the canvas only after Create
-  // so the game state (keyboard listeners, useTask loops) starts fresh.
+  // Show character creation first; the canvas only mounts after the
+  // player clicks Create so game systems start with a fresh state.
   let view = $state<'creation' | 'game'>('creation');
 </script>
 

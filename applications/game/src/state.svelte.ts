@@ -67,6 +67,9 @@ export const player = $state({
   // minimap can render the player + nearby entities.
   x: 0,
   z: 0,
+  // Last chat message floating above the player's head. Empty means
+  // no bubble; chat.svelte.ts clears this after 5s via setTimeout.
+  saying: '',
 });
 
 // Effective-stat helpers: equipped-weapon attributes are *added* to
@@ -82,4 +85,24 @@ export function getEffectiveAttackSpeed(): number {
 
 export function getEffectiveDamage(): number {
   return player.damage + (getEquippedWeapon()?.attributes.damage ?? 0);
+}
+
+// XP threshold for a single level. Linear for now — easy to swap to
+// a curve later if progression needs to slow down.
+export const EXP_PER_LEVEL = 50;
+
+// Add XP from a slain monster (or any source) and cascade level-ups
+// while the bar overflows. Each level-up tops the player off and
+// bumps the trigger so visuals/HUD can react.
+export function grantExperience(amount: number) {
+  if (amount <= 0) return;
+  player.experience += amount;
+  while (player.experience >= EXP_PER_LEVEL) {
+    player.experience -= EXP_PER_LEVEL;
+    player.level += 1;
+    player.health = 100;
+    player.mana = 100;
+    player.stamina = STAMINA_MAX;
+    player.levelUpTrigger += 1;
+  }
 }

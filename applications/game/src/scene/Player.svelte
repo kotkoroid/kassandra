@@ -3,6 +3,8 @@
   import { HTML } from '@threlte/extras';
   import { DoubleSide } from 'three';
   import { death } from '../death.svelte';
+  import { selection } from '../selection.svelte';
+  import { settings } from '../settings.svelte';
   import {
     ARMOR_COLORS,
     HAIR_COLORS,
@@ -95,17 +97,39 @@
   );
 </script>
 
-<T.Group {position} rotation.y={rotation}>
-  {#if death.alive}
-    <!-- Nameplate above the head. Hidden while dead so the corpse
-         doesn't keep a floating label over it. -->
-    <HTML position={[0, 2.25, 0]} center pointerEvents="none">
+<T.Group
+  {position}
+  rotation.y={rotation}
+  onclick={(e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    selection.value = { kind: 'player' };
+  }}
+>
+  {#if death.alive && (settings.showNames || player.saying)}
+    <!-- Nameplate + speech bubble above the head. Both are hidden
+         while dead so the corpse doesn't keep floating labels over
+         it. Nameplate is toggleable via the Settings dialog; the
+         say-bubble auto-dismisses 5s after each chat send. -->
+    <HTML position={[0, 2.25, 0]} center pointerEvents="none" zIndexRange={[40, 0]}>
       <div
-        class="flex items-baseline gap-1.5 text-sm font-semibold whitespace-nowrap [text-shadow:0_1px_2px_rgb(0_0_0_/_0.85)]"
+        class="flex flex-col items-center gap-1 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.85)]"
       >
-        <span class="text-amber-400">Level {player.level}</span>
-        <span class="text-white/50">|</span>
-        <span class="text-white">{player.name}</span>
+        {#if settings.showNames}
+          <div
+            class="flex items-baseline gap-1.5 text-sm font-semibold whitespace-nowrap"
+          >
+            <span class="text-amber-400">Level {player.level}</span>
+            <span class="text-white/50">|</span>
+            <span class="text-white">{player.name}</span>
+          </div>
+        {/if}
+        {#if player.saying}
+          <div
+            class="max-w-[240px] border border-amber-900/70 bg-black/85 px-2 py-0.5 text-xs text-white"
+          >
+            {player.saying}
+          </div>
+        {/if}
       </div>
     </HTML>
   {/if}

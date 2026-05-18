@@ -48,6 +48,7 @@
         rotation: Math.atan2(-(playerX - hx), -(playerZ - hz)),
         cooldown: Math.random() * HEAL_COOLDOWN,
         hp: HEALER_MAX_HP,
+        maxHp: HEALER_MAX_HP,
       });
     }
 
@@ -97,6 +98,7 @@
 
 {#each healers as healer (healer.id)}
   <Healer
+    id={healer.id}
     position={[healer.x, 0, healer.z]}
     rotation={healer.rotation}
     hpPercent={healer.hp / HEALER_MAX_HP}

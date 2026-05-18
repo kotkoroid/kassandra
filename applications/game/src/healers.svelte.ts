@@ -9,6 +9,10 @@ export interface Healer {
   rotation: number;
   cooldown: number;
   hp: number;
+  // Snapshot of the spawn-time max hp so the selection panel can
+  // render hp / maxHp without reaching back into the spawning
+  // component's constant.
+  maxHp: number;
 }
 
 export interface HealingCircle {

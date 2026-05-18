@@ -1,17 +1,17 @@
 <script lang="ts">
   import { useTask } from '@threlte/core';
-  import { addToBag } from '../bag.svelte';
   import { beasts, type BeastKind } from '../beasts.svelte';
   import { isInCity } from '../city';
   import { healers } from '../healers.svelte';
   import { rollLoot } from '../loot';
+  import { spawnLootBag } from '../lootBags.svelte';
   import {
     getMonster,
     MONSTER_BEAR,
     MONSTER_WOLF,
     type MonsterId,
   } from '../monsters';
-  import { getEffectiveDamage, player } from '../state.svelte';
+  import { getEffectiveDamage, grantExperience, player } from '../state.svelte';
   import { nightStatMultiplier } from '../time.svelte';
   import { getVisibleWaters } from './world';
   import Bear from './Bear.svelte';
@@ -112,7 +112,9 @@
         if (dot < SWORD_DOT_THRESHOLD) continue;
         b.hp -= damage;
         if (b.hp <= 0) {
-          for (const drop of rollLoot(b.monsterId)) addToBag(drop);
+          const monster = getMonster(b.monsterId);
+          spawnLootBag(b.x, b.z, rollLoot(b.monsterId));
+          grantExperience(monster.attributes.experience);
           beasts.splice(i, 1);
         }
       }
@@ -203,6 +205,7 @@
   {@const monster = getMonster(beast.monsterId)}
   {#if beast.kind === 'wolf'}
     <Wolf
+      id={beast.id}
       position={[beast.x, 0, beast.z]}
       rotation={beast.rotation}
       name={monster.name}
@@ -211,6 +214,7 @@
     />
   {:else}
     <Bear
+      id={beast.id}
       position={[beast.x, 0, beast.z]}
       rotation={beast.rotation}
       name={monster.name}

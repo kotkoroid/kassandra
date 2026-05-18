@@ -1,9 +1,15 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { death } from '../death.svelte';
+  import { death, requestRespawn } from '../death.svelte';
   import { player, STAMINA_MAX } from '../state.svelte';
+  import Chat from './Chat.svelte';
+  import LootBagPanel from './LootBagPanel.svelte';
   import Minimap from './Minimap.svelte';
-  import TimeStrip from './TimeStrip.svelte';
+  import QuickBar from './QuickBar.svelte';
+  import SelectionPanel from './SelectionPanel.svelte';
+  import Settings from './Settings.svelte';
+
+  let settingsOpen = $state(false);
 
   let fps = $state(0);
   let frames = 0;
@@ -42,6 +48,12 @@
   });
 </script>
 
+<!-- HUD root: a high-z fixed layer that sits above the canvas *and*
+     above every `<HTML>` overlay @threlte/extras portals to the body
+     (which would otherwise stack over the HUD by DOM order). The
+     wrapper is pointer-events-none so the 3D canvas still receives
+     mouse input through any HUD gap. -->
+<div class="pointer-events-none fixed inset-0 z-50">
 <div
   class="pointer-events-none absolute top-4 left-4 flex items-baseline gap-4 text-sm text-white/85 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.6)]"
 >
@@ -50,7 +62,7 @@
 </div>
 
 <Minimap />
-<TimeStrip />
+<SelectionPanel />
 
 {#if !death.alive}
   <div
@@ -62,11 +74,13 @@
       >
         You Died.
       </div>
-      <div
-        class="mt-4 text-sm font-semibold tracking-[0.3em] text-red-200/80 uppercase"
+      <button
+        type="button"
+        class="pointer-events-auto mt-8 border-2 border-red-500/80 bg-black/80 px-8 py-3 text-sm font-semibold tracking-[0.3em] text-red-100 uppercase transition hover:border-red-300 hover:bg-red-900/40 hover:text-white"
+        onclick={requestRespawn}
       >
-        Respawning in {Math.max(0, Math.ceil(death.respawnTimer))}…
-      </div>
+        Respawn
+      </button>
     </div>
   </div>
 {/if}
@@ -86,9 +100,9 @@
 {/if}
 
 <div
-  class="pointer-events-none absolute right-0 bottom-0 left-0 flex items-center justify-between border-t-2 border-amber-700/70 bg-black/90 p-1.5"
+  class="pointer-events-none absolute right-0 bottom-0 left-0 grid grid-cols-3 items-center border-t-2 border-amber-700/70 bg-black/90 p-1.5"
 >
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-2 justify-self-start">
     <div class="flex flex-col gap-0.5">
       <div class="group pointer-events-auto relative h-2 w-40 bg-neutral-800">
         <div class="h-full bg-red-600" style:width="{player.health}%"></div>
@@ -145,14 +159,29 @@
     </div>
   </div>
 
-  <div class="pointer-events-auto flex items-center gap-1.5">
+  <div class="justify-self-center">
+    <QuickBar />
+  </div>
+
+  <div class="pointer-events-auto flex items-center gap-1.5 justify-self-end">
     {#each ['Character', 'Inventory', 'Social', 'Settings'] as label (label)}
       <button
         type="button"
         class="border border-amber-700/50 bg-neutral-900/80 px-3 py-1.5 text-xs font-semibold tracking-wider text-amber-300/90 uppercase transition hover:border-amber-400 hover:bg-amber-900/30 hover:text-amber-100"
+        onclick={() => {
+          if (label === 'Settings') settingsOpen = true;
+        }}
       >
         {label}
       </button>
     {/each}
   </div>
+</div>
+
+{#if settingsOpen}
+  <Settings onClose={() => (settingsOpen = false)} />
+{/if}
+
+<LootBagPanel />
+<Chat />
 </div>

@@ -11,6 +11,8 @@ export interface MonsterAttributes {
   attackSpeed: number;
   health: number;
   healthRegen: number;
+  // XP granted to the player when this monster is slain.
+  experience: number;
 }
 
 export interface Monster {
@@ -39,6 +41,7 @@ export const MONSTER_SWAIN: MonsterId = 'MONSTER000003';
 export const MONSTER_SPIDER: MonsterId = 'MONSTER000004';
 export const MONSTER_SMALL_SPIDER: MonsterId = 'MONSTER000005';
 export const MONSTER_TINY_SPIDER: MonsterId = 'MONSTER000006';
+export const MONSTER_TROLLER: MonsterId = 'MONSTER000007';
 
 export function getMonster(id: MonsterId): Monster {
   const m = MONSTERS[id];

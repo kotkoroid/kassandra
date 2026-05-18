@@ -1,12 +1,12 @@
 <script lang="ts">
   import { useTask } from '@threlte/core';
-  import { addToBag } from '../bag.svelte';
   import { isInCity } from '../city';
   import { healers } from '../healers.svelte';
   import { rollLoot } from '../loot';
+  import { spawnLootBag } from '../lootBags.svelte';
   import { getMonster } from '../monsters';
   import { SPIDER_VISUALS, spiders, type SpiderSize } from '../spiders.svelte';
-  import { getEffectiveDamage, player } from '../state.svelte';
+  import { getEffectiveDamage, grantExperience, player } from '../state.svelte';
   import { nightStatMultiplier } from '../time.svelte';
   import Spider from './Spider.svelte';
   import { getVisibleProps, getVisibleWaters } from './world';
@@ -69,7 +69,9 @@
     const s = spiders[index];
     if (!s) return;
     const visual = SPIDER_VISUALS[s.size];
-    for (const drop of rollLoot(visual.monsterId)) addToBag(drop);
+    const monster = getMonster(visual.monsterId);
+    spawnLootBag(s.x, s.z, rollLoot(visual.monsterId));
+    grantExperience(monster.attributes.experience);
     spiders.splice(index, 1);
     if (visual.childSize && visual.childCount) {
       for (let i = 0; i < visual.childCount; i++) {
@@ -210,6 +212,7 @@
 {#each spiders as spider (spider.id)}
   {@const monster = getMonster(SPIDER_VISUALS[spider.size].monsterId)}
   <Spider
+    id={spider.id}
     position={[spider.x, 0, spider.z]}
     rotation={spider.rotation}
     scale={SPIDER_VISUALS[spider.size].scale}

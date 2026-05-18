@@ -1,12 +1,12 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
-  import { addToBag } from '../bag.svelte';
   import { isInCity } from '../city';
   import { enemies, projectiles } from '../enemies.svelte';
   import { healers } from '../healers.svelte';
   import { rollLoot } from '../loot';
+  import { spawnLootBag } from '../lootBags.svelte';
   import { getMonster, MONSTER_SWAIN } from '../monsters';
-  import { getEffectiveDamage, player, STAMINA_MAX } from '../state.svelte';
+  import { getEffectiveDamage, grantExperience, player } from '../state.svelte';
   import { nightStatMultiplier } from '../time.svelte';
   import Enemy from './Enemy.svelte';
 
@@ -32,8 +32,6 @@
   // Forward-cone width: dot product with player forward must exceed
   // this. 0.5 ≈ 60° half-angle, so the slash sweeps a ~120° arc.
   const SWORD_DOT_THRESHOLD = 0.5;
-  const EXP_PER_KILL = 10;
-  const EXP_PER_LEVEL = 50;
 
   let spawnTimer = 0;
   let nextId = 1;
@@ -135,17 +133,9 @@
         if (dot < SWORD_DOT_THRESHOLD) continue;
         e.hp -= damage;
         if (e.hp <= 0) {
-          for (const drop of rollLoot(MONSTER_SWAIN)) addToBag(drop);
+          spawnLootBag(e.x, e.z, rollLoot(MONSTER_SWAIN));
           enemies.splice(i, 1);
-          player.experience += EXP_PER_KILL;
-          while (player.experience >= EXP_PER_LEVEL) {
-            player.experience -= EXP_PER_LEVEL;
-            player.level += 1;
-            player.health = 100;
-            player.mana = 100;
-            player.stamina = STAMINA_MAX;
-            player.levelUpTrigger += 1;
-          }
+          grantExperience(swain.attributes.experience);
         }
       }
     }
@@ -193,6 +183,7 @@
 {#each enemies as enemy (enemy.id)}
   {@const swain = getMonster(MONSTER_SWAIN)}
   <Enemy
+    id={enemy.id}
     position={[enemy.x, 0, enemy.z]}
     rotation={enemy.rotation}
     name={swain.name}

@@ -10,7 +10,9 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "bun scripts/dev.ts",
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
     "graph": "nx graph",
     "types:check": "nx run-many -t types:check",
     "format": "vp fmt",

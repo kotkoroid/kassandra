@@ -1,15 +1,17 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { HTML } from '@threlte/extras';
+  import { selection } from '../selection.svelte';
+  import EntityNameplate from './EntityNameplate.svelte';
 
   interface Props {
+    id: string;
     position: [number, number, number];
     rotation: number;
     name: string;
     level: number;
     hpPercent: number;
   }
-  let { position, rotation, name, level, hpPercent }: Props = $props();
+  let { id, position, rotation, name, level, hpPercent }: Props = $props();
 
   const skin = '#dcc7b8';
   const hair = '#bcbcbc';
@@ -19,28 +21,17 @@
   const boot = '#16171a';
 </script>
 
-<T.Group {position} rotation.y={rotation}>
+<T.Group
+  {position}
+  rotation.y={rotation}
+  onclick={(e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    selection.value = { kind: 'enemy', id };
+  }}
+>
   <!-- Title + health bar above the head. center anchors the projected
        pixel so the stack stays horizontally centred over the model. -->
-  <HTML position={[0, 2.5, 0]} center pointerEvents="none">
-    <div
-      class="flex flex-col items-center gap-0.5 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.85)]"
-    >
-      <div
-        class="flex items-baseline gap-1 text-xs font-semibold whitespace-nowrap"
-      >
-        <span class="text-amber-400">Level {level}</span>
-        <span class="text-white/50">|</span>
-        <span class="text-white">{name}</span>
-      </div>
-      <div class="h-1.5 w-16 border border-red-950 bg-black/70">
-        <div
-          class="h-full bg-red-600"
-          style:width="{Math.max(0, Math.min(1, hpPercent)) * 100}%"
-        ></div>
-      </div>
-    </div>
-  </HTML>
+  <EntityNameplate position={[0, 2.5, 0]} {name} {level} {hpPercent} />
 
   <!-- Boots -->
   <T.Mesh position={[-0.13, 0.1, 0]} castShadow>

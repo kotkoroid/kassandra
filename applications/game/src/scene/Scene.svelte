@@ -1,23 +1,29 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
+  import { interactivity } from '@threlte/extras';
   import { onMount } from 'svelte';
   import {
     AmbientLight,
     Color,
     DirectionalLight,
+    DoubleSide,
     Fog,
     MeshStandardMaterial,
     PerspectiveCamera,
     Vector3,
   } from 'three';
+  import { chat, openChat } from '../chat.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z, isInCity } from '../city';
+  import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { death } from '../death.svelte';
+  import { settings } from '../settings.svelte';
   import { getEffectiveAttackSpeed, player, STAMINA_MAX } from '../state.svelte';
   import { currentHour, CYCLE_SECONDS, isNight, time } from '../time.svelte';
   import Beasts from './Beasts.svelte';
   import Death from './Death.svelte';
   import Enemies from './Enemies.svelte';
   import Healers from './Healers.svelte';
+  import LootBags from './LootBags.svelte';
   import Player from './Player.svelte';
   import Props from './Props.svelte';
   import Spiders from './Spiders.svelte';
@@ -54,6 +60,32 @@
   // Tracks death.alive transitions so we teleport the player to the
   // city exactly once at the moment they revive.
   let wasAlive = true;
+  // Click-to-move destination set by ground clicks. Cleared once the
+  // player arrives, or as soon as a WASD key resumes manual control.
+  let navTarget: { x: number; z: number } | null = $state(null);
+  const ARRIVE_RADIUS = 0.15;
+  // Sticky "should the player auto-engage the selected hostile?"
+  // flag. Set to true whenever a new selection is made, flipped to
+  // false the first time the player presses a movement key, and
+  // reset again only when they click another target. Without this
+  // WASD would only cancel chasing for the frame the key was held.
+  let engageActive = $state(true);
+  $effect(() => {
+    // Reads selection.value so the effect re-runs on each new
+    // selection — clicking another hostile rearms the auto-engage.
+    if (selection.value) engageActive = true;
+  });
+  // Engage / auto-slash range. Slightly less than the slash reach so
+  // the player stops a hair inside cone instead of grinding right at
+  // the edge, where a single step backwards by the target would drop
+  // them out again.
+  const ENGAGE_RANGE = 1.45;
+  const HOSTILE_KINDS: ReadonlyArray<string> = [
+    'spider',
+    'enemy',
+    'beast',
+    'troller',
+  ];
   let playerRotation = $state(0);
   let playerMoving = $state(false);
   // Increments each time space is pressed so Player can latch onto
@@ -61,6 +93,11 @@
   let slashTrigger = $state(0);
   let cameraYaw = $state(0);
   let cameraPitch = $state(0.55);
+  // Register Threlte's interactivity plugin so `onclick` works on
+  // every entity's T.Group. Click-on-empty-ground deselects via the
+  // ground mesh's own onclick below.
+  interactivity();
+
   let cameraRef: PerspectiveCamera | undefined = $state();
   let lightRef: DirectionalLight | undefined = $state();
   // Captured via oncreate so sun-driven color/intensity updates each
@@ -130,6 +167,30 @@
 
   onMount(() => {
     const keyDown = (e: KeyboardEvent) => {
+      // The chat panel owns its own keystrokes — don't let any of
+      // them double-trigger game bindings (WASD typing, F-keys, …).
+      if (chat.open) return;
+
+      // Enter opens chat (closing is handled inside Chat.svelte).
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!e.repeat) openChat();
+        return;
+      }
+
+      // Item / skill quick slots. Slots aren't wired to anything yet,
+      // but consuming the key here prevents the browser default and
+      // keeps WASD / Space behavior clean. F1..F5 also stop the
+      // browser from opening dev tools / help dialogs.
+      if (!e.repeat && /^[1-5]$/.test(e.key)) {
+        e.preventDefault();
+        return;
+      }
+      if (!e.repeat && /^F[1-5]$/.test(e.key)) {
+        e.preventDefault();
+        return;
+      }
+
       if (e.code === 'Space') {
         // Stop the page from scrolling and only count fresh presses
         // as new slashes — holding space shouldn't spam-trigger.
@@ -245,7 +306,56 @@
     else if (inWater) speed = SPEED_NORMAL * WATER_SPEED_FACTOR;
     else speed = SPEED_NORMAL;
 
+    // Auto-engage: if a hostile entity is selected and the player
+    // isn't taking manual WASD control, steer toward it and slash
+    // once in range. Friendly selections (player / Janna) are
+    // ignored — clicking them just inspects.
+    const hasManualInput = dx !== 0 || dz !== 0;
+    if (hasManualInput) engageActive = false;
+    if (!hasManualInput && engageActive && selection.value && HOSTILE_KINDS.includes(selection.value.kind)) {
+      const view = getSelectionView();
+      if (!view) {
+        // Target died or despawned — drop the selection and any
+        // lingering chase target so the player doesn't keep walking
+        // toward an empty spot.
+        clearSelection();
+        navTarget = null;
+      } else {
+        const tdx = view.x - playerX;
+        const tdz = view.z - playerZ;
+        const dist = Math.hypot(tdx, tdz);
+        if (dist > ENGAGE_RANGE) {
+          // Out of reach: keep the click-nav pointer updated to the
+          // target's live position so the regular movement block
+          // chases it.
+          navTarget = { x: view.x, z: view.z };
+        } else {
+          // In reach: stop running, face the target, and auto-slash
+          // at the player's effective attack-speed cadence.
+          navTarget = null;
+          playerRotation = Math.atan2(tdx, tdz);
+          const now = performance.now();
+          const minGapMs = 1000 / Math.max(getEffectiveAttackSpeed(), 0.0001);
+          if (now - lastSlashAt >= minGapMs) {
+            slashTrigger++;
+            lastSlashAt = now;
+            // One-attack mode: a single swing then disengage. The
+            // selection stays so the player can see hp / re-click to
+            // resume — only the auto-chain is stopped.
+            if (!settings.autoAttack) engageActive = false;
+          }
+        }
+      }
+    }
+
+    // Resolve world-space movement direction this frame: WASD wins
+    // when held (and cancels click-nav); otherwise steer toward the
+    // click-nav target until we arrive.
+    let worldX = 0;
+    let worldZ = 0;
+    let moving = false;
     if (dx !== 0 || dz !== 0) {
+      navTarget = null;
       const len = Math.hypot(dx, dz);
       const nx = dx / len;
       const nz = dz / len;
@@ -253,8 +363,23 @@
       const cosY = Math.cos(cameraYaw);
       // Forward (W) = away from camera = (-sinY, 0, -cosY).
       // Right (D) = (cosY, 0, -sinY). Map (nx, nz) onto those axes.
-      const worldX = nx * cosY + nz * sinY;
-      const worldZ = -nx * sinY + nz * cosY;
+      worldX = nx * cosY + nz * sinY;
+      worldZ = -nx * sinY + nz * cosY;
+      moving = true;
+    } else if (navTarget) {
+      const tdx = navTarget.x - playerX;
+      const tdz = navTarget.z - playerZ;
+      const dist = Math.hypot(tdx, tdz);
+      if (dist <= ARRIVE_RADIUS) {
+        navTarget = null;
+      } else {
+        worldX = tdx / dist;
+        worldZ = tdz / dist;
+        moving = true;
+      }
+    }
+
+    if (moving) {
       const stepX = worldX * speed * delta;
       const stepZ = worldZ * speed * delta;
       const newX = playerX + stepX;
@@ -268,6 +393,9 @@
       if (!cityClosed) {
         playerX = newX;
         playerZ = newZ;
+      } else {
+        // Don't keep grinding against the closed gate.
+        navTarget = null;
       }
       // Player model is authored with its face on +Z (head + horns
       // sit slightly forward, hair slab behind), so the rotation
@@ -442,7 +570,17 @@
   }}
 />
 
-<T.Mesh position={[0, -0.5, 0]} material={groundMaterials} receiveShadow>
+<T.Mesh
+  position={[0, -0.5, 0]}
+  material={groundMaterials}
+  receiveShadow
+  onclick={(e: { point: { x: number; z: number } }) => {
+    // Terrain click: drop any selected entity (this isn't an
+    // attack target) and walk to where the cursor pointed.
+    clearSelection();
+    navTarget = { x: e.point.x, z: e.point.z };
+  }}
+>
   <T.BoxGeometry args={[200, 1, 200]} />
 </T.Mesh>
 
@@ -473,6 +611,7 @@
   {slashTrigger}
 />
 <Healers {playerX} {playerZ} />
+<LootBags />
 <Spiders
   {playerX}
   {playerZ}
@@ -485,4 +624,32 @@
   {playerRotation}
   {slashTrigger}
 />
-<Death {playerX} {playerZ} />
+<Death
+  {playerX}
+  {playerZ}
+  {playerRotation}
+  {slashTrigger}
+/>
+
+{#if selection.value}
+  {@const view = getSelectionView()}
+  {#if view}
+    <!-- Red selection ring at the entity's feet, repositioned each
+         render. The ring is offset slightly above the ground to
+         avoid z-fighting with the grass; double-sided so it reads
+         even when the camera pitches low. -->
+    <T.Mesh
+      position={[view.x, 0.03, view.z]}
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      <T.RingGeometry args={[0.6, 0.8, 48]} />
+      <T.MeshBasicMaterial
+        color="#ff3030"
+        transparent
+        opacity={0.9}
+        depthWrite={false}
+        side={DoubleSide}
+      />
+    </T.Mesh>
+  {/if}
+{/if}

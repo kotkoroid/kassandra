@@ -1,22 +1,31 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
-  import { death } from '../death.svelte';
-  import { player, STAMINA_MAX } from '../state.svelte';
+  import { BAG_XP_RECOVERY, death, loseProgressOnDeath } from '../death.svelte';
+  import { getMonster, MONSTER_TROLLER } from '../monsters';
+  import { selection } from '../selection.svelte';
+  import { getEffectiveDamage, grantExperience, player } from '../state.svelte';
+  import EntityNameplate from './EntityNameplate.svelte';
 
   interface Props {
     playerX: number;
     playerZ: number;
+    playerRotation: number;
+    slashTrigger: number;
   }
-  let { playerX, playerZ }: Props = $props();
+  let { playerX, playerZ, playerRotation, slashTrigger }: Props = $props();
 
-  const RESPAWN_DELAY = 5; // sec after death until respawn
-  const GNOME_SPEED = 2.2;
-  const GNOME_LEAVE_DISTANCE = 4;
+  // Sword reach + cone match the values used in Enemies/Spiders/Beasts
+  // so the Troller can be cleaved from the same range as anything else.
+  const SWORD_REACH = 1.6;
+  const SWORD_DOT_THRESHOLD = 0.5;
+  let lastSlashTrigger = 0;
+
+  const GNOME_SPEED = 5;
+  const GNOME_LEAVE_DISTANCE = 30;
   const GNOME_COLLECT_TIME = 1.2;
   const BAG_TTL = 5 * 60; // 5 minutes
   const BAG_PICKUP_RADIUS = 1.2;
-  const BAG_XP_RECOVERY = 0.75;
   const BUG_SPEED = 1.6;
   const BUG_WANDER_RADIUS = 4;
   const BUG_RETARGET_MIN = 1.5;
@@ -36,15 +45,21 @@
   });
 
   $effect(() => {
-    // Trigger death sequence once health drops to 0.
+    // Trigger death sequence once health drops to 0. Respawn is
+    // user-initiated from the Hud — we set up the death scene and
+    // wait, no auto-timer.
     if (player.health <= 0 && death.alive) {
       death.alive = false;
       death.deathX = playerX;
       death.deathZ = playerZ;
-      death.bagXp = player.experience;
-      player.experience = 0;
-      death.respawnTimer = RESPAWN_DELAY;
-      // Gnome appears nearby and walks toward the corpse.
+      // Stash held XP into the bag and reset level + stats to base.
+      // The bag returns BAG_XP_RECOVERY of the XP (and, eventually,
+      // every dropped item) when the player walks back to it.
+      loseProgressOnDeath();
+      // Troller appears nearby and walks toward the corpse. HP comes
+      // from the monster catalog so any future balance tweak flows
+      // straight through.
+      const trollerHp = getMonster(MONSTER_TROLLER).attributes.health;
       const angle = Math.random() * Math.PI * 2;
       death.gnome = {
         phase: 'approach',
@@ -54,29 +69,13 @@
         targetZ: death.deathZ,
         rotation: 0,
         timer: 0,
+        hp: trollerHp,
+        maxHp: trollerHp,
       };
       death.bag = null;
       death.bug = null;
     }
   });
-
-  function respawn() {
-    death.alive = true;
-    player.health = 100;
-    player.mana = 100;
-    player.stamina = STAMINA_MAX;
-    // Indicator bug spawns next to the respawned player and starts
-    // wandering toward the loot bag (if it dropped).
-    const angle = Math.random() * Math.PI * 2;
-    death.bug = {
-      x: playerX + Math.cos(angle) * 1.5,
-      z: playerZ + Math.sin(angle) * 1.5,
-      rotation: 0,
-      wanderTargetX: playerX,
-      wanderTargetZ: playerZ,
-      retargetTimer: 0,
-    };
-  }
 
   function stepGnome(delta: number) {
     const g = death.gnome;
@@ -127,16 +126,7 @@
     }
     if (!death.alive) return;
     if (Math.hypot(b.x - playerX, b.z - playerZ) < BAG_PICKUP_RADIUS) {
-      const recovered = Math.round(death.bagXp * BAG_XP_RECOVERY);
-      player.experience += recovered;
-      while (player.experience >= 50) {
-        player.experience -= 50;
-        player.level += 1;
-        player.health = 100;
-        player.mana = 100;
-        player.stamina = STAMINA_MAX;
-        player.levelUpTrigger += 1;
-      }
+      grantExperience(Math.round(death.bagXp * BAG_XP_RECOVERY));
       death.bag = null;
       death.bagXp = 0;
       death.bug = null;
@@ -172,15 +162,37 @@
     b.rotation = Math.atan2(dx, dz);
   }
 
+  // Sword hit on the Troller. If the player kills him before he
+  // delivers the player's loot, the bag drops at his current
+  // position so the player still has a chance to reclaim it.
+  function tryHitTroller() {
+    if (slashTrigger === lastSlashTrigger) return;
+    lastSlashTrigger = slashTrigger;
+    const g = death.gnome;
+    if (!g) return;
+    const dx = g.x - playerX;
+    const dz = g.z - playerZ;
+    const dist = Math.hypot(dx, dz);
+    if (dist > SWORD_REACH || dist < 0.001) return;
+    const fwdX = Math.sin(playerRotation);
+    const fwdZ = Math.cos(playerRotation);
+    const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
+    if (dot < SWORD_DOT_THRESHOLD) return;
+    g.hp -= getEffectiveDamage();
+    if (g.hp <= 0) {
+      // Troller dies. Drop the player's loot bag right here, grant
+      // the standard kill XP, and clear the carrier sprite.
+      death.bag = { x: g.x, z: g.z, ttl: BAG_TTL };
+      grantExperience(getMonster(MONSTER_TROLLER).attributes.experience);
+      death.gnome = null;
+    }
+  }
+
   useTask((delta) => {
     if (delta <= 0) return;
     pulse += delta;
 
-    if (!death.alive) {
-      death.respawnTimer -= delta;
-      if (death.respawnTimer <= 0) respawn();
-    }
-
+    tryHitTroller();
     stepGnome(delta);
     stepBag(delta);
     stepBug(delta);
@@ -207,7 +219,22 @@
 
 {#if death.gnome}
   {@const g = death.gnome}
-  <T.Group position={[g.x, 0, g.z]} rotation.y={g.rotation}>
+  {@const troller = getMonster(MONSTER_TROLLER)}
+  <T.Group
+    position={[g.x, 0, g.z]}
+    rotation.y={g.rotation}
+    onclick={(e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      selection.value = { kind: 'troller' };
+    }}
+  >
+    <EntityNameplate
+      position={[0, 1.5, 0]}
+      name={troller.name}
+      level={troller.level}
+      hpPercent={g.hp / g.maxHp}
+      barWidthPx={56}
+    />
     <!-- Legs -->
     <T.Mesh position={[-0.08, 0.18, 0]} castShadow>
       <T.CylinderGeometry args={[0.06, 0.06, 0.32, 6]} />
@@ -277,7 +304,7 @@
     </T.Mesh>
   </T.Group>
   <!-- Floating countdown above the bag -->
-  <HTML position={[b.x, 0.9, b.z]} center pointerEvents="none">
+  <HTML position={[b.x, 0.9, b.z]} center pointerEvents="none" zIndexRange={[40, 0]}>
     <div
       class="border border-amber-700/70 bg-black/80 px-2 py-0.5 text-xs font-semibold text-amber-200 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.8)]"
     >
