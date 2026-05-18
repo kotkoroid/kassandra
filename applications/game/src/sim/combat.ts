@@ -14,7 +14,7 @@ import { emit } from './events';
 import { spawnEntity, type SpiderKind } from './spawn';
 import { getEffectiveStat } from './stats';
 import type { World } from './types';
-import { isHostile, removeEntity } from './util';
+import { isHostile, refreshLootBagFlags, removeEntity } from './util';
 import { genId } from './world.svelte';
 
 const SPIDER_CHILD_COUNT = 3;
@@ -29,7 +29,41 @@ export function applyDamageToEntity(
   const e = world.entities[index];
   if (!e) return;
   e.hp -= amount;
+  emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
   if (e.hp <= 0) onEntityDeath(world, index, byPlayer);
+}
+
+// Single chokepoint for damage taken by the player. Emits the popup
+// event AND attributes the damage to the named attacker so the
+// death-summary in world.death.attackers stays accurate without
+// every caller remembering to update it. A no-op while dead.
+export function applyDamageToPlayer(
+  world: World,
+  amount: number,
+  attacker: { monsterId: string; name: string },
+) {
+  if (!world.death.alive) return;
+  const before = world.player.health;
+  world.player.health = Math.max(0, before - amount);
+  const dealt = before - world.player.health;
+  if (dealt <= 0) return;
+  emit(world, {
+    kind: 'damage-dealt',
+    x: world.player.x,
+    z: world.player.z,
+    amount: dealt,
+    byPlayer: false,
+  });
+  if (world.death.fightStartedAt === null) {
+    world.death.fightStartedAt = world.time;
+  }
+  let entry = world.death.attackers.find((a) => a.monsterId === attacker.monsterId);
+  if (!entry) {
+    entry = { monsterId: attacker.monsterId, name: attacker.name, total: 0, hits: 0 };
+    world.death.attackers.push(entry);
+  }
+  entry.total += dealt;
+  entry.hits += 1;
 }
 
 function onEntityDeath(world: World, index: number, byPlayer: boolean) {
@@ -41,7 +75,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     const drops = rollLoot(e.monsterId);
     if (drops.length > 0) {
       const owner = world.player.name;
-      world.lootBags.push({
+      const bag = {
         id: genId(world, 'lb'),
         x: e.x,
         z: e.z,
@@ -49,7 +83,12 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
         ttl: LOOT_BAG_TTL,
         isDeathBag: false,
         bagXp: 0,
-      });
+        isCurrencyOnly: false,
+        larsCount: 0,
+        hasOwnerItems: false,
+      };
+      world.lootBags.push(bag);
+      refreshLootBagFlags(world, bag);
     }
     grantExperience(world, e.experience);
   }
@@ -102,7 +141,7 @@ export function dropPlayerDeathBag(
   x: number,
   z: number,
 ) {
-  world.lootBags.push({
+  const bag = {
     id: genId(world, 'lb'),
     x,
     z,
@@ -110,7 +149,12 @@ export function dropPlayerDeathBag(
     ttl: LOOT_BAG_TTL,
     isDeathBag: true,
     bagXp: world.death.bagXp,
-  });
+    isCurrencyOnly: false,
+    larsCount: 0,
+    hasOwnerItems: false,
+  };
+  world.lootBags.push(bag);
+  // Empty death bag — flags default to false; no items to scan.
   // The bag carries the XP from here on — clear the staging slot
   // so a future death doesn't double-count it.
   world.death.bagXp = 0;

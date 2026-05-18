@@ -2,12 +2,20 @@
   import { T } from '@threlte/core';
   import { HEAL_CIRCLE_RADIUS } from '../sim/constants';
   import { world } from '../sim/world.svelte';
+  import Azir from './Azir.svelte';
   import Healer from './Healer.svelte';
 </script>
 
 {#each world.entities as entity (entity.id)}
   {#if entity.kind === 'janna'}
     <Healer
+      id={entity.id}
+      position={[entity.x, 0, entity.z]}
+      rotation={entity.rotation}
+      hpPercent={entity.hp / entity.maxHp}
+    />
+  {:else if entity.kind === 'azir'}
+    <Azir
       id={entity.id}
       position={[entity.x, 0, entity.z]}
       rotation={entity.rotation}

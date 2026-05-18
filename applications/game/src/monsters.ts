@@ -43,6 +43,7 @@ export const MONSTER_SMALL_SPIDER: MonsterId = 'MONSTER000005';
 export const MONSTER_TINY_SPIDER: MonsterId = 'MONSTER000006';
 export const MONSTER_TROLLER: MonsterId = 'MONSTER000007';
 export const MONSTER_JANNA: MonsterId = 'MONSTER000008';
+export const MONSTER_AZIR: MonsterId = 'MONSTER000009';
 
 export function getMonster(id: MonsterId): Monster {
   const m = MONSTERS[id];

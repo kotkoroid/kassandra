@@ -7,6 +7,7 @@
 
 import { LARS_ID } from '../items';
 import { LOOT_BAG_TTL } from './constants';
+import { refreshLootBagFlags } from './util';
 import { applyChat } from './systems/chat';
 import { tickDeath } from './systems/death';
 import { tickModifiers } from './stats';
@@ -111,6 +112,7 @@ function handleEvent(world: World, ev: SimEvent) {
         return false;
       });
       bag.items = kept;
+      refreshLootBagFlags(world, bag);
       if (larsGained > 0) {
         world.chat.messages.push({
           id: genId(world, 'm'),
@@ -149,7 +151,7 @@ function handleEvent(world: World, ev: SimEvent) {
       const owner = world.player.name;
       const items = [] as { owner: string; itemId: string }[];
       for (let i = 0; i < n; i++) items.push({ owner, itemId: ev.itemId });
-      world.lootBags.push({
+      const newBag = {
         id: genId(world, 'lb'),
         x: world.player.x,
         z: world.player.z,
@@ -157,7 +159,12 @@ function handleEvent(world: World, ev: SimEvent) {
         ttl: LOOT_BAG_TTL,
         isDeathBag: false,
         bagXp: 0,
-      });
+        isCurrencyOnly: false,
+        larsCount: 0,
+        hasOwnerItems: false,
+      };
+      world.lootBags.push(newBag);
+      refreshLootBagFlags(world, newBag);
       break;
     }
   }

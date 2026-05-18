@@ -19,7 +19,19 @@ export type GameEvent =
       z: number;
       byPlayer: boolean;
     }
-  | { kind: 'player-level-up'; level: number };
+  | { kind: 'player-level-up'; level: number }
+  | {
+      // A discrete hit landed. The renderer turns these into floating
+      // damage popups; new subscribers (sounds, screen shake, combat
+      // log) can hook the same event without touching combat code.
+      kind: 'damage-dealt';
+      x: number;
+      z: number;
+      amount: number;
+      // True = the player dealt the damage (popup colored "given").
+      // False = the player received the damage (popup colored "taken").
+      byPlayer: boolean;
+    };
 
 type Handler = (world: World, event: GameEvent) => void;
 

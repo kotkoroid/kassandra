@@ -4,7 +4,8 @@
 // the small handlers below.
 
 import { isInCity } from '../../city';
-import { applyDamageToEntity } from '../combat';
+import { getMonster } from '../../monsters';
+import { applyDamageToEntity, applyDamageToPlayer } from '../combat';
 import {
   HEAL_CIRCLE_OFFSET_MAX,
   HEAL_CIRCLE_TTL,
@@ -30,6 +31,9 @@ const PROFILE: Record<
   // Ranged / stationary kinds — handled in their own handlers.
   swain:           { speed: 0,   attackRange: 0,   despawnDist: 35 },
   janna:           { speed: 0,   attackRange: 0,   despawnDist: 35 },
+  // Azir is a permanent city NPC — never despawn no matter how far
+  // the player roams.
+  azir:            { speed: 0,   attackRange: 0,   despawnDist: Infinity },
   // Troller pipeline runs in sim/systems/death.ts.
   troller:         { speed: 0,   attackRange: 0,   despawnDist: Infinity },
 };
@@ -146,7 +150,10 @@ function tickMelee(
   if (bestDist <= attackRange && e.attackCooldown <= 0) {
     e.attackCooldown = 1 / Math.max(e.attackSpeed, 0.0001);
     if (targetIsPlayer) {
-      world.player.health = Math.max(0, world.player.health - e.damage);
+      applyDamageToPlayer(world, e.damage, {
+        monsterId: e.monsterId,
+        name: getMonster(e.monsterId).name,
+      });
     } else if (bestEntityIndex >= 0) {
       applyDamageToEntity(world, bestEntityIndex, e.damage, false);
     }
@@ -176,6 +183,7 @@ function tickSwain(world: World, e: Entity, dt: number) {
     world.projectiles.push({
       id: genId(world, 'p'),
       ownerId: e.id,
+      ownerMonsterId: e.monsterId,
       x: e.x,
       z: e.z,
       vx: (toPlayerX / norm) * PROJECTILE_SPEED,

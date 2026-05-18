@@ -2,7 +2,8 @@
 // max range. Ally hits intercept the projectile so a player hiding
 // behind Janna still gets blocked.
 
-import { applyDamageToEntity } from '../combat';
+import { getMonster } from '../../monsters';
+import { applyDamageToEntity, applyDamageToPlayer } from '../combat';
 import {
   PROJECTILE_HIT_RADIUS,
   PROJECTILE_MAX_DISTANCE,
@@ -41,7 +42,10 @@ export function tickProjectiles(world: World, dt: number) {
       Math.hypot(p.x - world.player.x, p.z - world.player.z) <
         PROJECTILE_HIT_RADIUS
     ) {
-      world.player.health = Math.max(0, world.player.health - p.damage);
+      applyDamageToPlayer(world, p.damage, {
+        monsterId: p.ownerMonsterId,
+        name: getMonster(p.ownerMonsterId).name,
+      });
       world.projectiles.splice(i, 1);
       continue;
     }

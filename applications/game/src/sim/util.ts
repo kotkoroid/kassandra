@@ -1,8 +1,9 @@
 // Cross-system helpers — kept tiny and pure so anything in sim/ can
 // import without dragging system state around.
 
+import { LARS_ID } from '../items';
 import { getVisibleWaters } from '../scene/world';
-import type { Entity, EntityKind, World } from './types';
+import type { Entity, EntityKind, World, WorldLootBag } from './types';
 
 export function findEntity(world: World, id: string): Entity | null {
   return world.entityById.get(id) ?? null;
@@ -16,10 +17,10 @@ export function removeEntity(world: World, index: number): void {
   world.entities.splice(index, 1);
 }
 
-// Janna is the only ally entity kind. Troller is hostile (the
+// Allies the player can never damage. Troller stays hostile (the
 // player can slash it before it carries the bag away).
 export function isHostile(kind: EntityKind): boolean {
-  return kind !== 'janna';
+  return kind !== 'janna' && kind !== 'azir';
 }
 
 export function isInWaterAt(x: number, z: number): boolean {
@@ -36,4 +37,23 @@ export function lerpAngle(a: number, b: number, t: number): number {
   while (delta > Math.PI) delta -= 2 * Math.PI;
   while (delta < -Math.PI) delta += 2 * Math.PI;
   return a + delta * t;
+}
+
+// Recompute the cached `items` summaries on a loot bag. Call this
+// at every site that creates a bag or mutates its `items` array
+// (kill drop, player drop, troller bag, pickup). Single sweep of
+// the items list — keeps per-frame consumers O(1).
+export function refreshLootBagFlags(world: World, bag: WorldLootBag): void {
+  let lars = 0;
+  let hasOther = false;
+  let owned = false;
+  const me = world.player.name;
+  for (const it of bag.items) {
+    if (it.itemId === LARS_ID) lars++;
+    else hasOther = true;
+    if (it.owner === me) owned = true;
+  }
+  bag.larsCount = lars;
+  bag.isCurrencyOnly = !hasOther && bag.items.length > 0;
+  bag.hasOwnerItems = owned;
 }

@@ -25,6 +25,9 @@
   import Death from './Death.svelte';
   import Enemies from './Enemies.svelte';
   import Healers from './Healers.svelte';
+  import CityLamps from './CityLamps.svelte';
+  import CityWalls from './CityWalls.svelte';
+  import DamageNumbers from './DamageNumbers.svelte';
   import LootBags from './LootBags.svelte';
   import Player from './Player.svelte';
   import Props from './Props.svelte';
@@ -138,16 +141,17 @@
   // Z-key shortcut: grabs every in-range bag whose owned items
   // belong to the player. Multiple bags can be claimed in one press
   // — useful after a fight that drops several. No dialog is shown.
+  // `hasOwnerItems` is precomputed on the bag so the inner check is
+  // O(1) instead of scanning items per bag per keypress.
   function pickupNearbyOwnedLoot() {
     const px = world.player.x;
     const pz = world.player.z;
     const radius2 = BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS;
-    const me = world.player.name;
     for (const bag of world.lootBags) {
+      if (!bag.hasOwnerItems) continue;
       const dx = bag.x - px;
       const dz = bag.z - pz;
       if (dx * dx + dz * dz > radius2) continue;
-      if (!bag.items.some((it) => it.owner === me)) continue;
       dispatch(world, { kind: 'pickup_loot', bagId: bag.id });
     }
   }
@@ -351,6 +355,9 @@
   <T.MeshStandardMaterial color="#9a9a9a" />
 </T.Mesh>
 
+<CityWalls />
+<CityLamps />
+
 <Player
   position={[world.player.x, 0, world.player.z]}
   rotation={world.player.rotation}
@@ -365,6 +372,7 @@
 <Enemies />
 <Healers />
 <LootBags />
+<DamageNumbers />
 <Spiders />
 <Beasts />
 <Death />

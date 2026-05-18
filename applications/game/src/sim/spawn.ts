@@ -4,6 +4,7 @@
 
 import {
   getMonster,
+  MONSTER_AZIR,
   MONSTER_BEAR,
   MONSTER_JANNA,
   MONSTER_SMALL_SPIDER,
@@ -52,6 +53,7 @@ const KIND_CONFIG: Record<Exclude<EntityKind, 'troller'>, KindConfig> = {
   bear:            { idPrefix: 'b', monsterId: MONSTER_BEAR,         facing: 'toward', staggerAttack: false },
   swain:           { idPrefix: 'e', monsterId: MONSTER_SWAIN,        facing: 'away',   staggerAttack: true  },
   janna:           { idPrefix: 'j', monsterId: MONSTER_JANNA,        facing: 'away',   staggerAttack: false },
+  azir:            { idPrefix: 'a', monsterId: MONSTER_AZIR,         facing: 'toward', staggerAttack: false },
 };
 
 export function spawnEntity(
@@ -146,6 +148,7 @@ export function spawnByMonsterId(
     case MONSTER_SMALL_SPIDER: return spawnEntity(world, 'spider-medium', x, z);
     case MONSTER_TINY_SPIDER:  return spawnEntity(world, 'spider-tiny', x, z);
     case MONSTER_JANNA:        return spawnEntity(world, 'janna', x, z);
+    case MONSTER_AZIR:         return spawnEntity(world, 'azir', x, z);
     case MONSTER_TROLLER:      return spawnTroller(world, x, z, false);
     default: return null;
   }

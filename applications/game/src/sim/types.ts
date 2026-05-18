@@ -166,7 +166,7 @@ export interface Player {
 export type EntityKind =
   | 'spider-big' | 'spider-medium' | 'spider-tiny'
   | 'wolf' | 'bear' | 'swain'
-  | 'janna' | 'troller';
+  | 'janna' | 'azir' | 'troller';
 
 export interface Entity {
   id: string;
@@ -206,6 +206,9 @@ export interface Entity {
 export interface Projectile {
   id: string;
   ownerId: string;
+  // Catalog id of the firing monster. Captured at spawn time so the
+  // death-summary attribution survives the owner dying mid-flight.
+  ownerMonsterId: string;
   x: number;
   z: number;
   vx: number;
@@ -238,6 +241,15 @@ export interface WorldLootBag {
   isDeathBag: boolean;
   // XP held by the death bag (0 for regular bags).
   bagXp: number;
+
+  // --- Cached summaries of `items` ---
+  // These are refreshed by `refreshLootBagFlags()` whenever the
+  // bag is created or its items change (pickup). They let per-frame
+  // consumers (coin physics, render bundle visibility, Z-pickup
+  // scan) read O(1) instead of rescanning the items array.
+  isCurrencyOnly: boolean;
+  larsCount: number;
+  hasOwnerItems: boolean;
 }
 
 // --- Death-pipeline transient state -----------------------------
@@ -313,6 +325,19 @@ export interface World {
     deathZ: number;
     bagXp: number;
     bug: IndicatorBug | null;
+    // Running per-attacker damage taken since the last respawn —
+    // grouped by monsterId, used to build the death summary.
+    attackers: { monsterId: string; name: string; total: number; hits: number }[];
+    // World time of the first hit in the current life (null until
+    // someone lands the first hit). Drives the summary's fight length.
+    fightStartedAt: number | null;
+    // Snapshot frozen at death; cleared on respawn. The Hud shows
+    // the death recap whenever this is non-null.
+    summary: {
+      attackers: { monsterId: string; name: string; total: number; hits: number }[];
+      totalDamage: number;
+      fightSeconds: number;
+    } | null;
   };
 
   chat: {

@@ -105,12 +105,74 @@
   <div
     class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 [text-shadow:0_2px_6px_rgb(0_0_0_/_0.95)]"
   >
-    <div class="text-center">
+    <div class="flex flex-col items-center">
       <div
         class="text-7xl font-bold tracking-[0.4em] text-red-500 uppercase"
       >
         You Died.
       </div>
+
+      {#if death.summary}
+        {@const s = death.summary}
+        <div
+          class="mt-6 w-[480px] border-2 border-red-800/70 bg-black/80 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.9)]"
+        >
+          <div class="grid grid-cols-2 border-b border-red-900/60 px-4 py-2 text-center">
+            <div>
+              <div class="text-[10px] font-semibold tracking-[0.3em] text-red-300/80 uppercase">
+                Total Damage
+              </div>
+              <div class="font-mono text-2xl text-red-200">
+                {Math.round(s.totalDamage)}
+              </div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold tracking-[0.3em] text-red-300/80 uppercase">
+                Fight Length
+              </div>
+              <div class="font-mono text-2xl text-red-200">
+                {s.fightSeconds.toFixed(2)}s
+              </div>
+            </div>
+          </div>
+
+          <div class="px-4 py-3">
+            {#if s.attackers.length === 0}
+              <div class="text-center text-sm text-white/55 italic">
+                No attacker on record.
+              </div>
+            {:else}
+              <div class="mb-2 text-[10px] font-semibold tracking-[0.3em] text-red-300/80 uppercase">
+                Killers
+              </div>
+              <ul class="space-y-1.5">
+                {#each s.attackers as a (a.monsterId)}
+                  {@const pct = s.totalDamage > 0 ? (a.total / s.totalDamage) * 100 : 0}
+                  <li class="flex items-center gap-2">
+                    <span class="w-28 text-sm text-white/85">{a.name}</span>
+                    <span class="w-10 text-right font-mono text-[11px] text-white/55">
+                      ×{a.hits}
+                    </span>
+                    <div class="relative h-3 flex-1 border border-red-900/50 bg-black/60">
+                      <div
+                        class="h-full bg-red-600/80"
+                        style:width="{pct}%"
+                      ></div>
+                    </div>
+                    <span class="w-12 text-right font-mono text-xs text-red-200">
+                      {Math.round(a.total)}
+                    </span>
+                    <span class="w-10 text-right font-mono text-[10px] text-white/55">
+                      {Math.round(pct)}%
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
       <button
         type="button"
         class="pointer-events-auto mt-8 border-2 border-red-500/80 bg-black/80 px-8 py-3 text-sm font-semibold tracking-[0.3em] text-red-100 uppercase transition hover:border-red-300 hover:bg-red-900/40 hover:text-white"

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
+  import { SvelteMap } from 'svelte/reactivity';
+  import { ROCK_RADIUS, rockSnapshot } from './rockPhysics';
   import { getVisibleProps, type PropInstance } from './world';
 
   interface Props {
@@ -13,9 +15,6 @@
   const KICK_IMPULSE = 8;
   const KICK_MIN_PLAYER_SPEED = 0.5;
   const ROCK_FRICTION = 4;
-  // Treat each rock as a disc of this base radius (× its prop.scale).
-  // The mesh is 0.3×0.25; this is a slightly forgiving cylinder fit.
-  const ROCK_RADIUS = 0.18;
 
   interface RockState {
     offsetX: number;
@@ -26,12 +25,17 @@
 
   const visibleProps = $derived(getVisibleProps(playerX, playerZ));
 
-  // Rock kick state. $state.raw because we reassign the Map by
-  // shallow-copy when entries change. Persists across chunk
-  // visibility so a kicked rock stays kicked.
-  let rockStates = $state.raw<Map<string, RockState>>(new Map());
+  // Rock kick state. SvelteMap so per-key `set` triggers the
+  // template re-eval without us shallow-copying the whole Map.
+  // Persists across chunk visibility so a kicked rock stays kicked.
+  const rockStates = new SvelteMap<string, RockState>();
   let lastPlayerX = 0;
   let lastPlayerZ = 0;
+
+  // Reused per-frame for "which rocks are still visible" checks
+  // when pruning the cross-system rockSnapshot. Outside the useTask
+  // so we don't allocate a fresh Set every frame.
+  const snapshotScratch = new Set<string>();
 
   useTask((delta) => {
     if (delta <= 0) return;
@@ -135,8 +139,10 @@
       }
     }
 
-    // Write back: replace entries whose state actually changed.
-    let dirty = false;
+    // Write back: only re-publish entries whose state actually
+    // changed. SvelteMap.set notifies per-key, so we skip the
+    // shallow-copy of the whole Map that the old $state.raw pattern
+    // needed.
     for (const [id, state] of working) {
       const prev = rockStates.get(id);
       if (
@@ -147,11 +153,33 @@
         prev.offsetZ !== state.offsetZ
       ) {
         rockStates.set(id, state);
-        dirty = true;
       }
     }
 
-    if (dirty) rockStates = new Map(rockStates);
+    // Publish a snapshot of every visible rock's world pose so
+    // other scene physics (loot bags) can do one-way collisions
+    // against rocks. Mutates entries in place: a new RockSnapshot
+    // is only allocated the first time a rock scrolls into view,
+    // and stale ones are dropped when it leaves. Keeps per-frame
+    // allocation flat (one tiny Set, no per-rock objects).
+    snapshotScratch.clear();
+    for (const prop of rockProps) snapshotScratch.add(prop.id);
+    for (const id of rockSnapshot.keys()) {
+      if (!snapshotScratch.has(id)) rockSnapshot.delete(id);
+    }
+    for (const prop of rockProps) {
+      const s = working.get(prop.id)!;
+      let entry = rockSnapshot.get(prop.id);
+      if (!entry) {
+        entry = { x: 0, z: 0, radius: 0, vx: 0, vz: 0 };
+        rockSnapshot.set(prop.id, entry);
+      }
+      entry.x = prop.x + s.offsetX;
+      entry.z = prop.z + s.offsetZ;
+      entry.radius = ROCK_RADIUS * prop.scale;
+      entry.vx = s.vx;
+      entry.vz = s.vz;
+    }
   });
 </script>
 

@@ -67,6 +67,23 @@ function triggerDeath(world: World) {
   world.death.deathX = p.x;
   world.death.deathZ = p.z;
 
+  // Freeze the death summary before clearing the running totals so
+  // the Hud's death recap has stable, snapshot-frozen numbers.
+  const total = world.death.attackers.reduce((n, a) => n + a.total, 0);
+  const fightSeconds =
+    world.death.fightStartedAt !== null
+      ? Math.max(0, world.time - world.death.fightStartedAt)
+      : 0;
+  world.death.summary = {
+    attackers: world.death.attackers
+      .map((a) => ({ ...a }))
+      .sort((a, b) => b.total - a.total),
+    totalDamage: total,
+    fightSeconds,
+  };
+  world.death.attackers = [];
+  world.death.fightStartedAt = null;
+
   // Stash lifetime XP into the bag-in-transit. Use the level + bar
   // remainder so cleared levels don't silently evaporate.
   world.death.bagXp = (p.level - 1) * EXP_PER_LEVEL + p.experience;
@@ -102,6 +119,11 @@ function triggerDeath(world: World) {
 function respawn(world: World) {
   const p = world.player;
   world.death.alive = true;
+  // Clear the previous life's recap; the next life starts a fresh
+  // attribution log.
+  world.death.summary = null;
+  world.death.attackers = [];
+  world.death.fightStartedAt = null;
   p.health = getEffectiveStat(p, 'maxHealth');
   p.mana = getEffectiveStat(p, 'maxMana');
   p.stamina = getEffectiveStat(p, 'maxStamina');

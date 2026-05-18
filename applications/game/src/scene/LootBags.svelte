@@ -1,12 +1,12 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
-  import { LARS_ID } from '../items';
   import { lootBagOpen } from '../lootBagOpen.svelte';
   import { BAG_PICKUP_RADIUS } from '../sim/constants';
   import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
   import Coin from './Coin.svelte';
+  import { rockSnapshot, type RockSnapshot } from './rockPhysics';
 
   // Up to this many coin meshes are rendered per bag. Beyond it the
   // visual pile saturates; the actual Lars total still picks up
@@ -27,6 +27,17 @@
 
   interface BagPhysics { vx: number; vz: number; }
   const bagPhysics = new Map<string, BagPhysics>();
+
+  // Spatial grid for collision queries. Cell size must be at least
+  // the largest collision diameter; we use 1.0 since the worst-case
+  // contact (bag + scaled rock) is ~0.5, leaving comfortable margin
+  // so a 3×3 neighbour sweep is guaranteed to catch every overlap.
+  const SPATIAL_CELL = 1.0;
+  function cellKey(cx: number, cz: number): number {
+    // Pack two integer cell coords into one number. Offsets keep
+    // keys positive for typical world bounds (±200 units / 1.0).
+    return (cx + 32768) * 65536 + (cz + 32768);
+  }
 
   // Deterministic scatter for the initial coin pile layout. A small
   // hash off the bag id makes the pile stable across reactive reads
@@ -95,12 +106,11 @@
     const decay = Math.exp(-BAG_FRICTION * delta);
 
     // Currency-only bags participate in the kick/slide/collide
-    // system; mixed and weapon bags stay anchored.
+    // system; mixed and weapon bags stay anchored. `isCurrencyOnly`
+    // is precomputed by refreshLootBagFlags at every mutation, so
+    // this is a flat property read, not a per-frame items scan.
     const movable = world.lootBags.filter(
-      (b) =>
-        !b.isDeathBag &&
-        b.items.length > 0 &&
-        b.items.every((it) => it.itemId === LARS_ID),
+      (b) => !b.isDeathBag && b.isCurrencyOnly,
     );
 
     // Drop stale velocity records for bags that vanished (picked up
@@ -141,34 +151,114 @@
       }
     }
 
-    // Pass 2: bag-bag elastic collisions (equal masses) so two
-    // currency piles bump off each other instead of overlapping.
-    for (let i = 0; i < movable.length; i++) {
-      const a = movable[i]!;
+    // Build the spatial grid once per frame. For ~10 bags + ~25
+    // rocks this is a couple of dozen Map writes — cheaper than the
+    // O(n·m) sweep it replaces, and grows linearly with the world
+    // instead of quadratically.
+    const bagBuckets = new Map<number, typeof movable>();
+    for (const bag of movable) {
+      const k = cellKey(
+        Math.floor(bag.x / SPATIAL_CELL),
+        Math.floor(bag.z / SPATIAL_CELL),
+      );
+      let arr = bagBuckets.get(k);
+      if (!arr) {
+        arr = [];
+        bagBuckets.set(k, arr);
+      }
+      arr.push(bag);
+    }
+    const rockBuckets = new Map<number, RockSnapshot[]>();
+    for (const rock of rockSnapshot.values()) {
+      const k = cellKey(
+        Math.floor(rock.x / SPATIAL_CELL),
+        Math.floor(rock.z / SPATIAL_CELL),
+      );
+      let arr = rockBuckets.get(k);
+      if (!arr) {
+        arr = [];
+        rockBuckets.set(k, arr);
+      }
+      arr.push(rock);
+    }
+
+    // Pass 1.5: one-way rock→bag collision. Treat rocks as
+    // infinite-mass: the bag is shoved out of any overlap and its
+    // normal velocity is matched to the rock's (inelastic e=0), so
+    // a stationary rock stops a moving bag flat and a moving rock
+    // pushes a stationary bag in the rock's direction. The rock is
+    // never altered, so coins can't drag rocks around. Squared-dist
+    // early-exit skips the sqrt for the (very common) non-contact.
+    for (const bag of movable) {
+      const sa = bagPhysics.get(bag.id)!;
+      const cx = Math.floor(bag.x / SPATIAL_CELL);
+      const cz = Math.floor(bag.z / SPATIAL_CELL);
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oz = -1; oz <= 1; oz++) {
+          const rocks = rockBuckets.get(cellKey(cx + ox, cz + oz));
+          if (!rocks) continue;
+          for (const rock of rocks) {
+            const dx = bag.x - rock.x;
+            const dz = bag.z - rock.z;
+            const minDist = BAG_RADIUS + rock.radius;
+            const dist2 = dx * dx + dz * dz;
+            if (dist2 >= minDist * minDist || dist2 < 0.0001 * 0.0001) continue;
+            const dist = Math.sqrt(dist2);
+            const nx = dx / dist;
+            const nz = dz / dist;
+            bag.x += nx * (minDist - dist);
+            bag.z += nz * (minDist - dist);
+            const vbagN = sa.vx * nx + sa.vz * nz;
+            const vrockN = rock.vx * nx + rock.vz * nz;
+            const dv = vrockN - vbagN;
+            if (dv > 0) {
+              // Closing: replace the bag's normal-velocity component
+              // with the rock's. Tangential motion is untouched.
+              sa.vx += dv * nx;
+              sa.vz += dv * nz;
+            }
+          }
+        }
+      }
+    }
+
+    // Pass 2: bag-bag elastic collisions (equal masses). Same grid
+    // sweep, but with an id-ordering guard so each pair is visited
+    // exactly once across the 3×3 neighbourhood.
+    for (const a of movable) {
       const sa = bagPhysics.get(a.id)!;
-      for (let j = i + 1; j < movable.length; j++) {
-        const b = movable[j]!;
-        const sb = bagPhysics.get(b.id)!;
-        const dx = b.x - a.x;
-        const dz = b.z - a.z;
-        const dist = Math.hypot(dx, dz);
-        const minDist = BAG_RADIUS * 2;
-        if (dist >= minDist || dist < 0.0001) continue;
-        const nx = dx / dist;
-        const nz = dz / dist;
-        const overlap = (minDist - dist) / 2;
-        a.x -= nx * overlap;
-        a.z -= nz * overlap;
-        b.x += nx * overlap;
-        b.z += nz * overlap;
-        const va = sa.vx * nx + sa.vz * nz;
-        const vb = sb.vx * nx + sb.vz * nz;
-        const dv = vb - va;
-        if (dv >= 0) continue;
-        sa.vx += dv * nx;
-        sa.vz += dv * nz;
-        sb.vx -= dv * nx;
-        sb.vz -= dv * nz;
+      const cx = Math.floor(a.x / SPATIAL_CELL);
+      const cz = Math.floor(a.z / SPATIAL_CELL);
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oz = -1; oz <= 1; oz++) {
+          const cellBags = bagBuckets.get(cellKey(cx + ox, cz + oz));
+          if (!cellBags) continue;
+          for (const b of cellBags) {
+            if (b.id <= a.id) continue;
+            const sb = bagPhysics.get(b.id)!;
+            const dx = b.x - a.x;
+            const dz = b.z - a.z;
+            const minDist = BAG_RADIUS * 2;
+            const dist2 = dx * dx + dz * dz;
+            if (dist2 >= minDist * minDist || dist2 < 0.0001 * 0.0001) continue;
+            const dist = Math.sqrt(dist2);
+            const nx = dx / dist;
+            const nz = dz / dist;
+            const overlap = (minDist - dist) / 2;
+            a.x -= nx * overlap;
+            a.z -= nz * overlap;
+            b.x += nx * overlap;
+            b.z += nz * overlap;
+            const va = sa.vx * nx + sa.vz * nz;
+            const vb = sb.vx * nx + sb.vz * nz;
+            const dv = vb - va;
+            if (dv >= 0) continue;
+            sa.vx += dv * nx;
+            sa.vz += dv * nz;
+            sb.vx -= dv * nx;
+            sb.vz -= dv * nz;
+          }
+        }
       }
     }
   });
@@ -184,16 +274,14 @@
 {#each world.lootBags as b (b.id)}
   {@const pulseScale = 1 + Math.sin(pulse * 3) * 0.15}
   {@const pulseOpacity = 0.45 + Math.sin(pulse * 3) * 0.25}
-  {@const larsCount = b.items.reduce((n, it) => n + (it.itemId === LARS_ID ? 1 : 0), 0)}
-  {@const coinSpriteCount = Math.min(larsCount, MAX_COIN_SPRITES)}
+  {@const coinSpriteCount = Math.min(b.larsCount, MAX_COIN_SPRITES)}
   {@const offsets = coinSpriteCount > 0 ? coinOffsets(b.id, coinSpriteCount) : []}
   <!-- Show the bag bundle only when there's something other than
        currency to carry. A coin-only drop renders as the pile alone,
        matching the inspiration's loose-coin look on the ground.
        Death bags always show the bundle so the player's corpse-bag
        remains visually distinct even if it's empty. -->
-  {@const hasNonCurrency = b.items.some((it) => it.itemId !== LARS_ID)}
-  {@const showBundle = b.isDeathBag || hasNonCurrency}
+  {@const showBundle = b.isDeathBag || !b.isCurrencyOnly}
   <T.Mesh
     position={[b.x, 0.06, b.z]}
     rotation={[-Math.PI / 2, 0, 0]}
