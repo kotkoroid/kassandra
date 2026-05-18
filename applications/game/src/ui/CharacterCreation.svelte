@@ -1,14 +1,17 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import { onMount } from 'svelte';
-  import Player from '../scene/Player.svelte';
   import {
     ARMOR_COLORS,
     type ArmorColor,
     HAIR_COLORS,
     type HairColor,
-    player,
-  } from '../state.svelte';
+  } from '../cosmetics';
+  import Player from '../scene/Player.svelte';
+  import { resetWorld, world } from '../sim/world.svelte';
+
+  // Local alias so the existing form bindings stay readable.
+  const player = world.player;
 
   interface Props {
     onCreate: () => void;
@@ -51,8 +54,9 @@
     return ARMOR_KEYS[Math.floor(Math.random() * ARMOR_KEYS.length)]!;
   }
 
-  // Bind form controls directly to the shared player state so the
-  // preview canvas re-renders the model live as fields change.
+  // Bind form controls directly to world.player so the preview
+  // canvas re-renders the model live as fields change. A blank
+  // name signals a fresh creation flow — seed with random defaults.
   onMount(() => {
     if (!player.name) {
       player.name = randomName();
@@ -72,7 +76,15 @@
   function create() {
     const trimmed = player.name.trim();
     if (!trimmed) return;
-    player.name = trimmed;
+    // Snapshot the chosen identity, reset the world to start a fresh
+    // run (clearing any leftover entities/bags/messages), then write
+    // the identity onto the new world.player before flipping views.
+    const { sex, hairColor, armor } = player;
+    resetWorld();
+    world.player.name = trimmed;
+    world.player.sex = sex;
+    world.player.hairColor = hairColor;
+    world.player.armor = armor;
     onCreate();
   }
 

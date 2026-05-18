@@ -85,5 +85,17 @@
       "healthRegen": 0,
       "experience": 5
     }
+  },
+  "MONSTER000008": {
+    "name": "Janna",
+    "type": "ALLY",
+    "level": 10,
+    "attributes": {
+      "damage": 0,
+      "attackSpeed": 0,
+      "health": 50,
+      "healthRegen": 0,
+      "experience": 0
+    }
   }
 }

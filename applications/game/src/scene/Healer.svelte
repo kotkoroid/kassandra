@@ -26,7 +26,7 @@
   rotation.y={rotation}
   onclick={(e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    selection.value = { kind: 'healer', id };
+    selection.value = id;
   }}
 >
   <!-- Title + health bar above the head. -->

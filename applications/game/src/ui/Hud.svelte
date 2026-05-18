@@ -1,7 +1,16 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { death, requestRespawn } from '../death.svelte';
-  import { player, STAMINA_MAX } from '../state.svelte';
+  import { STAMINA_MAX } from '../sim/constants';
+  import { dispatch } from '../sim/input';
+  import { world } from '../sim/world.svelte';
+
+  // Local alias so the existing markup stays readable.
+  const player = world.player;
+  const death = world.death;
+
+  function requestRespawn() {
+    dispatch(world, { kind: 'request_respawn' });
+  }
   import Chat from './Chat.svelte';
   import LootBagPanel from './LootBagPanel.svelte';
   import Minimap from './Minimap.svelte';

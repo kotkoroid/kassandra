@@ -1,6 +1,8 @@
 <script lang="ts">
   import { T } from '@threlte/core';
   import { selection } from '../selection.svelte';
+  import { dispatch } from '../sim/input';
+  import { world } from '../sim/world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
 
   interface Props {
@@ -47,7 +49,8 @@
   {scale}
   onclick={(e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    selection.value = { kind: 'spider', id };
+    selection.value = id;
+    dispatch(world, { kind: 'engage', targetId: id });
   }}
 >
   <!-- Name + level + hp bar above the spider. Height is scaled into

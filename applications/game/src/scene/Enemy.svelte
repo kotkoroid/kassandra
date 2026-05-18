@@ -1,6 +1,8 @@
 <script lang="ts">
   import { T } from '@threlte/core';
   import { selection } from '../selection.svelte';
+  import { dispatch } from '../sim/input';
+  import { world } from '../sim/world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
 
   interface Props {
@@ -26,7 +28,8 @@
   rotation.y={rotation}
   onclick={(e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    selection.value = { kind: 'enemy', id };
+    selection.value = id;
+    dispatch(world, { kind: 'engage', targetId: id });
   }}
 >
   <!-- Title + health bar above the head. center anchors the projected

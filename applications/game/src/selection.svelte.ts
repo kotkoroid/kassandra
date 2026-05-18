@@ -1,32 +1,22 @@
-// Click-to-select state for every world entity. The Scene draws a
-// red ring under the chosen entity, and the HUD shows its name +
-// level + hp bar at the top.
+// Click-to-select state. Pure UI: which entity is highlighted with
+// a red ring + shown in the top selection panel. Sim-side
+// engagement (chase + auto-slash) is tracked separately on
+// `world.player.engageTargetId`; selecting a hostile dispatches an
+// `engage` event in addition to setting the local id.
 //
-// We store a *handle* (kind + id) rather than a snapshot, then read
-// the live record from the relevant array each frame. That way the
-// panel and ring track movement and damage in real time.
+// The selection is identified by entity id, with the sentinel
+// 'player' covering the local character — which never appears in
+// `world.entities` because it has its own slot.
 
-import { beasts } from './beasts.svelte';
-import { death } from './death.svelte';
-import { enemies } from './enemies.svelte';
-import { healers } from './healers.svelte';
-import {
-  getMonster,
-  MONSTER_SWAIN,
-  MONSTER_TROLLER,
-} from './monsters';
-import { SPIDER_VISUALS, spiders } from './spiders.svelte';
-import { player } from './state.svelte';
+import { getMonster, MONSTER_JANNA, MONSTER_TROLLER } from './monsters';
+import { PLAYER_MAX_HP } from './sim/constants';
+import { world } from './sim/world.svelte';
 
-export type Selection =
-  | { kind: 'player' }
-  | { kind: 'healer'; id: string }
-  | { kind: 'spider'; id: string }
-  | { kind: 'enemy'; id: string }
-  | { kind: 'beast'; id: string }
-  | { kind: 'troller' };
+export type SelectionId = 'player' | string;
 
-export const selection = $state<{ value: Selection | null }>({ value: null });
+export const selection = $state<{ value: SelectionId | null }>({
+  value: null,
+});
 
 export interface SelectionView {
   name: string;
@@ -37,89 +27,47 @@ export interface SelectionView {
   z: number;
 }
 
-// Returns the live display fields for the current selection, or
-// null if nothing is selected (or the previously selected entity
-// has since despawned). Callers should re-evaluate every frame.
 export function getSelectionView(): SelectionView | null {
-  const s = selection.value;
-  if (!s) return null;
-  switch (s.kind) {
-    case 'player':
-      return {
-        name: player.name,
-        level: player.level,
-        hp: player.health,
-        maxHp: 100,
-        x: player.x,
-        z: player.z,
-      };
-    case 'healer': {
-      const h = healers.find((x) => x.id === s.id);
-      if (!h) return null;
-      return {
-        name: 'Janna',
-        level: 10,
-        hp: h.hp,
-        maxHp: h.maxHp,
-        x: h.x,
-        z: h.z,
-      };
-    }
-    case 'spider': {
-      const sp = spiders.find((x) => x.id === s.id);
-      if (!sp) return null;
-      const monster = getMonster(SPIDER_VISUALS[sp.size].monsterId);
-      return {
-        name: monster.name,
-        level: monster.level,
-        hp: sp.hp,
-        maxHp: sp.maxHp,
-        x: sp.x,
-        z: sp.z,
-      };
-    }
-    case 'enemy': {
-      const e = enemies.find((x) => x.id === s.id);
-      if (!e) return null;
-      const monster = getMonster(MONSTER_SWAIN);
-      return {
-        name: monster.name,
-        level: monster.level,
-        hp: e.hp,
-        maxHp: e.maxHp,
-        x: e.x,
-        z: e.z,
-      };
-    }
-    case 'beast': {
-      const b = beasts.find((x) => x.id === s.id);
-      if (!b) return null;
-      const monster = getMonster(b.monsterId);
-      return {
-        name: monster.name,
-        level: monster.level,
-        hp: b.hp,
-        maxHp: b.maxHp,
-        x: b.x,
-        z: b.z,
-      };
-    }
-    case 'troller': {
-      const g = death.gnome;
-      if (!g) return null;
-      const monster = getMonster(MONSTER_TROLLER);
-      return {
-        name: monster.name,
-        level: monster.level,
-        hp: g.hp,
-        maxHp: g.maxHp,
-        x: g.x,
-        z: g.z,
-      };
-    }
+  const id = selection.value;
+  if (!id) return null;
+  if (id === 'player') {
+    return {
+      name: world.player.name,
+      level: world.player.level,
+      hp: world.player.health,
+      maxHp: PLAYER_MAX_HP,
+      x: world.player.x,
+      z: world.player.z,
+    };
   }
+  const entity = world.entities.find((e) => e.id === id);
+  if (!entity) return null;
+  // Name + level come from the catalog so the panel reads
+  // identically to the floating nameplate.
+  const monster = getMonster(entity.monsterId);
+  return {
+    name: monster.name,
+    level: monster.level,
+    hp: entity.hp,
+    maxHp: entity.maxHp,
+    x: entity.x,
+    z: entity.z,
+  };
 }
 
 export function clearSelection() {
   selection.value = null;
 }
+
+// Convenience for code that wants to know the underlying entity
+// kind (e.g. SelectionPanel deciding whether to show "ally" vs
+// "monster" badges).
+export function selectedEntityKind() {
+  const id = selection.value;
+  if (!id || id === 'player') return null;
+  return world.entities.find((e) => e.id === id)?.kind ?? null;
+}
+
+// Re-export catalog ids so consumers that care about ally/troller
+// don't have to import from two modules.
+export { MONSTER_JANNA, MONSTER_TROLLER };

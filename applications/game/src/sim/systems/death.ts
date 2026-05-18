@@ -1,0 +1,197 @@
+// Death pipeline.
+//
+//   alive=true  player.health hits 0
+//       │      ──────────────────────────►  loseProgress(): stash XP, reset
+//       │                                    stats, spawn Troller heading
+//       │                                    for the corpse
+//       │
+//       ▼
+//   alive=false  Troller phases (handled by `tickTroller`)
+//       │            approach → collect → leave  → drop bag
+//       │       (player can slash troller en-route; combat.ts
+//       │        intercepts that path and drops the bag locally)
+//       │
+//       ▼
+//   Hud "Respawn" button → SimEvent → pendingRespawn flag → respawn:
+//                                     restore pools, teleport to city,
+//                                     spawn indicator bug.
+
+import { CITY_X, CITY_Z } from '../../city';
+import { dropPlayerDeathBag } from '../combat';
+import {
+  BASE_ATTACK_SPEED,
+  BASE_DAMAGE,
+  BASE_HEALTH_REGEN,
+  BUG_BAG_BIAS,
+  BUG_RETARGET_MAX,
+  BUG_RETARGET_MIN,
+  BUG_SPEED,
+  BUG_WANDER_RADIUS,
+  EXP_PER_LEVEL,
+  PLAYER_MAX_HP,
+  PLAYER_MAX_MANA,
+  STAMINA_MAX,
+  TROLLER_COLLECT_TIME,
+  TROLLER_LEAVE_DISTANCE,
+  TROLLER_SPEED,
+} from '../constants';
+import { spawnTroller } from '../spawn';
+import type { Entity, World } from '../types';
+
+export function tickDeath(world: World, dt: number) {
+  // 1. Detect a fresh death and kick off the pipeline.
+  if (world.death.alive && world.player.health <= 0) {
+    triggerDeath(world);
+  }
+
+  // 2. Honor any queued respawn intent.
+  if (world.pending.respawn) {
+    world.pending.respawn = false;
+    if (!world.death.alive) respawn(world);
+  }
+
+  // 3. Step troller(s) — there is normally only one, but the
+  // pipeline tolerates duplicates rather than asserting.
+  for (let i = world.entities.length - 1; i >= 0; i--) {
+    const e = world.entities[i];
+    if (!e || e.kind !== 'troller') continue;
+    tickTroller(world, e, i, dt);
+  }
+
+  // 4. Indicator bug after respawn.
+  tickIndicatorBug(world, dt);
+}
+
+function triggerDeath(world: World) {
+  const p = world.player;
+  world.death.alive = false;
+  world.death.deathX = p.x;
+  world.death.deathZ = p.z;
+
+  // Stash lifetime XP into the bag-in-transit. Use the level + bar
+  // remainder so cleared levels don't silently evaporate.
+  world.death.bagXp = (p.level - 1) * EXP_PER_LEVEL + p.experience;
+
+  // Reset progression back to base; the bag is the only way to claw
+  // some of it back.
+  p.experience = 0;
+  p.level = 1;
+  p.attackSpeed = BASE_ATTACK_SPEED;
+  p.healthRegen = BASE_HEALTH_REGEN;
+  p.damage = BASE_DAMAGE;
+
+  // Detach anything that was tracking the live body.
+  p.engageTargetId = null;
+  p.navTargetX = null;
+  p.navTargetZ = null;
+  world.death.bug = null;
+
+  // Spawn the troller a short distance away, walking toward the
+  // corpse. carriesPlayerBag stays false until the collect phase
+  // completes so a kill during approach doesn't drop a bag yet —
+  // but a kill during leave does.
+  const angle = world.rng.next() * Math.PI * 2;
+  spawnTroller(
+    world,
+    p.x + Math.cos(angle) * 4,
+    p.z + Math.sin(angle) * 4,
+    false,
+  );
+}
+
+function respawn(world: World) {
+  const p = world.player;
+  world.death.alive = true;
+  p.health = PLAYER_MAX_HP;
+  p.mana = PLAYER_MAX_MANA;
+  p.stamina = STAMINA_MAX;
+  p.x = CITY_X;
+  p.z = CITY_Z;
+  p.rotation = 0;
+
+  // Indicator bug appears near the respawned player so the
+  // breadcrumb back to any pending bag is visible immediately.
+  const angle = world.rng.next() * Math.PI * 2;
+  world.death.bug = {
+    x: p.x + Math.cos(angle) * 1.5,
+    z: p.z + Math.sin(angle) * 1.5,
+    rotation: 0,
+    wanderTargetX: p.x,
+    wanderTargetZ: p.z,
+    retargetTimer: 0,
+  };
+}
+
+function tickTroller(world: World, e: Entity, index: number, dt: number) {
+  const phase = e.phase ?? 'approach';
+  const targetX = e.trollerTargetX ?? world.death.deathX;
+  const targetZ = e.trollerTargetZ ?? world.death.deathZ;
+  const dx = targetX - e.x;
+  const dz = targetZ - e.z;
+  const dist = Math.hypot(dx, dz);
+
+  if (phase === 'collect') {
+    e.phaseTimer = (e.phaseTimer ?? 0) - dt;
+    if ((e.phaseTimer ?? 0) <= 0) {
+      // Pick a random direction and walk that far away from the
+      // corpse. Bag travels with the troller from now on.
+      const angle = world.rng.next() * Math.PI * 2;
+      e.trollerTargetX =
+        world.death.deathX + Math.cos(angle) * TROLLER_LEAVE_DISTANCE;
+      e.trollerTargetZ =
+        world.death.deathZ + Math.sin(angle) * TROLLER_LEAVE_DISTANCE;
+      e.phase = 'leave';
+      e.carriesPlayerBag = true;
+    }
+    return;
+  }
+
+  if (dist < 0.15) {
+    if (phase === 'approach') {
+      e.phase = 'collect';
+      e.phaseTimer = TROLLER_COLLECT_TIME;
+    } else if (phase === 'leave') {
+      // Drop the bag and despawn the troller.
+      dropPlayerDeathBag(world, e.x, e.z);
+      world.entities.splice(index, 1);
+    }
+    return;
+  }
+
+  const norm = Math.max(dist, 0.0001);
+  e.x += (dx / norm) * TROLLER_SPEED * dt;
+  e.z += (dz / norm) * TROLLER_SPEED * dt;
+  e.rotation = Math.atan2(dx, dz);
+}
+
+function tickIndicatorBug(world: World, dt: number) {
+  const bug = world.death.bug;
+  if (!bug || !world.death.alive) return;
+
+  bug.retargetTimer -= dt;
+  if (bug.retargetTimer <= 0) {
+    const angle = world.rng.next() * Math.PI * 2;
+    const dist = world.rng.next() * BUG_WANDER_RADIUS;
+    let tx = world.player.x + Math.cos(angle) * dist;
+    let tz = world.player.z + Math.sin(angle) * dist;
+    // Bias the wander target toward the most recent loot bag so
+    // the bug visibly leads the player back to it.
+    const bag = world.lootBags.find((b) => b.isDeathBag) ?? null;
+    if (bag) {
+      tx = tx * (1 - BUG_BAG_BIAS) + bag.x * BUG_BAG_BIAS;
+      tz = tz * (1 - BUG_BAG_BIAS) + bag.z * BUG_BAG_BIAS;
+    }
+    bug.wanderTargetX = tx;
+    bug.wanderTargetZ = tz;
+    bug.retargetTimer =
+      BUG_RETARGET_MIN +
+      world.rng.next() * (BUG_RETARGET_MAX - BUG_RETARGET_MIN);
+  }
+
+  const dx = bug.wanderTargetX - bug.x;
+  const dz = bug.wanderTargetZ - bug.z;
+  const norm = Math.max(Math.hypot(dx, dz), 0.0001);
+  bug.x += (dx / norm) * BUG_SPEED * dt;
+  bug.z += (dz / norm) * BUG_SPEED * dt;
+  bug.rotation = Math.atan2(dx, dz);
+}

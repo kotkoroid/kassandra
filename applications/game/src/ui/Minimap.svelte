@@ -1,11 +1,9 @@
 <script lang="ts">
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
-  import { death } from '../death.svelte';
-  import { enemies } from '../enemies.svelte';
-  import { healers } from '../healers.svelte';
-  import { spiders } from '../spiders.svelte';
-  import { player } from '../state.svelte';
-  import { currentHour, isNightHour, time } from '../time.svelte';
+  import { currentHour, isNightHour } from '../sim/systems/time';
+  import { world } from '../sim/world.svelte';
+
+  const player = world.player;
 
   // Overall clock dial size in CSS pixels. The inner circular
   // minimap is centered inside the ring of hours.
@@ -56,9 +54,9 @@
   // Major labels every 3 hours. Reads like a clock without crowding.
   const LABEL_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 
-  // Reading time.elapsed keeps these reactive to the cycle advancing
-  // in Scene.svelte's useTask.
-  const hour = $derived(time.elapsed >= 0 ? currentHour() : 0);
+  // Reading world.time keeps these reactive to the cycle advancing
+  // in the sim tick.
+  const hour = $derived(world.time >= 0 ? currentHour(world) : 0);
   const indicatorInner = $derived(ringPoint(hour, RING_INNER));
   const indicatorOuter = $derived(ringPoint(hour, RING_OUTER + 6));
 </script>
@@ -191,33 +189,41 @@
         stroke-width="0.7"
       />
 
-      <!-- Healers (allies) — cyan. -->
-      {#each healers as h (h.id)}
-        <circle cx={mapX(h.x)} cy={mapY(h.z)} r="3" fill="#5dd6ff" />
+      <!-- World entities. One pass through, colour + size dispatched
+           by kind. Cyan = allies, red = swain, dark purple-red =
+           spiders (sized by tier), tan = wolf, brown = bear,
+           dim grey = troller. -->
+      {#each world.entities as e (e.id)}
+        {#if e.kind === 'janna'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3" fill="#5dd6ff" />
+        {:else if e.kind === 'swain'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3" fill="#e44141" />
+        {:else if e.kind === 'spider-big'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3" fill="#9c2a55" />
+        {:else if e.kind === 'spider-medium'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="2.2" fill="#9c2a55" />
+        {:else if e.kind === 'spider-tiny'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="1.5" fill="#9c2a55" />
+        {:else if e.kind === 'wolf'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3" fill="#9a8266" />
+        {:else if e.kind === 'bear'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3.5" fill="#6b4625" />
+        {:else if e.kind === 'troller'}
+          <circle cx={mapX(e.x)} cy={mapY(e.z)} r="2.5" fill="#bdbdbd" />
+        {/if}
       {/each}
 
-      <!-- Enemies — red. -->
-      {#each enemies as e (e.id)}
-        <circle cx={mapX(e.x)} cy={mapY(e.z)} r="3" fill="#e44141" />
-      {/each}
-
-      <!-- Spiders — dark purple-red, sized by tier. -->
-      {#each spiders as s (s.id)}
+      <!-- Loot bags — gold for kill bags, brighter gold for the
+           player's death bag. -->
+      {#each world.lootBags as b (b.id)}
+        <circle cx={mapX(b.x)} cy={mapY(b.z)} r="6" fill="#d4a23a" opacity="0.3" />
         <circle
-          cx={mapX(s.x)}
-          cy={mapY(s.z)}
-          r={s.size === 'big' ? 3 : s.size === 'medium' ? 2.2 : 1.5}
-          fill="#9c2a55"
+          cx={mapX(b.x)}
+          cy={mapY(b.z)}
+          r="3.5"
+          fill={b.isDeathBag ? '#ffd040' : '#d4a23a'}
         />
       {/each}
-
-      <!-- Loot bag — gold with a faint glow ring. -->
-      {#if death.bag}
-        {@const bx = mapX(death.bag.x)}
-        {@const by = mapY(death.bag.z)}
-        <circle cx={bx} cy={by} r="6" fill="#d4a23a" opacity="0.3" />
-        <circle cx={bx} cy={by} r="3.5" fill="#ffd040" />
-      {/if}
 
       <!-- Player — center, yellow with white ring. -->
       <circle cx="0" cy="0" r="4.5" fill="#ffeb80" stroke="#ffffff" stroke-width="1" />

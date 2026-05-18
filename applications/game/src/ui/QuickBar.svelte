@@ -1,6 +1,14 @@
 <script lang="ts">
   import { chat, toggleChat } from '../chat.svelte';
-  import { settings } from '../settings.svelte';
+  import { dispatch } from '../sim/input';
+  import { world } from '../sim/world.svelte';
+
+  // Auto-attack lives on the simulated player so the toggle is
+  // multiplayer-ready. Click dispatches a SimEvent rather than
+  // mutating world directly so the input pipeline stays single-source.
+  function toggleAutoAttack() {
+    dispatch(world, { kind: 'set_auto_attack', on: !world.player.autoAttack });
+  }
 
   // Five item slots (keys 1-5) and five skill slots (keys F1-F5).
   // Nothing is wired into them yet — the labels exist so the bar
@@ -16,13 +24,13 @@
        click). -->
   <button
     type="button"
-    class="flex h-10 w-10 items-center justify-center border-2 transition {settings.autoAttack
+    class="flex h-10 w-10 items-center justify-center border-2 transition {world.player.autoAttack
       ? 'border-amber-400 bg-amber-900/40 text-amber-100'
       : 'border-amber-900/70 bg-neutral-900/80 text-amber-300/70'} hover:border-amber-300 hover:text-amber-100"
-    onclick={() => (settings.autoAttack = !settings.autoAttack)}
-    aria-pressed={settings.autoAttack}
+    onclick={toggleAutoAttack}
+    aria-pressed={world.player.autoAttack}
     aria-label="Toggle auto-attack"
-    title="Auto-attack: {settings.autoAttack ? 'on' : 'off'}"
+    title="Auto-attack: {world.player.autoAttack ? 'on' : 'off'}"
   >
     <!-- Stylised sword icon. -->
     <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true">

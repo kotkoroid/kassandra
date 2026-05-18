@@ -1,6 +1,11 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { chat, closeChat, cycleChannel, sendMessage } from '../chat.svelte';
+  import { world } from '../sim/world.svelte';
+
+  // Messages live on the world (so multiplayer would broadcast
+  // them); everything else in this panel is local UI state.
+  const messages = $derived(world.chat.messages);
 
   let inputRef: HTMLInputElement | undefined = $state();
   let listRef: HTMLDivElement | undefined = $state();
@@ -17,7 +22,7 @@
 
   $effect(() => {
     // Read the messages length so the effect re-runs after sends.
-    chat.messages.length;
+    messages.length;
     tick().then(() => {
       if (listRef) listRef.scrollTop = listRef.scrollHeight;
     });
@@ -63,10 +68,10 @@
       bind:this={listRef}
       class="h-48 overflow-y-auto bg-black/40 px-3 py-2 text-sm text-white/95 font-sans"
     >
-      {#if chat.messages.length === 0}
+      {#if messages.length === 0}
         <div class="text-white/40 italic">No messages yet.</div>
       {:else}
-        {#each chat.messages as msg (msg.id)}
+        {#each messages as msg (msg.id)}
           <div class="leading-tight">
             <span class="text-amber-300">{msg.author}</span>
             <span class="text-white/50">:</span>

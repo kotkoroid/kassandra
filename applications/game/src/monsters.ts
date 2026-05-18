@@ -4,7 +4,7 @@
 
 import rawCatalog from './monsters.jsonc?raw';
 
-export type MonsterType = 'ANIMAL';
+export type MonsterType = 'ANIMAL' | 'ALLY';
 
 export interface MonsterAttributes {
   damage: number;
@@ -42,6 +42,7 @@ export const MONSTER_SPIDER: MonsterId = 'MONSTER000004';
 export const MONSTER_SMALL_SPIDER: MonsterId = 'MONSTER000005';
 export const MONSTER_TINY_SPIDER: MonsterId = 'MONSTER000006';
 export const MONSTER_TROLLER: MonsterId = 'MONSTER000007';
+export const MONSTER_JANNA: MonsterId = 'MONSTER000008';
 
 export function getMonster(id: MonsterId): Monster {
   const m = MONSTERS[id];

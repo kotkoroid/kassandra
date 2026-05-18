@@ -2,23 +2,38 @@
   import { T, useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
   import { DoubleSide } from 'three';
-  import { death } from '../death.svelte';
+  import { ARMOR_COLORS, HAIR_COLORS } from '../cosmetics';
   import { selection } from '../selection.svelte';
   import { settings } from '../settings.svelte';
-  import {
-    ARMOR_COLORS,
-    HAIR_COLORS,
-    getEffectiveAttackSpeed,
-    player,
-  } from '../state.svelte';
+  import { effectiveAttackSpeed } from '../sim/util';
+  import { world } from '../sim/world.svelte';
+
+  // Player.svelte is reused by the CharacterCreation preview, which
+  // controls position/rotation/slashTrigger externally — so those
+  // come in as props instead of reading the live world fields.
+  // Cosmetic + identity bits (name, hair, armor, sex, level, level-
+  // up trigger) read straight from world.player.
+  const player = world.player;
 
   interface Props {
     position: [number, number, number];
     rotation: number;
     moving: boolean;
     slashTrigger: number;
+    // Optional ref-capture for the top-level Group. Scene.svelte uses
+    // it to keep the player's pose updated imperatively in the same
+    // useTask as the camera — otherwise Svelte's prop-binding flush
+    // lags one frame behind Threlte's render call, making the model
+    // appear to trail the camera while walking.
+    oncreate?: (group: import('three').Group) => void;
   }
-  let { position, rotation, moving, slashTrigger }: Props = $props();
+  let {
+    position,
+    rotation,
+    moving,
+    slashTrigger,
+    oncreate,
+  }: Props = $props();
 
   const skin = '#f0907e';
 
@@ -60,7 +75,7 @@
     if (slashPhase >= 0) {
       // Animation length = 1 / attackSpeed seconds, so the visible
       // swing plays at exactly the rate the stat advertises.
-      slashPhase += delta * Math.max(getEffectiveAttackSpeed(), 0.0001);
+      slashPhase += delta * Math.max(effectiveAttackSpeed(player), 0.0001);
       if (slashPhase >= 1) slashPhase = -1;
     }
 
@@ -100,12 +115,13 @@
 <T.Group
   {position}
   rotation.y={rotation}
+  oncreate={(g) => oncreate?.(g)}
   onclick={(e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    selection.value = { kind: 'player' };
+    selection.value = 'player';
   }}
 >
-  {#if death.alive && (settings.showNames || player.saying)}
+  {#if world.death.alive && (settings.showNames || player.saying)}
     <!-- Nameplate + speech bubble above the head. Both are hidden
          while dead so the corpse doesn't keep floating labels over
          it. Nameplate is toggleable via the Settings dialog; the
@@ -134,7 +150,7 @@
     </HTML>
   {/if}
 
-  {#if levelUpTime >= 0 && death.alive}
+  {#if levelUpTime >= 0 && world.death.alive}
     <!-- Pillar of golden light wrapping the character. Open-ended
          cylinder + DoubleSide so it renders from both inside and out;
          depthWrite off so it doesn't clip the model behind it. -->
@@ -178,7 +194,7 @@
   <!-- Body parts wrap in an inner group so death drops the whole
        avatar flat on its back without affecting the nameplate or
        level-up effect that live above. -->
-  <T.Group rotation.x={death.alive ? 0 : -Math.PI / 2}>
+  <T.Group rotation.x={world.death.alive ? 0 : -Math.PI / 2}>
     <!-- Torso (skin under the armor). -->
     <T.Mesh position={[0, 1.2, 0]} castShadow>
     <T.BoxGeometry args={[0.4, 0.5, 0.25]} />
