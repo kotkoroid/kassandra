@@ -1,8 +1,19 @@
 // Canonical item catalog. Each entry is keyed by an ITEM###### id and
 // describes the metadata + attribute stats that get *added* to a
-// character's base stats when the item is equipped.
+// character's base stats when the item is equipped. CURRENCY items
+// are non-equippable; their `attributes` are zeroed and ignored.
 {
   "ITEM000001": {
+    "name": "Lars",
+    "type": "CURRENCY",
+    "subtype": "COIN",
+    "level": 1,
+    "attributes": {
+      "damage": 0,
+      "attackSpeed": 0
+    }
+  },
+  "ITEM000002": {
     "name": "Wooden Sword",
     "type": "WEAPON",
     "subtype": "SWORD",
@@ -12,7 +23,7 @@
       "attackSpeed": 0.3
     }
   },
-  "ITEM000002": {
+  "ITEM000003": {
     "name": "Bronze Sword",
     "type": "WEAPON",
     "subtype": "SWORD",
@@ -22,7 +33,7 @@
       "attackSpeed": 0.4
     }
   },
-  "ITEM000003": {
+  "ITEM000004": {
     "name": "Carbon Steel Sword",
     "type": "WEAPON",
     "subtype": "SWORD",
@@ -32,7 +43,7 @@
       "attackSpeed": 0.5
     }
   },
-  "ITEM000004": {
+  "ITEM000005": {
     "name": "Damascus Steel Sword",
     "type": "WEAPON",
     "subtype": "SWORD",
@@ -42,7 +53,7 @@
       "attackSpeed": 1
     }
   },
-  "ITEM000005": {
+  "ITEM000006": {
     "name": "Cermet Sword",
     "type": "WEAPON",
     "subtype": "SWORD",

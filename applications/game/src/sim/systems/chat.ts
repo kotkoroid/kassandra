@@ -61,6 +61,7 @@ const HELP_LINES = [
   '/m or /monster [ID] [COUNT?] — spawn monster(s) by id (default 1)',
   '/kill [NAME] — drop the named player to 0 hp',
   '/respawn [NAME] — revive the named player',
+  '/gold [NAME] [+/-AMOUNT] — adjust Lars (default +; cannot go below 0)',
   '/help — list commands',
 ];
 
@@ -78,6 +79,8 @@ function runCommand(world: World, line: string): string[] {
       return cmdKill(world, args[0]);
     case 'respawn':
       return cmdRespawn(world, args[0]);
+    case 'gold':
+      return cmdGold(world, args[0], args[1]);
     default:
       return [`Unknown command: /${cmd}`];
   }
@@ -131,6 +134,40 @@ function cmdKill(world: World, name: string | undefined): string[] {
   if (!world.death.alive) return [`${name} is already dead`];
   world.player.health = 0;
   return [`Killed ${name}`];
+}
+
+function cmdGold(
+  world: World,
+  nameArg: string | undefined,
+  amountArg: string | undefined,
+): string[] {
+  if (!nameArg || amountArg === undefined) {
+    return ['Usage: /gold [NAME] [+/-AMOUNT]'];
+  }
+  if (world.player.name !== nameArg) return [`No player named ${nameArg}`];
+
+  // Parse the signed amount. Leading + adds (the default), leading -
+  // subtracts; a bare number is treated as +. Only integers; the
+  // magnitude must be >= 0 after stripping the sign.
+  let sign = 1;
+  let mag = amountArg;
+  if (amountArg.startsWith('+')) mag = amountArg.slice(1);
+  else if (amountArg.startsWith('-')) {
+    sign = -1;
+    mag = amountArg.slice(1);
+  }
+  const n = Number.parseInt(mag, 10);
+  if (!Number.isFinite(n) || n < 0 || String(n) !== mag) {
+    return [`Invalid amount: ${amountArg}`];
+  }
+  const delta = sign * n;
+
+  const have = world.player.lars;
+  if (have + delta < 0) {
+    return [`${nameArg} only has ${have} Lars (cannot remove ${n})`];
+  }
+  world.player.lars = have + delta;
+  return [`${nameArg}: ${have} → ${world.player.lars} Lars (${delta >= 0 ? '+' : ''}${delta})`];
 }
 
 function cmdRespawn(world: World, name: string | undefined): string[] {

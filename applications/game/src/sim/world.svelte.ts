@@ -36,6 +36,7 @@ function defaultPlayer(): Player {
     equippedWeaponId: STARTING_WEAPON_ID,
     modifiers: [],
     bag: [],
+    lars: 0,
     abilities: [],
     skillPoints: 0,
     classSpellPoints: 0,

@@ -106,8 +106,13 @@ export interface Player {
   equippedWeaponId: ItemId;
   modifiers: Modifier[];
 
-  // Inventory: item ids acquired from world loot bags.
+  // Inventory: item ids acquired from world loot bags. Currency
+  // items (Lars) do NOT live here — they roll into the `lars`
+  // counter at pickup so the bag never wastes slots on coins.
   bag: ItemId[];
+  // Lars (the currency). Increments on coin pickup, decrements on
+  // drop or on /gold -N. Floor is 0.
+  lars: number;
 
   // Trained abilities. Empty on a fresh character — populated as
   // ability books are consumed or as class skills unlock at level.
@@ -267,7 +272,8 @@ export type SimEvent =
   | { kind: 'request_respawn' }
   | { kind: 'set_auto_attack'; on: boolean }
   | { kind: 'kill_player' }
-  | { kind: 'pickup_loot'; bagId: string };
+  | { kind: 'pickup_loot'; bagId: string }
+  | { kind: 'drop_item'; itemId: string; count: number };
 
 export interface FrameInputs {
   // World-space WASD (already camera-transformed by the client).

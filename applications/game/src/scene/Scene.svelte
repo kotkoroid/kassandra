@@ -16,6 +16,7 @@
   import { chat, openChat } from '../chat.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
+  import { BAG_PICKUP_RADIUS } from '../sim/constants';
   import { dispatch } from '../sim/input';
   import { currentHour } from '../sim/systems/time';
   import { tick } from '../sim/tick';
@@ -134,6 +135,23 @@
     }
   }
 
+  // Z-key shortcut: grabs every in-range bag whose owned items
+  // belong to the player. Multiple bags can be claimed in one press
+  // — useful after a fight that drops several. No dialog is shown.
+  function pickupNearbyOwnedLoot() {
+    const px = world.player.x;
+    const pz = world.player.z;
+    const radius2 = BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS;
+    const me = world.player.name;
+    for (const bag of world.lootBags) {
+      const dx = bag.x - px;
+      const dz = bag.z - pz;
+      if (dx * dx + dz * dz > radius2) continue;
+      if (!bag.items.some((it) => it.owner === me)) continue;
+      dispatch(world, { kind: 'pickup_loot', bagId: bag.id });
+    }
+  }
+
   onMount(() => {
     const keyDown = (e: KeyboardEvent) => {
       // Chat owns its own keystrokes while open.
@@ -155,6 +173,10 @@
       if (e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) dispatch(world, { kind: 'manual_attack' });
+      }
+      if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (!e.repeat) pickupNearbyOwnedLoot();
       }
       if (e.repeat) return;
       keys.add(e.key.toLowerCase());

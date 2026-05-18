@@ -4,8 +4,8 @@
 
 import rawCatalog from './data/items.jsonc?raw';
 
-export type ItemType = 'WEAPON';
-export type ItemSubtype = 'SWORD';
+export type ItemType = 'WEAPON' | 'CURRENCY';
+export type ItemSubtype = 'SWORD' | 'COIN';
 
 export interface ItemAttributes {
   // Flat damage added to the wielder's base damage on each hit.
@@ -35,7 +35,13 @@ function stripJsonc(text: string): string {
 export const ITEMS: Record<ItemId, Item> = JSON.parse(stripJsonc(rawCatalog));
 
 // Player starts with the wooden sword equipped.
-export const STARTING_WEAPON_ID: ItemId = 'ITEM000001';
+export const STARTING_WEAPON_ID: ItemId = 'ITEM000002';
+
+// Currency item id. Lars are the in-world coins that drop from
+// every kill. Stored as repeated entries in `world.player.bag` so
+// the existing stack-by-id grouping in BagPanel/LootBagPanel
+// renders the running total automatically.
+export const LARS_ID: ItemId = 'ITEM000001';
 
 export function getItem(id: ItemId): Item | undefined {
   return ITEMS[id];

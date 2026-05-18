@@ -1,16 +1,43 @@
 // Loot tables keyed by MonsterId. Each entry maps an ItemId to its
-// independent drop chance in percent (0–100). On kill the engine
-// rolls every line of the matching table separately, so the values
-// are *not* weights — a 10/1 row gives a 10% chance for the first
-// item AND a 1% chance for the second, both rollable in the same
-// kill.
+// drop rule. The simplest form is a bare number — that's a flat
+// drop chance in percent (0–100), one item on success. The object
+// form supports a count or a [min, max] range, used for currency
+// stacks like Lars.
+//
+// Rolls are independent: every line is evaluated on its own when
+// the monster dies, so a kill may yield several distinct items.
 {
   "MONSTER000001": {
-    "ITEM000001": 10,
-    "ITEM000002": 1
+    // Wolf — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 3 },
+    "ITEM000002": 10,
+    "ITEM000003": 1
   },
   "MONSTER000002": {
-    "ITEM000001": 50,
-    "ITEM000002": 20
+    // Bear — L3
+    "ITEM000001": { "chance": 50, "min": 3, "max": 8 },
+    "ITEM000003": 50,
+    "ITEM000004": 20
+  },
+  "MONSTER000003": {
+    // Swain — L10
+    "ITEM000001": { "chance": 50, "min": 10, "max": 25 }
+  },
+  "MONSTER000004": {
+    // Spider — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 2 }
+  },
+  "MONSTER000005": {
+    // Small Spider — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 2 }
+  },
+  "MONSTER000006": {
+    // Tiny Spider — L1
+    "ITEM000001": { "chance": 50, "count": 1 }
+  },
+  "MONSTER000007": {
+    // Troller — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 3 }
   }
+  // MONSTER000008 (Janna) is an ALLY — no drops.
 }

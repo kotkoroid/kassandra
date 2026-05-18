@@ -1,22 +1,56 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import { bagOpen } from '../bag.svelte';
-  import { getItem, type ItemId } from '../items';
+  import { getItem, LARS_ID, type ItemId } from '../items';
   import Player from '../scene/Player.svelte';
+  import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
+
+  // Max coins droppable in one go from the UI. Matches the spec.
+  const DROP_MAX = 50;
+
+  // Per-stack drop dialog. `dropItem` is the stack the player picked
+  // (Lars today); `dropAvailable` caches the count at open time so
+  // the slider max doesn't shrink mid-edit if a tick happens between
+  // open and submit.
+  let dropItem = $state<ItemId | null>(null);
+  let dropAvailable = $state(0);
+  let dropCount = $state(1);
+  const dropCap = $derived(Math.min(DROP_MAX, dropAvailable));
+
+  function openDrop(id: ItemId, available: number) {
+    dropItem = id;
+    dropAvailable = available;
+    dropCount = Math.min(1, Math.max(0, available));
+    if (dropCount === 0) dropCount = 1;
+  }
+  function confirmDrop() {
+    if (!dropItem) return;
+    const n = Math.max(1, Math.min(dropCap, Math.floor(dropCount)));
+    dispatch(world, { kind: 'drop_item', itemId: dropItem, count: n });
+    dropItem = null;
+  }
+  function cancelDrop() {
+    dropItem = null;
+  }
 
   interface Stack {
     id: ItemId;
     count: number;
   }
 
+  // Currency lives on a dedicated counter; the slot grid only shows
+  // non-currency items so coins never occupy bag slots.
   const stacks = $derived.by<Stack[]>(() => {
     const counts = new Map<ItemId, number>();
     for (const id of world.player.bag) {
+      if (id === LARS_ID) continue;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
     return [...counts.entries()].map(([id, count]) => ({ id, count }));
   });
+
+  const larsCount = $derived(world.player.lars);
 
   // Equipment paper-doll. Only `weapon` is wired to actual player
   // state today — the rest are visual placeholders matching the
@@ -204,13 +238,83 @@
         </div>
       </div>
 
-      <!-- Currency footer -->
-      <div class="flex items-center gap-2 border-t border-amber-700/40 bg-stone-950/70 px-3 py-1.5">
+      <!-- Currency footer — click to open the drop-amount dialog. -->
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 border-t border-amber-700/40 bg-stone-950/70 px-3 py-1.5 text-left transition hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-stone-950/70"
+        disabled={larsCount === 0}
+        title={larsCount === 0 ? 'No Lars to drop' : 'Click to drop Lars'}
+        onclick={() => openDrop(LARS_ID, larsCount)}
+      >
         <div class="flex h-5 w-5 items-center justify-center rounded-full border border-amber-600/70 bg-amber-700/40 text-[10px] font-bold text-amber-200">
           ¥
         </div>
-        <span class="font-mono text-xs tracking-wider text-amber-200/90">0 Lars</span>
-      </div>
+        <span class="font-mono text-xs tracking-wider text-amber-200/90">{larsCount} Lars</span>
+      </button>
+
+      {#if dropItem}
+        {@const itemName = getItem(dropItem)?.name ?? 'item'}
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="absolute inset-0 z-10 flex items-center justify-center bg-black/70"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Drop {itemName}"
+          tabindex="-1"
+          onclick={cancelDrop}
+          onkeydown={(e) => {
+            if (e.key === 'Escape') cancelDrop();
+            if (e.key === 'Enter') confirmDrop();
+          }}
+        >
+          <div
+            class="w-[240px] border-2 border-amber-700/70 bg-neutral-900/95 p-3"
+            role="document"
+            onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.stopPropagation()}
+          >
+            <div class="mb-2 text-center text-xs font-semibold tracking-[0.25em] text-amber-200 uppercase">
+              Drop {itemName}
+            </div>
+            <div class="mb-3 text-center text-[11px] text-white/60">
+              You have {dropAvailable} · max {DROP_MAX} per drop
+            </div>
+            <div class="mb-3 flex items-center gap-2">
+              <input
+                type="range"
+                min="1"
+                max={dropCap}
+                bind:value={dropCount}
+                class="flex-1 accent-amber-500"
+              />
+              <input
+                type="number"
+                min="1"
+                max={dropCap}
+                bind:value={dropCount}
+                class="w-14 border border-amber-700/40 bg-black/60 px-1.5 py-0.5 text-center font-mono text-sm text-white outline-none focus:border-amber-400"
+              />
+            </div>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="flex-1 border border-amber-700/40 bg-neutral-900/70 px-2 py-1.5 text-xs font-semibold tracking-widest text-white/70 uppercase hover:border-amber-500 hover:text-amber-200"
+                onclick={cancelDrop}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="flex-1 border-2 border-amber-400 bg-amber-500/20 px-2 py-1.5 text-xs font-bold tracking-widest text-amber-100 uppercase hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-30"
+                disabled={dropCap < 1}
+                onclick={confirmDrop}
+              >
+                Drop
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

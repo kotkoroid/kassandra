@@ -5,6 +5,8 @@
 // authoritative server would call `tick` on a fixed schedule with a
 // fixed dt; the same function works either way.
 
+import { LARS_ID } from '../items';
+import { LOOT_BAG_TTL } from './constants';
 import { applyChat } from './systems/chat';
 import { tickDeath } from './systems/death';
 import { tickModifiers } from './stats';
@@ -16,6 +18,7 @@ import { tickProjectiles } from './systems/projectiles';
 import { tickSpawners } from './systems/spawners';
 import { tickTime } from './systems/time';
 import type { FrameInputs, SimEvent, World } from './types';
+import { genId } from './world.svelte';
 
 // Hard upper bound on a single step. Protects against catastrophic
 // catch-up after a tab unfreeze where frameDt could be seconds long.
@@ -94,17 +97,78 @@ function handleEvent(world: World, ev: SimEvent) {
       if (bagIdx < 0) break;
       const bag = world.lootBags[bagIdx]!;
       const playerName = world.player.name;
+      let larsGained = 0;
       const kept = bag.items.filter((item) => {
         if (item.owner !== playerName) return true;
-        world.player.bag.push(item.itemId);
+        // Currency items roll into the Lars counter; everything else
+        // lands as an inventory slot in the player bag.
+        if (item.itemId === LARS_ID) {
+          world.player.lars += 1;
+          larsGained += 1;
+        } else {
+          world.player.bag.push(item.itemId);
+        }
         return false;
       });
       bag.items = kept;
+      if (larsGained > 0) {
+        world.chat.messages.push({
+          id: genId(world, 'm'),
+          author: 'System',
+          text: `You have received ${larsGained} Lars.`,
+          channel: 'Normal',
+        });
+      }
       // Remove empty kill bags immediately rather than waiting for TTL.
       if (kept.length === 0 && !bag.isDeathBag) {
         world.lootBags.splice(bagIdx, 1);
       }
       break;
+    }
+    case 'drop_item': {
+      // Splits N copies of `itemId` out of the player's holdings
+      // into a fresh loot bag at the player's feet. Lars pulls from
+      // the dedicated counter; other ids pull from the bag array.
+      // Stamps the player as owner so they can reclaim the coins.
+      let have: number;
+      if (ev.itemId === LARS_ID) {
+        have = world.player.lars;
+      } else {
+        have = world.player.bag.reduce(
+          (n, id) => n + (id === ev.itemId ? 1 : 0),
+          0,
+        );
+      }
+      const n = Math.max(0, Math.min(ev.count, have));
+      if (n === 0) break;
+      if (ev.itemId === LARS_ID) {
+        world.player.lars -= n;
+      } else {
+        removeBagItems(world.player.bag, ev.itemId, n);
+      }
+      const owner = world.player.name;
+      const items = [] as { owner: string; itemId: string }[];
+      for (let i = 0; i < n; i++) items.push({ owner, itemId: ev.itemId });
+      world.lootBags.push({
+        id: genId(world, 'lb'),
+        x: world.player.x,
+        z: world.player.z,
+        items,
+        ttl: LOOT_BAG_TTL,
+        isDeathBag: false,
+        bagXp: 0,
+      });
+      break;
+    }
+  }
+}
+
+function removeBagItems(bag: string[], itemId: string, count: number) {
+  let removed = 0;
+  for (let i = bag.length - 1; i >= 0 && removed < count; i--) {
+    if (bag[i] === itemId) {
+      bag.splice(i, 1);
+      removed++;
     }
   }
 }

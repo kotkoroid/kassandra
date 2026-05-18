@@ -1,6 +1,13 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { chat, closeChat, cycleChannel, sendMessage } from '../chat.svelte';
+  import {
+    chat,
+    closeChat,
+    cycleChannel,
+    historyNext,
+    historyPrev,
+    sendMessage,
+  } from '../chat.svelte';
   import { world } from '../sim/world.svelte';
 
   // Messages live on the world (so multiplayer would broadcast
@@ -28,6 +35,15 @@
     });
   });
 
+  function moveCursorToEnd() {
+    tick().then(() => {
+      const el = inputRef;
+      if (!el) return;
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    });
+  }
+
   function handleKey(e: KeyboardEvent) {
     // Stop the global game keybinds from reading what the player is
     // typing (WASD, F-keys, etc.).
@@ -38,6 +54,14 @@
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeChat();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      historyPrev();
+      moveCursorToEnd();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      historyNext();
+      moveCursorToEnd();
     }
   }
 </script>

@@ -13,11 +13,25 @@ export const chat = $state<{
   open: boolean;
   draft: string;
   channel: ChatChannel;
+  // Sent-message history for Up/Down navigation. Most recent at the
+  // end. Consecutive duplicates are deduped at send time.
+  history: string[];
+  // Cursor into `history` while the user is scrolling through it.
+  // `null` means the input shows the live draft, not a history entry.
+  historyIndex: number | null;
+  // The in-progress draft the user had typed before they started
+  // pressing Up. Restored when they scroll back past the newest entry.
+  pendingDraft: string;
 }>({
   open: false,
   draft: '',
   channel: 'Normal',
+  history: [],
+  historyIndex: null,
+  pendingDraft: '',
 });
+
+const HISTORY_MAX = 50;
 
 export function openChat() {
   chat.open = true;
@@ -45,6 +59,43 @@ export function sendMessage() {
     closeChat();
     return;
   }
+  // Dedupe consecutive duplicates so spamming the same command
+  // doesn't bloat the recall list. Cap the ring at HISTORY_MAX.
+  const last = chat.history[chat.history.length - 1];
+  if (last !== text) {
+    chat.history.push(text);
+    if (chat.history.length > HISTORY_MAX) chat.history.shift();
+  }
   chat.draft = '';
+  chat.historyIndex = null;
+  chat.pendingDraft = '';
   dispatch(world, { kind: 'send_chat', text, channel: chat.channel });
+}
+
+// Recall the previous entry (terminal-style ↑). If we're currently
+// showing the live draft, snapshot it first so ↓ past the newest
+// entry can restore it.
+export function historyPrev() {
+  if (chat.history.length === 0) return;
+  if (chat.historyIndex === null) {
+    chat.pendingDraft = chat.draft;
+    chat.historyIndex = chat.history.length - 1;
+  } else if (chat.historyIndex > 0) {
+    chat.historyIndex -= 1;
+  }
+  chat.draft = chat.history[chat.historyIndex]!;
+}
+
+// Recall the next entry (terminal-style ↓). Past the newest entry,
+// restore the in-progress draft and detach from the history.
+export function historyNext() {
+  if (chat.historyIndex === null) return;
+  if (chat.historyIndex < chat.history.length - 1) {
+    chat.historyIndex += 1;
+    chat.draft = chat.history[chat.historyIndex]!;
+  } else {
+    chat.historyIndex = null;
+    chat.draft = chat.pendingDraft;
+    chat.pendingDraft = '';
+  }
 }
