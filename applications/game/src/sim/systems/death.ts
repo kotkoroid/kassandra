@@ -128,6 +128,8 @@ function respawn(world: World) {
   p.health = getEffectiveStat(p, 'maxHealth');
   p.mana = getEffectiveStat(p, 'maxMana');
   p.stamina = getEffectiveStat(p, 'maxStamina');
+  p.spellCooldowns = {};
+  p.activeSpell = null;
   p.x = CITY_X;
   p.z = CITY_Z;
   p.rotation = 0;

@@ -5,6 +5,7 @@
   // hair, a tall black staff capped with a glowing violet crystal.
 
   import { T } from '@threlte/core';
+  import { hover } from '../hover.svelte';
   import { selection } from '../selection.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import {
@@ -38,8 +39,14 @@
     e.stopPropagation();
     selection.value = id;
   }}
+  onpointerenter={(e: { stopPropagation: () => void }) => { e.stopPropagation(); hover.entityId = id; }}
+  onpointerleave={() => { if (hover.entityId === id) hover.entityId = null; }}
 >
   <EntityNameplate position={[0, 2.55, 0]} {name} {level} {hpPercent} entityX={position[0]} entityZ={position[2]} />
+  <T.Mesh position={[0, 1.0, 0]}>
+    <T.CylinderGeometry args={[0.4, 0.4, 2.0, 8]} />
+    <T.MeshStandardMaterial transparent opacity={0} depthWrite={false} />
+  </T.Mesh>
 
   <!-- Long robe — a tapered cylinder from the shoulders down to
        the ground, no visible legs/feet so she reads as a floating

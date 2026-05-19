@@ -17,6 +17,7 @@ function baseValue(player: Player, stat: StatKey): number {
     case 'maxHealth':   return PLAYER_MAX_HP;
     case 'maxMana':     return PLAYER_MAX_MANA;
     case 'maxStamina':  return STAMINA_MAX;
+    case 'moveSpeed':   return 1;  // pure multiplier; base 1 = no change
   }
 }
 

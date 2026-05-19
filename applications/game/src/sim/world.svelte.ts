@@ -53,6 +53,9 @@ function defaultPlayer(): Player {
     saying: '',
     sayExpiresAt: 0,
     levelUpTrigger: 0,
+    spellCooldowns: {},
+    activeSpell: null,
+    spellAnimTrigger: 0,
   };
 }
 

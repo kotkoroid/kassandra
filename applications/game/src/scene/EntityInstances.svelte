@@ -12,6 +12,7 @@
 
   import { T, useTask } from '@threlte/core';
   import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
+  import { hover } from '../hover.svelte';
   import { getMonster } from '../monsters';
   import { selection } from '../selection.svelte';
   import { dispatch } from '../sim/input';
@@ -123,18 +124,31 @@
     }
   });
 
+  function entityFromEvent(event: any, def: PartDef) {
+    const instanceId = event.instanceId;
+    if (typeof instanceId !== 'number') return null;
+    const i = Math.floor(instanceId / def.locals.length);
+    const list = world.entities.filter((e) => kindSet.has(e.kind));
+    return list[i] ?? null;
+  }
+
   function handleClick(event: any, def: PartDef) {
     event.stopPropagation();
-    const instanceId = event.instanceId;
-    if (typeof instanceId !== 'number') return;
-    const i = Math.floor(instanceId / def.locals.length);
-    // Re-derive the entity list at click time — the matrix update
-    // path also rebuilds it, so a stale closure can't drift here.
-    const list = world.entities.filter((e) => kindSet.has(e.kind));
-    const ent = list[i];
+    const ent = entityFromEvent(event, def);
     if (!ent) return;
     selection.value = ent.id;
     dispatch(world, { kind: 'engage', targetId: ent.id });
+  }
+
+  function handlePointerEnter(event: any, def: PartDef) {
+    event.stopPropagation();
+    const ent = entityFromEvent(event, def);
+    if (ent) hover.entityId = ent.id;
+  }
+
+  function handlePointerLeave(event: any, def: PartDef) {
+    const ent = entityFromEvent(event, def);
+    if (ent && hover.entityId === ent.id) hover.entityId = null;
   }
 </script>
 
@@ -148,6 +162,8 @@
       meshes[di] = m;
     }}
     onclick={(e: any) => handleClick(e, def)}
+    onpointerenter={(e: any) => handlePointerEnter(e, def)}
+    onpointerleave={(e: any) => handlePointerLeave(e, def)}
   />
 {/each}
 

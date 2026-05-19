@@ -1,21 +1,37 @@
 <script lang="ts">
   import { chat, toggleChat } from '../chat.svelte';
+  import { CLASS_SPELLS } from '../classSpells';
+  import { selection } from '../selection.svelte';
   import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
 
-  // Auto-attack lives on the simulated player so the toggle is
-  // multiplayer-ready. Click dispatches a SimEvent rather than
-  // mutating world directly so the input pipeline stays single-source.
   function toggleAutoAttack() {
     dispatch(world, { kind: 'set_auto_attack', on: !world.player.autoAttack });
   }
 
-  // Five item slots (keys 1-5) and five skill slots (keys F1-F5).
-  // Nothing is wired into them yet — the labels exist so the bar
-  // reads as the right thing visually and keyboard fires the right
-  // intent, ready for items/skills to land later.
-  const ITEM_SLOTS = [1, 2, 3, 4, 5] as const;
-  const SKILL_SLOTS = [1, 2, 3, 4, 5] as const;
+  function castSpell(spellId: string) {
+    const targetId = selection.value && selection.value !== 'player' ? selection.value : null;
+    dispatch(world, { kind: 'cast_spell', spellId, targetId });
+  }
+
+  // Class spells for the current player (up to 5 shown in number slots).
+  const classSpells = $derived(CLASS_SPELLS[world.player.playerClass] ?? []);
+
+  function cooldownFraction(spellId: string): number {
+    const readyAt = world.player.spellCooldowns[spellId] ?? 0;
+    if (world.time >= readyAt) return 0;
+    // We don't store the cooldown duration per-spell here, so we just
+    // clamp to a max so the overlay at least shows "cooling down".
+    return Math.min((readyAt - world.time) / 15, 1);
+  }
+
+  function isOnCooldown(spellId: string): boolean {
+    return (world.player.spellCooldowns[spellId] ?? 0) > world.time;
+  }
+
+  function secondsLeft(spellId: string): number {
+    return Math.max(0, Math.ceil((world.player.spellCooldowns[spellId] ?? 0) - world.time));
+  }
 </script>
 
 <div class="pointer-events-auto flex items-center gap-1">
@@ -41,19 +57,44 @@
     </svg>
   </button>
 
-  <!-- Item quick slots (1-5). Empty placeholders for now. -->
-  {#each ITEM_SLOTS as n (n)}
-    <button
-      type="button"
-      class="relative flex h-10 w-10 items-center justify-center border-2 border-amber-900/70 bg-neutral-900/80 text-xs text-amber-300/70 hover:border-amber-300"
-      aria-label="Item slot {n}"
-      title="Item slot {n} (key {n})"
-    >
-      <span
-        class="absolute top-0.5 left-1 font-mono text-[10px] leading-none text-amber-200/80"
-        >{n}</span
+  <!-- Number slots 1-5: class spells where available, empty otherwise. -->
+  {#each [0, 1, 2, 3, 4] as i (i)}
+    {@const spell = classSpells[i]}
+    {#if spell}
+      {@const onCd = isOnCooldown(spell.id)}
+      <button
+        type="button"
+        class="relative flex h-10 w-10 flex-col items-center justify-center border-2 text-xs transition
+          {onCd
+            ? 'border-amber-900/50 bg-neutral-900/80 text-amber-300/40'
+            : 'border-amber-600/80 bg-amber-900/20 text-amber-200 hover:border-amber-300 hover:bg-amber-900/40'}"
+        onclick={() => castSpell(spell.id)}
+        aria-label="{spell.name} (key {i + 1})"
+        title="{spell.name} — {spell.description} (key {i + 1})"
       >
-    </button>
+        <span class="absolute top-0.5 left-1 font-mono text-[10px] leading-none text-amber-200/80"
+          >{i + 1}</span
+        >
+        <span class="max-w-full truncate px-0.5 text-[9px] leading-tight">{spell.name}</span>
+        {#if onCd}
+          <span class="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-bold text-amber-300">
+            {secondsLeft(spell.id)}
+          </span>
+        {/if}
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="relative flex h-10 w-10 items-center justify-center border-2 border-amber-900/70 bg-neutral-900/80 text-xs text-amber-300/70"
+        aria-label="Slot {i + 1}"
+        title="Slot {i + 1} (key {i + 1})"
+        disabled
+      >
+        <span class="absolute top-0.5 left-1 font-mono text-[10px] leading-none text-amber-200/80"
+          >{i + 1}</span
+        >
+      </button>
+    {/if}
   {/each}
 
   <!-- Chat button. Highlighted while the chat panel is open. -->
@@ -75,16 +116,15 @@
     </svg>
   </button>
 
-  <!-- Skill quick slots (F1-F5). Empty placeholders. -->
-  {#each SKILL_SLOTS as n (n)}
+  <!-- F-slots (F1-F5). Empty placeholders for now. -->
+  {#each [1, 2, 3, 4, 5] as n (n)}
     <button
       type="button"
       class="relative flex h-10 w-10 items-center justify-center border-2 border-amber-900/70 bg-neutral-900/80 text-xs text-amber-300/70 hover:border-amber-300"
       aria-label="Skill slot F{n}"
       title="Skill slot F{n} (key F{n})"
     >
-      <span
-        class="absolute top-0.5 left-1 font-mono text-[10px] leading-none text-amber-200/80"
+      <span class="absolute top-0.5 left-1 font-mono text-[10px] leading-none text-amber-200/80"
         >F{n}</span
       >
     </button>

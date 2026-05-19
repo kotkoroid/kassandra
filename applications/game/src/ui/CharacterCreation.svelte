@@ -67,10 +67,10 @@
   onMount(() => {
     if (!player.name) {
       player.name = randomName();
-      player.sex = Math.random() < 0.5 ? 'male' : 'female';
-      player.hairColor = randomHair();
-      player.armor = randomArmor();
-      player.playerClass = randomClass();
+      player.sex = 'male';
+      player.hairColor = HAIR_KEYS[0]!;
+      player.armor = ARMOR_KEYS[0]!;
+      player.playerClass = CLASS_KEYS[0]!;
     }
   });
 
@@ -361,7 +361,7 @@
         <Player
           position={[0, 0, 0]}
           rotation={previewRotation}
-          moving={running}
+          speed={running ? 5 : 0}
           paused={manualRotation}
           {slashTrigger}
         />

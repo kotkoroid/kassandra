@@ -57,6 +57,9 @@ export function tickMonsters(world: World, dt: number) {
       e.hp = Math.min(e.maxHp, e.hp + e.healthRegen * dt);
     }
 
+    // Stunned entities skip their AI entirely.
+    if ((e.stunnedUntil ?? 0) > world.time) continue;
+
     switch (e.kind) {
       case 'spider-big':
       case 'spider-medium':
@@ -136,7 +139,8 @@ function tickMelee(
   const dx = bestX - e.x;
   const dz = bestZ - e.z;
   const norm = Math.max(bestDist, 0.0001);
-  const step = speed * dt;
+  const slowMul = (e.slowedUntil ?? 0) > world.time ? 0.5 : 1;
+  const step = speed * slowMul * dt;
   if (bestDist > attackRange) {
     const newX = e.x + (dx / norm) * step;
     const newZ = e.z + (dz / norm) * step;

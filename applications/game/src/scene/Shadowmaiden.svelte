@@ -6,6 +6,7 @@
   // and a tall ornate circlet capped with a single feather.
 
   import { T } from '@threlte/core';
+  import { hover } from '../hover.svelte';
   import { selection } from '../selection.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import {
@@ -44,8 +45,14 @@
     e.stopPropagation();
     selection.value = id;
   }}
+  onpointerenter={(e: { stopPropagation: () => void }) => { e.stopPropagation(); hover.entityId = id; }}
+  onpointerleave={() => { if (hover.entityId === id) hover.entityId = null; }}
 >
   <EntityNameplate position={[0, 2.5, 0]} {name} {level} {hpPercent} entityX={position[0]} entityZ={position[2]} />
+  <T.Mesh position={[0, 1.0, 0]}>
+    <T.CylinderGeometry args={[0.4, 0.4, 2.0, 8]} />
+    <T.MeshStandardMaterial transparent opacity={0} depthWrite={false} />
+  </T.Mesh>
 
   <!-- Boots — strapped sandals with cloth wraps up the calf. -->
   <T.Mesh position={[-0.12, 0.08, 0]} castShadow material={SHADOWMAIDEN_BOOT_MAT}>

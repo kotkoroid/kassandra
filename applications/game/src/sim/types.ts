@@ -12,7 +12,7 @@ import type { Rng } from './rng';
 
 export type StatKey =
   | 'damage' | 'attackSpeed' | 'healthRegen'
-  | 'maxHealth' | 'maxMana' | 'maxStamina';
+  | 'maxHealth' | 'maxMana' | 'maxStamina' | 'moveSpeed';
 
 export interface Modifier {
   stat: StatKey;
@@ -96,6 +96,26 @@ export interface Quest {
   // increment this directly; the UI just displays it.
   progress?: { current: number; goal: number; label: string };
 }
+
+// --- Spell channel state ----------------------------------------
+
+export type ActiveSpell =
+  | {
+      kind: 'rush';
+      targetId: string;
+      startedAt: number;
+      endsAt: number;
+      fromX: number;
+      fromZ: number;
+      toX: number;
+      toZ: number;
+    }
+  | {
+      kind: 'hail-of-blades';
+      startedAt: number;
+      endsAt: number;
+      lastTickAt: number;
+    };
 
 // --- Abilities --------------------------------------------------
 
@@ -203,6 +223,15 @@ export interface Player {
   // Level-up visual trigger — incremented once per level-up so
   // Player.svelte can spawn the pillar of light without polling.
   levelUpTrigger: number;
+
+  // Spell system. `spellCooldowns` maps spellId → world.time at which
+  // the spell becomes castable again. `activeSpell` is non-null while a
+  // channelled spell (Rush dash, Hail spin) is in progress — movement
+  // and auto-attack are suppressed during channels. `spellAnimTrigger`
+  // is a monotonic counter Player.svelte watches to kick off vfx.
+  spellCooldowns: Record<string, number>;
+  activeSpell: ActiveSpell | null;
+  spellAnimTrigger: number;
 }
 
 // --- Entities (monsters + janna + troller) ----------------------
@@ -250,6 +279,10 @@ export interface Entity {
   carriesPlayerBag?: boolean;
   trollerTargetX?: number;
   trollerTargetZ?: number;
+
+  // Spell status effects applied by player abilities.
+  stunnedUntil?: number;  // world.time; AI skips its tick while set
+  slowedUntil?: number;   // world.time; AI moves at half speed while set
 
   // Ambient NPC chatter. The line currently shown above the head
   // (cleared when `sayExpiresAt` passes). `nextSayAt` is the sim
@@ -344,7 +377,8 @@ export type SimEvent =
   | { kind: 'set_auto_attack'; on: boolean }
   | { kind: 'kill_player' }
   | { kind: 'pickup_loot'; bagId: string }
-  | { kind: 'drop_item'; itemId: string; count: number };
+  | { kind: 'drop_item'; itemId: string; count: number }
+  | { kind: 'cast_spell'; spellId: string; targetId?: string | null };
 
 export interface FrameInputs {
   // World-space WASD (already camera-transformed by the client).

@@ -43,6 +43,8 @@
   <!-- Lantern body. Outer dark frame + inner glowing cube — emissive
        intensity scales with `lit` so dusk/dawn fade smoothly. -->
   <T.Group position={[0.3, 2.2, 0]}>
+    <!-- Warm point light — no shadow casting (too expensive per-lamp). -->
+    <T.PointLight color={bulb} intensity={lit * 6} distance={12} decay={2} />
     <!-- Cap on top of the lantern. -->
     <T.Mesh position={[0, 0.2, 0]} castShadow material={NEAR_BLACK_MAT}>
       <T.BoxGeometry args={[0.22, 0.05, 0.22]} />

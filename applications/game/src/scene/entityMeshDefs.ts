@@ -30,6 +30,7 @@ import {
   FUR_WOLF_BELLY_MAT,
   FUR_WOLF_DARK_MAT,
   FUR_WOLF_MAT,
+  HITBOX_MAT,
   NEAR_BLACK_MAT,
   SPIDER_BODY_MAT,
   SPIDER_EYE_MAT,
@@ -62,6 +63,14 @@ function local(
   );
 }
 
+// ── Shared hitbox geometries ─────────────────────────────────────────────
+// One invisible cylinder per entity kind used as a uniform click target.
+// Sized to generously cover the entity's silhouette so targeting feels
+// consistent regardless of which body part the cursor lands on.
+const WOLF_HITBOX_GEO   = new CylinderGeometry(0.5, 0.5, 1.0, 8);
+const BEAR_HITBOX_GEO   = new CylinderGeometry(0.65, 0.65, 1.5, 8);
+const SPIDER_HITBOX_GEO = new CylinderGeometry(0.38, 0.38, 0.42, 8);
+
 // ── Wolf ─────────────────────────────────────────────────────────────────
 const WOLF_BODY_GEO = new BoxGeometry(0.42, 0.4, 0.85);
 const WOLF_BELLY_GEO = new BoxGeometry(0.38, 0.12, 0.78);
@@ -76,6 +85,7 @@ const WOLF_LEG_GEO = new CylinderGeometry(0.06, 0.06, 0.36, 6);
 const WOLF_TAIL_GEO = new CylinderGeometry(0.04, 0.07, 0.36, 6);
 
 export const WOLF_DEFS: PartDef[] = [
+  { geo: WOLF_HITBOX_GEO, mat: HITBOX_MAT, castShadow: false, locals: [local(0, 0.5, 0)] },
   { geo: WOLF_BODY_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.5, 0)] },
   { geo: WOLF_BELLY_GEO, mat: FUR_WOLF_BELLY_MAT, castShadow: true, locals: [local(0, 0.32, 0)] },
   { geo: WOLF_NECK_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.62, 0.38, 0.3, 0, 0)] },
@@ -127,6 +137,7 @@ const BEAR_CLAW_GEO = new BoxGeometry(0.22, 0.04, 0.1);
 const BEAR_TAIL_GEO = new SphereGeometry(0.1, 6, 6);
 
 export const BEAR_DEFS: PartDef[] = [
+  { geo: BEAR_HITBOX_GEO, mat: HITBOX_MAT, castShadow: false, locals: [local(0, 0.75, 0)] },
   { geo: BEAR_BODY_GEO, mat: FUR_BEAR_MAT, castShadow: true, locals: [local(0, 0.72, 0)] },
   { geo: BEAR_HUMP_GEO, mat: FUR_BEAR_MAT, castShadow: true, locals: [local(0, 1.05, 0.2)] },
   { geo: BEAR_HEAD_GEO, mat: FUR_BEAR_MAT, castShadow: true, locals: [local(0, 1.0, 0.62)] },
@@ -198,6 +209,7 @@ const SPIDER_LEG_LOCALS = (() => {
 })();
 
 export const SPIDER_DEFS: PartDef[] = [
+  { geo: SPIDER_HITBOX_GEO, mat: HITBOX_MAT, castShadow: false, locals: [local(0, 0.21, 0)] },
   { geo: SPIDER_BODY_GEO, mat: SPIDER_BODY_MAT, castShadow: true, locals: [local(0, 0.15, 0)] },
   {
     geo: SPIDER_EYE_GEO,

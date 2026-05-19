@@ -186,7 +186,7 @@
             <Player
               position={[0, 0, 0]}
               rotation={portraitRotation}
-              moving={false}
+              speed={0}
               slashTrigger={0}
             />
           </Canvas>

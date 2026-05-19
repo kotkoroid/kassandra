@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Canvas } from '@threlte/core';
+  import { ACESFilmicToneMapping, PCFSoftShadowMap } from 'three';
   import Scene from './scene/Scene.svelte';
   import CharacterCreation from './ui/CharacterCreation.svelte';
   import Hud from './ui/Hud.svelte';
@@ -18,7 +19,7 @@
   {#if view === 'creation'}
     <CharacterCreation onCreate={() => (view = 'game')} />
   {:else}
-    <Canvas shadows {dpr}>
+    <Canvas shadows={PCFSoftShadowMap} toneMapping={ACESFilmicToneMapping} {dpr}>
       <Scene />
     </Canvas>
     <Hud />

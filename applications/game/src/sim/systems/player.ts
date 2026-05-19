@@ -50,6 +50,13 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
     return;
   }
 
+  // While a channelled spell is running (Rush dash, Hail spin) the
+  // player cannot move or slash — tickSpells owns position this tick.
+  if (p.activeSpell !== null) {
+    world.pending.manualAttack = false;
+    return;
+  }
+
   // --- Engage block --------------------------------------------
 
   const hasManualInput = inputs.moveX !== 0 || inputs.moveZ !== 0;
@@ -125,6 +132,7 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
   if (empty) speed = SPEED_EXHAUSTED;
   else if (inWater) speed = SPEED_NORMAL * WATER_SPEED_FACTOR;
   else speed = SPEED_NORMAL;
+  speed *= getEffectiveStat(p, 'moveSpeed');
 
   // --- Apply movement + stamina ---------------------------------
 
@@ -180,6 +188,10 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
 
   if (world.pending.manualAttack) {
     world.pending.manualAttack = false;
+    // Cancel click-to-move navigation so the character plants and
+    // slashes in place instead of continuing to walk through the swing.
+    p.navTargetX = null;
+    p.navTargetZ = null;
     const minGap = 1 / Math.max(getEffectiveStat(p, 'attackSpeed'), 0.0001);
     if (world.time - p.lastSlashTime >= minGap) {
       slash(world);

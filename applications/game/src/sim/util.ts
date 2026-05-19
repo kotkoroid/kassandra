@@ -6,7 +6,13 @@ import { getVisibleWaters, type WaterPatch } from '../scene/world';
 import type { Entity, EntityKind, World, WorldLootBag } from './types';
 
 export function findEntity(world: World, id: string): Entity | null {
-  return world.entityById.get(id) ?? null;
+  // Read from the reactive entities array (same proxy path the sim writes
+  // through) rather than entityById, whose stored plain-object reference
+  // may not reflect in-place Svelte 5 signal updates to x/z/hp.
+  for (let i = 0; i < world.entities.length; i++) {
+    if (world.entities[i]!.id === id) return world.entities[i]!;
+  }
+  return null;
 }
 
 // Removes the entity at `index` from both the array and the id index.

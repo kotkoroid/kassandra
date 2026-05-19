@@ -1,24 +1,29 @@
 <script lang="ts">
-  import { T, useTask } from '@threlte/core';
+  import { T, useTask, useThrelte } from '@threlte/core';
   import { interactivity } from '@threlte/extras';
   import { onMount } from 'svelte';
   import {
-    AmbientLight,
     Color,
     DirectionalLight,
     DoubleSide,
     Fog,
     Group,
+    HemisphereLight,
+    Mesh,
+    MeshBasicMaterial,
     MeshStandardMaterial,
     PerspectiveCamera,
     Plane,
     Raycaster,
+    RingGeometry,
     Vector2,
     Vector3,
   } from 'three';
+  import { CLASS_SPELLS } from '../classSpells';
   import { chat, closeChat, openChat } from '../chat.svelte';
   import { fireClickIndicator } from '../clickIndicator.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
+  import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../sim/constants';
   import { dispatch } from '../sim/input';
@@ -43,6 +48,30 @@
   // handlers + the ground-click navigation/deselect.
   interactivity();
 
+  // Tone-mapping exposure. ACESFilmicToneMapping is set on the Canvas;
+  // exposure can only be reached through the renderer instance.
+  const { renderer, scene } = useThrelte();
+  renderer.toneMappingExposure = 0.9;
+
+  // Rings are created as raw Three.js objects and added to the scene
+  // directly so Threlte's prop-sync never fights our imperative position
+  // and visibility writes inside useTask.
+  const _selRing = new Mesh(
+    new RingGeometry(0.6, 0.8, 48),
+    new MeshBasicMaterial({ color: '#ff3030', transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide }),
+  );
+  _selRing.rotation.x = -Math.PI / 2;
+  _selRing.visible = false;
+  scene.add(_selRing);
+
+  const _hovRing = new Mesh(
+    new RingGeometry(0.4, 0.58, 48),
+    new MeshBasicMaterial({ color: '#ff6020', transparent: true, opacity: 0.75, depthWrite: false, side: DoubleSide }),
+  );
+  _hovRing.rotation.x = -Math.PI / 2;
+  _hovRing.visible = false;
+  scene.add(_hovRing);
+
   const cameraDistance = 12;
   const cameraTargetHeight = 1.1;
   const yawSensitivity = 0.005;
@@ -50,18 +79,24 @@
   const pitchMin = 0.15;
   const pitchMax = Math.PI / 2 - 0.1;
 
-  // --- Sun rig (visual-only — drives DirectionalLight/Ambient/Fog) ---
+  // --- Sun rig (visual-only — drives DirectionalLight/Hemisphere/Fog) ---
   const SUN_DISTANCE = 40;
   const PEAK_INTENSITY = 1.3;
   const NIGHT_INTENSITY = 0.04;
-  const PEAK_AMBIENT = 0.55;
-  const NIGHT_AMBIENT = 0.18;
+  const PEAK_AMBIENT = 0.7;
+  const NIGHT_AMBIENT = 0.22;
   const COLOR_MIDDAY = new Color('#fff4d6');
   const COLOR_HORIZON = new Color('#ffb56e');
   const COLOR_NIGHT = new Color('#5a7fc0');
   const SKY_MIDDAY = new Color('#d8e5b0');
   const SKY_HORIZON = new Color('#e89a72');
   const SKY_NIGHT = new Color('#1c2238');
+  // Ground-bounce colours for the hemisphere light's lower hemisphere.
+  // Darker and warmer than sky so undersides of models pick up a
+  // subtle earth tint instead of the same overhead hue.
+  const GND_MIDDAY = new Color('#8aaa48');
+  const GND_HORIZON = new Color('#7a5030');
+  const GND_NIGHT = new Color('#10141e');
   const tmpColor = new Color();
   const tmpColor2 = new Color();
 
@@ -70,13 +105,15 @@
   let cameraRef: PerspectiveCamera | undefined = $state();
   let playerGroupRef: Group | undefined = $state();
   let lightRef: DirectionalLight | undefined = $state();
-  let ambientRef: AmbientLight | undefined = $state();
+  let hemisphereRef: HemisphereLight | undefined = $state();
   let fogRef: Fog | undefined = $state();
 
-  // Visual moving flag for the walk cycle. True iff the player
-  // actually translated this frame; tracked separately because the
-  // sim doesn't expose a "moving this tick" bit.
-  let playerMoving = $state(false);
+
+  // Actual movement speed (world-units/sec) fed to the walk cycle.
+  // Derived from per-frame displacement so it naturally reflects
+  // water drag and exhaustion without coupling the renderer to sim
+  // constants.
+  let playerSpeed = $state(0);
   let lastPlayerX = world.player.x;
   let lastPlayerZ = world.player.z;
 
@@ -121,6 +158,15 @@
     else out.copy(SKY_NIGHT);
   }
 
+  function sampleGroundColor(sunY: number, out: Color) {
+    if (sunY >= 0.35) out.copy(GND_MIDDAY);
+    else if (sunY >= 0)
+      out.copy(GND_HORIZON).lerp(GND_MIDDAY, sunY / 0.35);
+    else if (sunY >= -0.15)
+      out.copy(GND_HORIZON).lerp(GND_NIGHT, -sunY / 0.15);
+    else out.copy(GND_NIGHT);
+  }
+
   // Sun rig follows world.time and the player's world position so
   // shadow coverage stays centered on the camera target. The sun's
   // arc is split so the lit half (sunY ≥ 0) spans the gameplay day
@@ -157,12 +203,14 @@
       lightRef.color.copy(tmpColor);
     }
 
-    if (ambientRef) {
+    if (hemisphereRef) {
       const dayWeight = Math.max(0, sunY);
-      ambientRef.intensity =
+      hemisphereRef.intensity =
         NIGHT_AMBIENT + dayWeight * (PEAK_AMBIENT - NIGHT_AMBIENT);
       sampleSkyColor(sunY, tmpColor2);
-      ambientRef.color.copy(tmpColor2);
+      hemisphereRef.color.copy(tmpColor2);
+      sampleGroundColor(sunY, tmpColor2);
+      hemisphereRef.groundColor.copy(tmpColor2);
     }
 
     if (fogRef) {
@@ -201,6 +249,12 @@
       }
       if (!e.repeat && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
+        const spells = CLASS_SPELLS[world.player.playerClass] ?? [];
+        const spell = spells[parseInt(e.key, 10) - 1];
+        if (spell) {
+          const targetId = selection.value && selection.value !== 'player' ? selection.value : null;
+          dispatch(world, { kind: 'cast_spell', spellId: spell.id, targetId });
+        }
         return;
       }
       if (!e.repeat && /^F[1-5]$/.test(e.key)) {
@@ -329,10 +383,9 @@
     const move = computeMove();
     tick(world, frameDt, { moveX: move.x, moveZ: move.z });
 
-    // Walk-cycle flag: did the player actually translate this frame?
-    playerMoving =
-      Math.hypot(world.player.x - lastPlayerX, world.player.z - lastPlayerZ) >
-      0.0001;
+    // Speed in world-units/sec for the walk-cycle phase advance.
+    const dist = Math.hypot(world.player.x - lastPlayerX, world.player.z - lastPlayerZ);
+    playerSpeed = frameDt > 0.001 ? dist / frameDt : 0;
     lastPlayerX = world.player.x;
     lastPlayerZ = world.player.z;
 
@@ -359,6 +412,29 @@
     }
 
     updateSunRig();
+
+    // Read positions from world.entities (the reactive array) so we go
+    // through the same Svelte proxy path the sim writes through, not the
+    // plain-object reference stored in entityById.
+    const sid = selection.value;
+    let sEnt = null;
+    if (sid && sid !== 'player') {
+      for (let _i = 0; _i < world.entities.length; _i++) {
+        if (world.entities[_i]!.id === sid) { sEnt = world.entities[_i]; break; }
+      }
+    }
+    _selRing.visible = !!sEnt;
+    if (sEnt) _selRing.position.set(sEnt.x, 0.03, sEnt.z);
+
+    const hid = hover.entityId;
+    let hEnt = null;
+    if (hid && hid !== sid) {
+      for (let _i = 0; _i < world.entities.length; _i++) {
+        if (world.entities[_i]!.id === hid) { hEnt = world.entities[_i]; break; }
+      }
+    }
+    _hovRing.visible = !!hEnt;
+    if (hEnt) _hovRing.position.set(hEnt.x, 0.03, hEnt.z);
   });
 
   const grass = new MeshStandardMaterial({ color: '#7caa3e' });
@@ -383,22 +459,26 @@
   }}
 />
 
-<T.AmbientLight
-  intensity={0.55}
+<T.HemisphereLight
+  args={['#d8e5b0', '#8aaa48', 0.7]}
   oncreate={(light) => {
-    ambientRef = light;
+    hemisphereRef = light;
   }}
 />
 <T.DirectionalLight
   intensity={1.1}
   castShadow
   oncreate={(light) => {
-    light.shadow.camera.left = -80;
-    light.shadow.camera.right = 80;
-    light.shadow.camera.top = 80;
-    light.shadow.camera.bottom = -80;
+    // Tight frustum centred on the player's position (the light
+    // target already tracks world.player every frame via updateSunRig).
+    // ±20 covers all combat-relevant entities while giving ~4× the
+    // shadow-map texel density vs the old ±80 volume.
+    light.shadow.camera.left = -20;
+    light.shadow.camera.right = 20;
+    light.shadow.camera.top = 20;
+    light.shadow.camera.bottom = -20;
     light.shadow.camera.near = 1;
-    light.shadow.camera.far = 150;
+    light.shadow.camera.far = 80;
     light.shadow.camera.updateProjectionMatrix();
     light.shadow.mapSize.set(4096, 4096);
     light.shadow.bias = -0.0005;
@@ -453,7 +533,7 @@
 <Player
   position={[world.player.x, 0, world.player.z]}
   rotation={world.player.rotation}
-  moving={playerMoving}
+  speed={playerSpeed}
   slashTrigger={world.player.slashTrigger}
   oncreate={(g) => {
     playerGroupRef = g;
@@ -469,22 +549,3 @@
 <Beasts />
 <ClickIndicator />
 <Death />
-
-{#if selection.value}
-  {@const view = getSelectionView()}
-  {#if view}
-    <T.Mesh
-      position={[view.x, 0.03, view.z]}
-      rotation={[-Math.PI / 2, 0, 0]}
-    >
-      <T.RingGeometry args={[0.6, 0.8, 48]} />
-      <T.MeshBasicMaterial
-        color="#ff3030"
-        transparent
-        opacity={0.9}
-        depthWrite={false}
-        side={DoubleSide}
-      />
-    </T.Mesh>
-  {/if}
-{/if}

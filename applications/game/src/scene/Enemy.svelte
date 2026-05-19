@@ -1,5 +1,6 @@
 <script lang="ts">
   import { T } from '@threlte/core';
+  import { hover } from '../hover.svelte';
   import { selection } from '../selection.svelte';
   import { dispatch } from '../sim/input';
   import { world } from '../sim/world.svelte';
@@ -32,8 +33,14 @@
     selection.value = id;
     dispatch(world, { kind: 'engage', targetId: id });
   }}
+  onpointerenter={(e: { stopPropagation: () => void }) => { e.stopPropagation(); hover.entityId = id; }}
+  onpointerleave={() => { if (hover.entityId === id) hover.entityId = null; }}
 >
   <EntityNameplate position={[0, 2.5, 0]} {name} {level} {hpPercent} entityX={position[0]} entityZ={position[2]} />
+  <T.Mesh position={[0, 1.0, 0]}>
+    <T.CylinderGeometry args={[0.4, 0.4, 2.0, 8]} />
+    <T.MeshStandardMaterial transparent opacity={0} depthWrite={false} />
+  </T.Mesh>
 
   <!-- Boots -->
   <T.Mesh position={[-0.13, 0.1, 0]} castShadow material={NEAR_BLACK_MAT}>

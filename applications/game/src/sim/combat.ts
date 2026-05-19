@@ -44,12 +44,13 @@ export function applyDamageToEntityRef(
   amount: number,
   byPlayer: boolean,
 ) {
-  e.hp -= amount;
-  emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
-  if (e.hp <= 0) {
-    const index = world.entities.indexOf(e);
-    if (index >= 0) onEntityDeath(world, index, byPlayer);
-  }
+  // Look up canonical index before mutating so we always operate on
+  // world.entities[index] — the authoritative proxy. Comparing by id
+  // avoids Svelte 5 proxy-identity mismatches between entityById and
+  // entities array access paths.
+  const index = world.entities.findIndex(ent => ent.id === e.id);
+  if (index < 0) return;
+  applyDamageToEntity(world, index, amount, byPlayer);
 }
 
 // Single chokepoint for damage taken by the player. Emits the popup

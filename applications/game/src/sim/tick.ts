@@ -19,6 +19,7 @@ import { tickPlayer } from './systems/player';
 import { tickProjectiles } from './systems/projectiles';
 import { tickSpawners } from './systems/spawners';
 import { tickTime } from './systems/time';
+import { castSpell, tickSpells } from './spells';
 import type { FrameInputs, SimEvent, World } from './types';
 import { rebuildGrid } from './spatialGrid';
 import { primeWaterCache } from './util';
@@ -60,6 +61,10 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
 
   // 3. Player input + movement + engage + slash cadence.
   tickPlayer(world, dt, inputs);
+
+  // 3b. Advance channelled spells (Rush dash lerp, Hail ticks).
+  //     Runs after player movement so the channel overrides position.
+  tickSpells(world, dt);
 
   // 4. Monster AI (target pick, move, attack) and Janna heal-circle
   // spawning. Runs per-entity dispatch on kind.
@@ -154,6 +159,9 @@ function handleEvent(world: World, ev: SimEvent) {
       }
       break;
     }
+    case 'cast_spell':
+      castSpell(world, ev.spellId, ev.targetId ?? null);
+      break;
     case 'drop_item': {
       // Splits N copies of `itemId` out of the player's holdings
       // into a fresh loot bag at the player's feet. Lars pulls from

@@ -5,6 +5,7 @@
   import { ARMOR_COLORS, HAIR_COLORS } from '../cosmetics';
   import {
     BRONZE_POMMEL_MAT,
+    NEAR_BLACK_MAT,
     PLAYER_BLADE_MAT,
     PLAYER_CROSSGUARD_MAT,
     PLAYER_GRIP_MAT,
@@ -26,7 +27,10 @@
   interface Props {
     position: [number, number, number];
     rotation: number;
-    moving: boolean;
+    /** Actual movement speed in world-units/sec. 0 = idle. Walk cycle
+     *  advances at speed × PHASE_FACTOR so the leg stride matches the
+     *  ground pace automatically (slow in water, sluggish when exhausted). */
+    speed: number;
     slashTrigger: number;
     // When true, every per-frame animation update on this instance
     // (walk cycle, slash, level-up effect) is short-circuited so the
@@ -44,11 +48,16 @@
   let {
     position,
     rotation,
-    moving,
+    speed,
     slashTrigger,
     paused = false,
     oncreate,
   }: Props = $props();
+
+  // At SPEED_NORMAL (5 u/s) this matches the old hard-coded delta*9
+  // cycle rate. Slower movement (water, exhaustion) produces a
+  // proportionally slower stride automatically.
+  const PHASE_FACTOR = 1.8;
 
   const hair = $derived(HAIR_COLORS[player.hairColor]);
   const armorMain = $derived(ARMOR_COLORS[player.armor].skirt);
@@ -68,10 +77,19 @@
   let levelUpRingSpin = $state(0);
   let lastLevelUpTrigger = $state(0);
 
+  // Spell VFX state.
+  let hailRingSpin = $state(0);
+  // Blade whip flash: timer in [0..WHIP_DURATION] while showing, -1 idle.
+  const WHIP_DURATION = 0.22;
+  let whipTime = $state(-1);
+  let whipTargetX = $state(0);
+  let whipTargetZ = $state(0);
+  let lastSpellAnimTrigger = $state(0);
+
   useTask((delta) => {
     if (paused) return;
-    if (moving) {
-      phase += delta * 9;
+    if (speed > 0.1) {
+      phase += delta * speed * PHASE_FACTOR;
       amp = Math.min(1, amp + delta * 8);
     } else {
       amp = Math.max(0, amp - delta * 8);
@@ -96,6 +114,31 @@
       levelUpTime += delta;
       levelUpRingSpin += delta * 2;
       if (levelUpTime >= LEVEL_UP_DURATION) levelUpTime = -1;
+    }
+
+    // Hail of Blades rings spin continuously while the channel is active.
+    if (player.activeSpell?.kind === 'hail-of-blades') {
+      hailRingSpin += delta * 6;
+    }
+
+    // Blade Whip flash: latch on spellAnimTrigger when active spell just
+    // fired whip (not a channel), capture target position, run the timer.
+    if (player.spellAnimTrigger !== lastSpellAnimTrigger) {
+      lastSpellAnimTrigger = player.spellAnimTrigger;
+      // Only start the whip flash if no channel is running (channels have
+      // their own vfx) and the player has an engage target.
+      if (player.activeSpell === null && player.engageTargetId !== null) {
+        const t = world.entityById.get(player.engageTargetId);
+        if (t) {
+          whipTargetX = t.x;
+          whipTargetZ = t.z;
+          whipTime = 0;
+        }
+      }
+    }
+    if (whipTime >= 0) {
+      whipTime += delta;
+      if (whipTime >= WHIP_DURATION) whipTime = -1;
     }
   });
 
@@ -204,6 +247,102 @@
     </T.Mesh>
   {/if}
 
+  <!-- Rush: cyan trail ring at feet while dashing. -->
+  {#if player.activeSpell?.kind === 'rush' && world.death.alive}
+    {@const sp = player.activeSpell}
+    {@const t = Math.min((world.time - sp.startedAt) / Math.max(sp.endsAt - sp.startedAt, 0.001), 1)}
+    <T.Mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <T.RingGeometry args={[0.5, 0.85, 32]} />
+      <T.MeshBasicMaterial
+        color="#40e0ff"
+        transparent
+        opacity={(1 - t) * 0.85}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+    <T.Mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <T.RingGeometry args={[0.2, 0.5, 32]} />
+      <T.MeshBasicMaterial
+        color="#80f8ff"
+        transparent
+        opacity={(1 - t) * 0.6}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+  {/if}
+
+  <!-- Mayhem: pulsing amber/orange aura while buff is active. -->
+  {#if player.effects.find(e => e.id === 'mayhem') && world.death.alive}
+    {@const pulse = 0.35 + 0.25 * Math.sin(world.time * 6)}
+    <T.Mesh position={[0, 1.0, 0]}>
+      <T.CylinderGeometry args={[0.55, 0.55, 2.2, 14, 1, true]} />
+      <T.MeshBasicMaterial
+        color="#ff8800"
+        transparent
+        opacity={pulse}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+    <T.Mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, world.time * 2]}>
+      <T.RingGeometry args={[0.5, 0.75, 32]} />
+      <T.MeshBasicMaterial
+        color="#ffcc00"
+        transparent
+        opacity={pulse * 0.9}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+  {/if}
+
+  <!-- Hail of Blades: two counter-rotating gold rings while channelling. -->
+  {#if player.activeSpell?.kind === 'hail-of-blades' && world.death.alive}
+    <T.Mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, hailRingSpin]}>
+      <T.RingGeometry args={[1.8, 2.6, 32]} />
+      <T.MeshBasicMaterial
+        color="#ffe044"
+        transparent
+        opacity={0.55}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+    <T.Mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, -hailRingSpin * 0.7]}>
+      <T.RingGeometry args={[1.2, 1.85, 32]} />
+      <T.MeshBasicMaterial
+        color="#ffd080"
+        transparent
+        opacity={0.4}
+        side={DoubleSide}
+        depthWrite={false}
+      />
+    </T.Mesh>
+  {/if}
+
+  <!-- Blade Whip: brief orange cylinder from player toward target. -->
+  {#if whipTime >= 0 && world.death.alive}
+    {@const progress = whipTime / WHIP_DURATION}
+    {@const localDx = whipTargetX - position[0]}
+    {@const localDz = whipTargetZ - position[2]}
+    {@const whipLen = Math.hypot(localDx, localDz)}
+    {@const whipAngle = Math.atan2(localDx, localDz)}
+    <T.Group rotation.y={whipAngle}>
+      <!-- Cylinder is Y-up; rotate it 90° on X to point along Z. -->
+      <T.Mesh position={[0, 1.1, whipLen / 2]} rotation.x={Math.PI / 2}>
+        <T.CylinderGeometry args={[0.045, 0.085, whipLen, 6]} />
+        <T.MeshBasicMaterial
+          color="#ff6600"
+          transparent
+          opacity={(1 - progress) * 0.9}
+          depthWrite={false}
+        />
+      </T.Mesh>
+    </T.Group>
+  {/if}
+
   <!-- Body parts wrap in an inner group so death drops the whole
        avatar flat on its back without affecting the nameplate or
        level-up effect that live above. -->
@@ -268,6 +407,45 @@
   <!-- Head -->
   <T.Mesh position={[0, 1.6, 0.03]} castShadow material={PLAYER_SKIN_MAT}>
     <T.BoxGeometry args={[0.3, 0.3, 0.3]} />
+  </T.Mesh>
+
+  <!-- Eyes -->
+  <T.Mesh position={[-0.075, 1.635, 0.185]} material={NEAR_BLACK_MAT}>
+    <T.BoxGeometry args={[0.055, 0.04, 0.015]} />
+  </T.Mesh>
+  <T.Mesh position={[0.075, 1.635, 0.185]} material={NEAR_BLACK_MAT}>
+    <T.BoxGeometry args={[0.055, 0.04, 0.015]} />
+  </T.Mesh>
+
+  <!-- Eyebrows — hair-coloured; arched on female, flat on male -->
+  {#if player.sex === 'female'}
+    <T.Mesh position={[-0.075, 1.662, 0.183]} rotation.z={0.18}>
+      <T.BoxGeometry args={[0.052, 0.013, 0.012]} />
+      <T.MeshStandardMaterial color={hair} />
+    </T.Mesh>
+    <T.Mesh position={[0.075, 1.662, 0.183]} rotation.z={-0.18}>
+      <T.BoxGeometry args={[0.052, 0.013, 0.012]} />
+      <T.MeshStandardMaterial color={hair} />
+    </T.Mesh>
+  {:else}
+    <T.Mesh position={[-0.075, 1.662, 0.183]}>
+      <T.BoxGeometry args={[0.065, 0.017, 0.012]} />
+      <T.MeshStandardMaterial color={hair} />
+    </T.Mesh>
+    <T.Mesh position={[0.075, 1.662, 0.183]}>
+      <T.BoxGeometry args={[0.065, 0.017, 0.012]} />
+      <T.MeshStandardMaterial color={hair} />
+    </T.Mesh>
+  {/if}
+
+  <!-- Nose bump -->
+  <T.Mesh position={[0, 1.607, 0.189]} material={PLAYER_SKIN_MAT}>
+    <T.BoxGeometry args={[0.025, 0.022, 0.018]} />
+  </T.Mesh>
+
+  <!-- Mouth -->
+  <T.Mesh position={[0, 1.566, 0.185]} material={NEAR_BLACK_MAT}>
+    <T.BoxGeometry args={[0.075, 0.013, 0.012]} />
   </T.Mesh>
 
   <!-- Left leg pivots at hip (group origin = hip joint, leg + boot hang

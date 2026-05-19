@@ -31,7 +31,8 @@ export type GameEvent =
       // True = the player dealt the damage (popup colored "given").
       // False = the player received the damage (popup colored "taken").
       byPlayer: boolean;
-    };
+    }
+  | { kind: 'spell-cast'; spellId: string; x: number; z: number };
 
 type Handler = (world: World, event: GameEvent) => void;
 
