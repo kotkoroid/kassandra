@@ -14,8 +14,9 @@ import {
 import { emit } from './events';
 import { spawnEntity, type SpiderKind } from './spawn';
 import { getEffectiveStat } from './stats';
-import type { World } from './types';
+import type { Entity, World } from './types';
 import { isHostile, refreshLootBagFlags, removeEntity } from './util';
+import { grid } from './spatialGrid';
 import { genId } from './world.svelte';
 
 const SPIDER_CHILD_COUNT = 3;
@@ -32,6 +33,23 @@ export function applyDamageToEntity(
   e.hp -= amount;
   emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
   if (e.hp <= 0) onEntityDeath(world, index, byPlayer);
+}
+
+// Entity-reference variant. Avoids holding an array index across
+// intermediate code that may splice. `indexOf` is O(N) but called only
+// on death (rare), and the subsequent splice is also O(N) — no extra cost.
+export function applyDamageToEntityRef(
+  world: World,
+  e: Entity,
+  amount: number,
+  byPlayer: boolean,
+) {
+  e.hp -= amount;
+  emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
+  if (e.hp <= 0) {
+    const index = world.entities.indexOf(e);
+    if (index >= 0) onEntityDeath(world, index, byPlayer);
+  }
 }
 
 // Single chokepoint for damage taken by the player. Emits the popup
@@ -196,7 +214,9 @@ export function grantExperience(world: World, amount: number) {
 const SLASH_STAMINA_COST = 5;
 
 // Sword swing: damages every hostile entity inside the forward cone
-// within sword reach.
+// within sword reach. The spatial grid narrows candidates to the cell
+// neighbourhood around the player — typically 0-3 entities — instead of
+// scanning all entities in the world.
 export function slash(world: World) {
   const p = world.player;
   p.slashTrigger++;
@@ -208,16 +228,14 @@ export function slash(world: World) {
   const fwdZ = Math.cos(p.rotation);
   const damage = getEffectiveStat(p, 'damage');
 
-  for (let i = world.entities.length - 1; i >= 0; i--) {
-    const e = world.entities[i];
-    if (!e) continue;
+  for (const e of grid.queryRadius(p.x, p.z, SWORD_REACH)) {
     if (!isHostile(e.kind)) continue;
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const dist = Math.hypot(dx, dz);
-    if (dist > SWORD_REACH || dist < 0.001) continue;
+    if (dist < 0.001) continue;
     const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
     if (dot < SWORD_DOT_THRESHOLD) continue;
-    applyDamageToEntity(world, i, damage, true);
+    applyDamageToEntityRef(world, e, damage, true);
   }
 }

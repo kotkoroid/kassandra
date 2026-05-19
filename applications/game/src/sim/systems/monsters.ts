@@ -7,7 +7,7 @@
 
 import { isInCity } from '../../city';
 import { getMonster } from '../../monsters';
-import { applyDamageToEntity, applyDamageToPlayer } from '../combat';
+import { applyDamageToEntityRef, applyDamageToPlayer } from '../combat';
 import {
   HEAL_CIRCLE_OFFSET_MAX,
   HEAL_CIRCLE_TTL,
@@ -40,6 +40,10 @@ const PROFILE: Record<EntityKind, { speed: number; attackRange: number }> = {
 };
 
 export function tickMonsters(world: World, dt: number) {
+  // Pre-find the single Janna so tickMelee doesn't scan O(N) entities
+  // per melee entity per tick (was O(N²) across the whole monster loop).
+  const janna = world.entities.find(e => e.kind === 'janna') ?? null;
+
   // Iterate in reverse because handlers may splice.
   for (let i = world.entities.length - 1; i >= 0; i--) {
     const e = world.entities[i];
@@ -61,7 +65,7 @@ export function tickMonsters(world: World, dt: number) {
       case 'bear':
       case 'warmaiden':
       case 'shadowmaiden':
-        tickMelee(world, e, profile.speed, profile.attackRange, dt);
+        tickMelee(world, e, profile.speed, profile.attackRange, dt, janna);
         break;
       case 'swain':
       case 'bowmaiden':
@@ -81,17 +85,19 @@ export function tickMonsters(world: World, dt: number) {
 // Walk-toward-and-bite behaviour shared by every melee kind. Picks
 // the nearest reachable target (player or Janna), respects the
 // water + city no-go zones, and applies damage on contact.
+// janna is pre-found once in tickMonsters to avoid an O(N) scan here.
 function tickMelee(
   world: World,
   e: Entity,
   speed: number,
   attackRange: number,
   dt: number,
+  janna: Entity | null,
 ) {
   let bestX = 0;
   let bestZ = 0;
   let bestDist = Infinity;
-  let bestEntityIndex = -1;
+  let bestEntity: Entity | null = null;
   let targetIsPlayer = false;
 
   // Player as candidate target. Water and the city both protect
@@ -108,18 +114,14 @@ function tickMelee(
     targetIsPlayer = true;
   }
 
-  // Janna as candidate target. Only one Janna at a time today, but
-  // iterating handles multi-ally cleanly.
-  for (let j = 0; j < world.entities.length; j++) {
-    const t = world.entities[j];
-    if (!t || t.kind !== 'janna') continue;
-    if (isInWaterAt(t.x, t.z)) continue;
-    const d = Math.hypot(e.x - t.x, e.z - t.z);
+  // Janna as candidate target — passed in so we don't scan O(N) here.
+  if (janna && !isInWaterAt(janna.x, janna.z)) {
+    const d = Math.hypot(e.x - janna.x, e.z - janna.z);
     if (d < bestDist) {
       bestDist = d;
-      bestX = t.x;
-      bestZ = t.z;
-      bestEntityIndex = j;
+      bestX = janna.x;
+      bestZ = janna.z;
+      bestEntity = janna;
       targetIsPlayer = false;
     }
   }
@@ -153,8 +155,8 @@ function tickMelee(
         monsterId: e.monsterId,
         name: getMonster(e.monsterId).name,
       });
-    } else if (bestEntityIndex >= 0) {
-      applyDamageToEntity(world, bestEntityIndex, e.damage, false);
+    } else if (bestEntity) {
+      applyDamageToEntityRef(world, bestEntity, e.damage, false);
     }
   }
 }

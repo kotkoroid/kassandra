@@ -1,30 +1,10 @@
 <script lang="ts">
-  import { getMonster } from '../monsters';
-  import { world } from '../sim/world.svelte';
-  import Bear from './Bear.svelte';
-  import Wolf from './Wolf.svelte';
+  // Wolves and bears now ride a shared InstancedMesh renderer — one
+  // draw call per body-part shape across the entire roster, instead
+  // of 11+ draws per beast. See entityMeshDefs.ts for the part lists.
+  import EntityInstances from './EntityInstances.svelte';
+  import { BEAR_DEFS, WOLF_DEFS } from './entityMeshDefs';
 </script>
 
-{#each world.entities as entity (entity.id)}
-  {#if entity.kind === 'wolf'}
-    {@const monster = getMonster(entity.monsterId)}
-    <Wolf
-      id={entity.id}
-      position={[entity.x, 0, entity.z]}
-      rotation={entity.rotation}
-      name={monster.name}
-      level={monster.level}
-      hpPercent={entity.hp / entity.maxHp}
-    />
-  {:else if entity.kind === 'bear'}
-    {@const monster = getMonster(entity.monsterId)}
-    <Bear
-      id={entity.id}
-      position={[entity.x, 0, entity.z]}
-      rotation={entity.rotation}
-      name={monster.name}
-      level={monster.level}
-      hpPercent={entity.hp / entity.maxHp}
-    />
-  {/if}
-{/each}
+<EntityInstances kinds={['wolf']} defs={WOLF_DEFS} nameplateY={1.2} />
+<EntityInstances kinds={['bear']} defs={BEAR_DEFS} nameplateY={1.65} />

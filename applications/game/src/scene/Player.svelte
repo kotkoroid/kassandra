@@ -3,6 +3,14 @@
   import { HTML } from '@threlte/extras';
   import { DoubleSide } from 'three';
   import { ARMOR_COLORS, HAIR_COLORS } from '../cosmetics';
+  import {
+    BRONZE_POMMEL_MAT,
+    PLAYER_BLADE_MAT,
+    PLAYER_CROSSGUARD_MAT,
+    PLAYER_GRIP_MAT,
+    PLAYER_LEATHER_MAT,
+    PLAYER_SKIN_MAT,
+  } from './materials';
   import { selection } from '../selection.svelte';
   import { settings } from '../settings.svelte';
   import { getEffectiveStat } from '../sim/stats';
@@ -42,16 +50,9 @@
     oncreate,
   }: Props = $props();
 
-  const skin = '#f0907e';
-
   const hair = $derived(HAIR_COLORS[player.hairColor]);
-  const leather = '#5a3a28';
   const armorMain = $derived(ARMOR_COLORS[player.armor].skirt);
   const boot = $derived(ARMOR_COLORS[player.armor].boot);
-  const blade = '#c0c0c8';
-  const crossguard = '#a8a8b0';
-  const grip = '#3a2a1a';
-  const pommel = '#7a5a30';
 
   // Walk-cycle phase advances while moving; amplitude lerps in/out
   // so the limbs ease into/out of the swing instead of snapping.
@@ -208,9 +209,8 @@
        level-up effect that live above. -->
   <T.Group rotation.x={world.death.alive ? 0 : -Math.PI / 2}>
     <!-- Torso (skin under the armor). -->
-    <T.Mesh position={[0, 1.2, 0]} castShadow>
+    <T.Mesh position={[0, 1.2, 0]} castShadow material={PLAYER_SKIN_MAT}>
     <T.BoxGeometry args={[0.4, 0.5, 0.25]} />
-    <T.MeshStandardMaterial color={skin} />
   </T.Mesh>
 
   <!-- Chest armor plate over the upper torso. -->
@@ -232,9 +232,8 @@
   {/if}
 
   <!-- Belt -->
-  <T.Mesh position={[0, 0.92, 0]} castShadow>
+  <T.Mesh position={[0, 0.92, 0]} castShadow material={PLAYER_LEATHER_MAT}>
     <T.CylinderGeometry args={[0.23, 0.23, 0.05, 8]} />
-    <T.MeshStandardMaterial color={leather} />
   </T.Mesh>
 
   <!-- Skirt -->
@@ -267,17 +266,15 @@
   {/if}
 
   <!-- Head -->
-  <T.Mesh position={[0, 1.6, 0.03]} castShadow>
+  <T.Mesh position={[0, 1.6, 0.03]} castShadow material={PLAYER_SKIN_MAT}>
     <T.BoxGeometry args={[0.3, 0.3, 0.3]} />
-    <T.MeshStandardMaterial color={skin} />
   </T.Mesh>
 
   <!-- Left leg pivots at hip (group origin = hip joint, leg + boot hang
        below). Opposite-phase leg/arm pairs give the classic walk cycle. -->
   <T.Group position={[-0.12, 0.7, 0]} rotation.x={swing}>
-    <T.Mesh position={[0, -0.25, 0]} castShadow>
+    <T.Mesh position={[0, -0.25, 0]} castShadow material={PLAYER_SKIN_MAT}>
       <T.CylinderGeometry args={[0.09, 0.09, 0.5, 8]} />
-      <T.MeshStandardMaterial color={skin} />
     </T.Mesh>
     <T.Mesh position={[0, -0.6, 0]} castShadow>
       <T.BoxGeometry args={[0.2, 0.2, 0.25]} />
@@ -286,9 +283,8 @@
   </T.Group>
 
   <T.Group position={[0.12, 0.7, 0]} rotation.x={-swing}>
-    <T.Mesh position={[0, -0.25, 0]} castShadow>
+    <T.Mesh position={[0, -0.25, 0]} castShadow material={PLAYER_SKIN_MAT}>
       <T.CylinderGeometry args={[0.09, 0.09, 0.5, 8]} />
-      <T.MeshStandardMaterial color={skin} />
     </T.Mesh>
     <T.Mesh position={[0, -0.6, 0]} castShadow>
       <T.BoxGeometry args={[0.2, 0.2, 0.25]} />
@@ -298,9 +294,8 @@
 
   <!-- Left arm pivots at shoulder, swings opposite the left leg. -->
   <T.Group position={[-0.27, 1.325, 0]} rotation.x={-swing}>
-    <T.Mesh position={[0, -0.225, 0]} castShadow>
+    <T.Mesh position={[0, -0.225, 0]} castShadow material={PLAYER_SKIN_MAT}>
       <T.CylinderGeometry args={[0.07, 0.07, 0.45, 8]} />
-      <T.MeshStandardMaterial color={skin} />
     </T.Mesh>
     <T.Mesh position={[0, -0.5, 0]} castShadow>
       <T.CylinderGeometry args={[0.09, 0.09, 0.15, 8]} />
@@ -311,9 +306,8 @@
   <!-- Right arm holds the sword. Walk swing when idle/moving, slash
        arc when triggered. -->
   <T.Group position={[0.27, 1.325, 0]} rotation.x={rightArmRotation}>
-    <T.Mesh position={[0, -0.225, 0]} castShadow>
+    <T.Mesh position={[0, -0.225, 0]} castShadow material={PLAYER_SKIN_MAT}>
       <T.CylinderGeometry args={[0.07, 0.07, 0.45, 8]} />
-      <T.MeshStandardMaterial color={skin} />
     </T.Mesh>
     <T.Mesh position={[0, -0.5, 0]} castShadow>
       <T.CylinderGeometry args={[0.09, 0.09, 0.15, 8]} />
@@ -323,21 +317,17 @@
     <!-- Sword: pommel above hand, grip in hand, crossguard, blade
          extending in the arm's down direction so it follows the slash. -->
     <T.Group position={[0, -0.55, 0]}>
-      <T.Mesh position={[0, 0.1, 0]} castShadow>
+      <T.Mesh position={[0, 0.1, 0]} castShadow material={BRONZE_POMMEL_MAT}>
         <T.SphereGeometry args={[0.035, 6, 6]} />
-        <T.MeshStandardMaterial color={pommel} />
       </T.Mesh>
-      <T.Mesh castShadow>
+      <T.Mesh castShadow material={PLAYER_GRIP_MAT}>
         <T.CylinderGeometry args={[0.022, 0.022, 0.16, 6]} />
-        <T.MeshStandardMaterial color={grip} />
       </T.Mesh>
-      <T.Mesh position={[0, -0.1, 0]} castShadow>
+      <T.Mesh position={[0, -0.1, 0]} castShadow material={PLAYER_CROSSGUARD_MAT}>
         <T.BoxGeometry args={[0.22, 0.04, 0.06]} />
-        <T.MeshStandardMaterial color={crossguard} />
       </T.Mesh>
-      <T.Mesh position={[0, -0.45, 0]} castShadow>
+      <T.Mesh position={[0, -0.45, 0]} castShadow material={PLAYER_BLADE_MAT}>
         <T.BoxGeometry args={[0.07, 0.6, 0.04]} />
-        <T.MeshStandardMaterial color={blade} />
       </T.Mesh>
     </T.Group>
   </T.Group>

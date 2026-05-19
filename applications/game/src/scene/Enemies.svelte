@@ -5,6 +5,14 @@
   import { world } from '../sim/world.svelte';
   import Bowmaiden from './Bowmaiden.svelte';
   import Enemy from './Enemy.svelte';
+  import {
+    ARROW_HEAD_MAT,
+    BOWMAIDEN_FLETCH_MAT,
+    DARK_WOOD_MAT,
+    SPELL_PROJ_CORE_MAT,
+    SPELL_PROJ_HALO_MAT,
+    SWAIN_ORB_MAT,
+  } from './materials';
   import Shadowmaiden from './Shadowmaiden.svelte';
   import Spellmaiden from './Spellmaiden.svelte';
   import Warmaiden from './Warmaiden.svelte';
@@ -72,54 +80,33 @@
   {#if p.ownerMonsterId === MONSTER_SPELLMAIDEN}
     <T.Group position={[p.x, PROJECTILE_HEIGHT, p.z]}>
       <!-- Bright violet core. -->
-      <T.Mesh castShadow>
+      <T.Mesh castShadow material={SPELL_PROJ_CORE_MAT}>
         <T.SphereGeometry args={[0.13, 12, 12]} />
-        <T.MeshStandardMaterial
-          color="#c050ff"
-          emissive="#e090ff"
-          emissiveIntensity={2.2}
-        />
       </T.Mesh>
       <!-- Translucent halo around it for the arcane shimmer. -->
-      <T.Mesh>
+      <T.Mesh material={SPELL_PROJ_HALO_MAT}>
         <T.SphereGeometry args={[0.22, 12, 12]} />
-        <T.MeshStandardMaterial
-          color="#e090ff"
-          emissive="#e090ff"
-          emissiveIntensity={0.5}
-          transparent
-          opacity={0.25}
-          depthWrite={false}
-        />
       </T.Mesh>
     </T.Group>
   {:else if p.ownerMonsterId === MONSTER_BOWMAIDEN}
     {@const angle = Math.atan2(p.vx, p.vz)}
     <T.Group position={[p.x, PROJECTILE_HEIGHT, p.z]} rotation.y={angle}>
       <!-- Shaft (lying along local +Z). -->
-      <T.Mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+      <T.Mesh rotation={[Math.PI / 2, 0, 0]} castShadow material={DARK_WOOD_MAT}>
         <T.CylinderGeometry args={[0.018, 0.018, 0.45, 6]} />
-        <T.MeshStandardMaterial color="#3d2715" />
       </T.Mesh>
       <!-- Steel arrowhead at the front. -->
-      <T.Mesh position={[0, 0, 0.27]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+      <T.Mesh position={[0, 0, 0.27]} rotation={[Math.PI / 2, 0, 0]} castShadow material={ARROW_HEAD_MAT}>
         <T.ConeGeometry args={[0.03, 0.12, 8]} />
-        <T.MeshStandardMaterial color="#c0c0c8" metalness={0.6} roughness={0.4} />
       </T.Mesh>
       <!-- Fletching cone at the tail. -->
-      <T.Mesh position={[0, 0, -0.25]} rotation={[-Math.PI / 2, 0, 0]} castShadow>
+      <T.Mesh position={[0, 0, -0.25]} rotation={[-Math.PI / 2, 0, 0]} castShadow material={BOWMAIDEN_FLETCH_MAT}>
         <T.ConeGeometry args={[0.05, 0.1, 4]} />
-        <T.MeshStandardMaterial color="#d4b078" />
       </T.Mesh>
     </T.Group>
   {:else}
-    <T.Mesh position={[p.x, PROJECTILE_HEIGHT, p.z]} castShadow>
+    <T.Mesh position={[p.x, PROJECTILE_HEIGHT, p.z]} castShadow material={SWAIN_ORB_MAT}>
       <T.SphereGeometry args={[0.16, 12, 12]} />
-      <T.MeshStandardMaterial
-        color="#ff3a3a"
-        emissive="#c41a1a"
-        emissiveIntensity={1.8}
-      />
     </T.Mesh>
   {/if}
 {/each}

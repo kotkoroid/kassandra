@@ -1,29 +1,22 @@
 <script lang="ts">
-  import { getMonster } from '../monsters';
-  import { world } from '../sim/world.svelte';
-  import Spider from './Spider.svelte';
+  // Spiders share a single set of InstancedMeshes across all three
+  // tiers — the tier-specific scale (1 / 0.7 / 0.45) is folded into
+  // each instance's matrix, so big/medium/tiny live in the same
+  // draw calls without per-tier asset duplication.
+  import EntityInstances from './EntityInstances.svelte';
+  import { SPIDER_DEFS } from './entityMeshDefs';
 
-  // Render-only mapping from spider tier → mesh scale. The sim
-  // doesn't care about visual scale; it lives here so a tweak to
-  // the model stays in the view layer.
-  const SCALE: Record<'spider-big' | 'spider-medium' | 'spider-tiny', number> = {
+  const SCALE = {
     'spider-big': 1,
     'spider-medium': 0.7,
     'spider-tiny': 0.45,
-  };
+  } as const;
 </script>
 
-{#each world.entities as entity (entity.id)}
-  {#if entity.kind === 'spider-big' || entity.kind === 'spider-medium' || entity.kind === 'spider-tiny'}
-    {@const monster = getMonster(entity.monsterId)}
-    <Spider
-      id={entity.id}
-      position={[entity.x, 0, entity.z]}
-      rotation={entity.rotation}
-      scale={SCALE[entity.kind]}
-      name={monster.name}
-      level={monster.level}
-      hpPercent={entity.hp / entity.maxHp}
-    />
-  {/if}
-{/each}
+<EntityInstances
+  kinds={['spider-big', 'spider-medium', 'spider-tiny']}
+  defs={SPIDER_DEFS}
+  nameplateY={0.6}
+  scaleByKind={SCALE}
+  barWidthPx={56}
+/>

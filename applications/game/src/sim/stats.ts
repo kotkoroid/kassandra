@@ -40,13 +40,41 @@ export function getEffectiveStat(player: Player, stat: StatKey): number {
   return addTotal * mulProduct;
 }
 
-// Remove modifiers whose expiresAt has passed. Call once per tick.
+// Remove expired effects + modifiers. Effects are the presentation
+// layer (HUD icon + tooltip); modifiers are the math layer. When an
+// effect expires, every modifier carrying its `effectId` is dropped
+// alongside it so the two stay in lockstep. Plain modifiers with
+// their own `expiresAt` are still pruned independently — equipment
+// procs or quest rewards that never showed an icon still time out.
 export function tickModifiers(world: World) {
-  const mods = world.player.modifiers;
-  for (let i = mods.length - 1; i >= 0; i--) {
-    const m = mods[i];
-    if (m && m.expiresAt !== undefined && m.expiresAt <= world.time) {
-      mods.splice(i, 1);
+  const p = world.player;
+  const now = world.time;
+
+  // Pass 1: prune expired effects, remembering their ids.
+  let expiredEffectIds: Set<string> | null = null;
+  for (let i = p.effects.length - 1; i >= 0; i--) {
+    const eff = p.effects[i];
+    if (eff && eff.expiresAt !== undefined && eff.expiresAt <= now) {
+      (expiredEffectIds ??= new Set()).add(eff.id);
+      p.effects.splice(i, 1);
+    }
+  }
+
+  // Pass 2: prune modifier rows whose own expiry passed OR whose
+  // owning effect was removed in pass 1.
+  for (let i = p.modifiers.length - 1; i >= 0; i--) {
+    const m = p.modifiers[i];
+    if (!m) continue;
+    if (m.expiresAt !== undefined && m.expiresAt <= now) {
+      p.modifiers.splice(i, 1);
+      continue;
+    }
+    if (
+      m.effectId !== undefined &&
+      expiredEffectIds !== null &&
+      expiredEffectIds.has(m.effectId)
+    ) {
+      p.modifiers.splice(i, 1);
     }
   }
 }

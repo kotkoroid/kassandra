@@ -35,6 +35,7 @@ function defaultPlayer(): Player {
     damage: BASE_DAMAGE,
     equippedWeaponId: STARTING_WEAPON_ID,
     modifiers: [],
+    effects: [],
     bag: [],
     lars: 0,
     abilities: [],

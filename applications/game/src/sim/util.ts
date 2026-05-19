@@ -2,7 +2,7 @@
 // import without dragging system state around.
 
 import { LARS_ID } from '../items';
-import { getVisibleWaters } from '../scene/world';
+import { getVisibleWaters, type WaterPatch } from '../scene/world';
 import type { Entity, EntityKind, World, WorldLootBag } from './types';
 
 export function findEntity(world: World, id: string): Entity | null {
@@ -23,8 +23,20 @@ export function isHostile(kind: EntityKind): boolean {
   return kind !== 'janna' && kind !== 'azir';
 }
 
+// Per-tick water snapshot. Populated once per tick by primeWaterCache
+// (called in tick.ts before any system runs) so every isInWaterAt call
+// in a tick iterates one shared array instead of issuing its own
+// 25-chunk getVisibleWaters lookup. All entities in active combat are
+// within the player's chunk window, so the player-centred snapshot is
+// authoritative for every water check the sim performs.
+let _tickWaters: WaterPatch[] = [];
+
+export function primeWaterCache(playerX: number, playerZ: number) {
+  _tickWaters = getVisibleWaters(playerX, playerZ);
+}
+
 export function isInWaterAt(x: number, z: number): boolean {
-  for (const w of getVisibleWaters(x, z)) {
+  for (const w of _tickWaters) {
     if (Math.hypot(x - w.x, z - w.z) < w.radius) return true;
   }
   return false;

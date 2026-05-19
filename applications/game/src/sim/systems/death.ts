@@ -96,6 +96,7 @@ function triggerDeath(world: World) {
   p.healthRegen = BASE_HEALTH_REGEN;
   p.damage = BASE_DAMAGE;
   p.modifiers = [];
+  p.effects = [];
 
   // Detach anything that was tracking the live body.
   p.engageTargetId = null;

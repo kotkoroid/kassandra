@@ -20,6 +20,47 @@ export interface Modifier {
   value: number;
   // World time (seconds) at which this modifier expires. Absent = permanent.
   expiresAt?: number;
+  // Optional link back to the ActiveEffect that owns this math row.
+  // When the effect expires, every modifier carrying its id is dropped
+  // alongside it so the two layers stay consistent.
+  effectId?: string;
+}
+
+// --- Buffs / debuffs --------------------------------------------
+
+// A single line in an effect's tooltip ("Intelligence +12"). Kept
+// free-form so the catalog can advertise flavour stats (Strength,
+// Intelligence, Crit) without growing StatKey to match. The actual
+// math impact lives in the Modifier rows the effect spawns; this
+// list is presentation only.
+export interface EffectStat {
+  label: string;
+  delta: number;
+  // Optional unit suffix (e.g. 's', '%'). Renderer prints
+  // `${label} ${sign}${delta}${unit ?? ''}`.
+  unit?: string;
+}
+
+// A presentation-layer buff/debuff. One effect = one icon in the
+// HUD bar. Each effect can also push one or more Modifier rows tagged
+// with its id; when the effect's expiresAt passes, tickModifiers
+// drops the effect AND its modifier rows together.
+export interface ActiveEffect {
+  id: string;
+  name: string;
+  // Single emoji used as the icon for now. Swap for an image key
+  // later when art lands.
+  icon: string;
+  kind: 'buff' | 'debuff';
+  // World time when applied. Useful for sort order and (later) a
+  // radial-fill expiry animation.
+  appliedAt: number;
+  // Absent = permanent. Number = world.time at expiry.
+  expiresAt?: number;
+  // Display name of whoever applied this effect.
+  source: string;
+  // Tooltip stat lines (display only).
+  stats: EffectStat[];
 }
 
 // --- Identity / cosmetics ---------------------------------------
@@ -105,6 +146,9 @@ export interface Player {
   damage: number;
   equippedWeaponId: ItemId;
   modifiers: Modifier[];
+  // Active buffs / debuffs surfaced in the HUD bar. Pure presentation
+  // wrapper around `modifiers` — see ActiveEffect above.
+  effects: ActiveEffect[];
 
   // Inventory: item ids acquired from world loot bags. Currency
   // items (Lars) do NOT live here — they roll into the `lars`

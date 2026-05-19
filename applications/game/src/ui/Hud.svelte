@@ -18,8 +18,10 @@
   import { socialOpen } from '../social.svelte';
   import { BAG_PICKUP_RADIUS } from '../sim/constants';
   import BagPanel from './BagPanel.svelte';
+  import BuffBar from './BuffBar.svelte';
   import CharacterPanel from './CharacterPanel.svelte';
   import Chat from './Chat.svelte';
+  import ChatTicker from './ChatTicker.svelte';
   import DialogPanel from './DialogPanel.svelte';
   import SocialPanel from './SocialPanel.svelte';
 
@@ -136,6 +138,7 @@
 </div>
 
 <Minimap />
+<BuffBar />
 <SelectionPanel />
 
 {#if !death.alive}
@@ -301,6 +304,7 @@
 <SocialPanel />
 <DialogPanel />
 <Chat />
+<ChatTicker />
 </div>
 
 <style>

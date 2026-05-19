@@ -20,6 +20,8 @@ import { tickProjectiles } from './systems/projectiles';
 import { tickSpawners } from './systems/spawners';
 import { tickTime } from './systems/time';
 import type { FrameInputs, SimEvent, World } from './types';
+import { rebuildGrid } from './spatialGrid';
+import { primeWaterCache } from './util';
 import { genId } from './world.svelte';
 
 // Hard upper bound on a single step. Protects against catastrophic
@@ -28,6 +30,23 @@ const MAX_STEP = 1 / 20;
 
 export function tick(world: World, dt: number, inputs: FrameInputs) {
   if (dt > MAX_STEP) dt = MAX_STEP;
+
+  // 0. Per-tick caches — built before any system runs so every lookup
+  //    this tick reads a consistent snapshot of the world at tick start.
+  //
+  //    Spatial entity grid: slash() and projectile intercept visit only
+  //    nearby cells instead of scanning all entities. Stationary entities
+  //    (Janna, ranged casters) have zero drift; movers introduce at most
+  //    dt×speed ≈ 0.06 unit error by tickProjectiles time, well within
+  //    any hit radius.
+  //
+  //    Water patch list: isInWaterAt() iterates one shared array instead
+  //    of issuing ~60 per-call getVisibleWaters() lookups (25 chunk
+  //    Map.get + array alloc each). All active entities are within the
+  //    player's chunk window, so the player-centred snapshot is correct
+  //    for every water check this tick.
+  rebuildGrid(world.entities);
+  primeWaterCache(world.player.x, world.player.z);
 
   // 1. World clock first so other systems see the new time.
   tickTime(world, dt);

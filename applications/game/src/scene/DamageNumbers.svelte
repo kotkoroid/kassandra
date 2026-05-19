@@ -10,12 +10,25 @@
   // appears around chest level instead of clipping the ground.
   const SPAWN_HEIGHT = 1.6;
 
+  // Match EntityNameplate's cull radius — beyond 40 units a floating
+  // number would be off-screen or a few pixels and unreadable, and the
+  // <HTML> portal overhead is pure waste.
+  const CULL_DIST_SQ = 40 * 40;
+
+  const visiblePops = $derived(
+    damageNumbers.list.filter((pop) => {
+      const dx = pop.x - world.player.x;
+      const dz = pop.z - world.player.z;
+      return dx * dx + dz * dz <= CULL_DIST_SQ;
+    }),
+  );
+
   useTask(() => {
     pruneDamageNumbers(world.time);
   });
 </script>
 
-{#each damageNumbers.list as pop (pop.id)}
+{#each visiblePops as pop (pop.id)}
   {@const age = world.time - pop.spawnedAt}
   {@const t = Math.max(0, Math.min(1, age / DAMAGE_TTL))}
   {@const y = SPAWN_HEIGHT + t * RISE}

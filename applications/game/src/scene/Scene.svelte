@@ -11,9 +11,13 @@
     Group,
     MeshStandardMaterial,
     PerspectiveCamera,
+    Plane,
+    Raycaster,
+    Vector2,
     Vector3,
   } from 'three';
-  import { chat, openChat } from '../chat.svelte';
+  import { chat, closeChat, openChat } from '../chat.svelte';
+  import { fireClickIndicator } from '../clickIndicator.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../sim/constants';
@@ -22,6 +26,7 @@
   import { tick } from '../sim/tick';
   import { world } from '../sim/world.svelte';
   import Beasts from './Beasts.svelte';
+  import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';
   import Enemies from './Enemies.svelte';
   import Healers from './Healers.svelte';
@@ -82,6 +87,20 @@
   let dragging = false;
   let lastMouseX = 0;
   let lastMouseY = 0;
+  // Left-mouse-button click-to-move drag state. While `groundFollow`
+  // is on, every mousemove re-targets the player at the cursor's
+  // ground projection — the character chases the cursor in real time
+  // instead of waiting for the click to be released.
+  let groundFollow = false;
+  // Scratch instances for the per-move raycast against the ground
+  // plane. Allocated once at module mount so the move handler is
+  // GC-free (it can fire dozens of times during a single drag).
+  const followRaycaster = new Raycaster();
+  const followPointer = new Vector2();
+  const followHit = new Vector3();
+  // Infinite ground plane at y = 0 — matches the top face of the
+  // ground BoxGeometry below (which sits at y = -0.5 with height 1).
+  const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
   const lookAtTarget = new Vector3();
 
   function sampleSunColor(sunY: number, out: Color) {
@@ -208,19 +227,59 @@
       lastMouseY = e.clientY;
     };
     const mouseMove = (e: MouseEvent) => {
-      if (!dragging) return;
-      const dx = e.clientX - lastMouseX;
-      const dy = e.clientY - lastMouseY;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-      cameraYaw -= dx * yawSensitivity;
-      cameraPitch = Math.max(
-        pitchMin,
-        Math.min(pitchMax, cameraPitch + dy * pitchSensitivity),
-      );
+      // Right-button drag: camera yaw/pitch.
+      if (dragging) {
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        cameraYaw -= dx * yawSensitivity;
+        cameraPitch = Math.max(
+          pitchMin,
+          Math.min(pitchMax, cameraPitch + dy * pitchSensitivity),
+        );
+      }
+
+      // Left-button drag: continuously re-target the player at the
+      // cursor's ground-plane projection. The Threlte mesh
+      // `onpointerdown` started the drag — once it's on we raycast
+      // ourselves against an infinite y = 0 plane so the player
+      // keeps tracking even when the cursor wanders off the ground
+      // mesh (over an entity, off the edge of the world, etc.).
+      if (groundFollow && cameraRef) {
+        followPointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        followPointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        followRaycaster.setFromCamera(followPointer, cameraRef);
+        const hit = followRaycaster.ray.intersectPlane(
+          GROUND_PLANE,
+          followHit,
+        );
+        if (hit) {
+          dispatch(world, { kind: 'click_ground', x: hit.x, z: hit.z });
+        }
+      }
     };
     const mouseUp = (e: MouseEvent) => {
       if (e.button === 2) dragging = false;
+      if (e.button === 0 && groundFollow) {
+        // Final-position indicator. On a drag the initial click ring
+        // is back where the press landed; we want a fresh marker at
+        // the release point so the player can see where they ended.
+        // For a pure click (no movement) the release lands on the
+        // same spot as the press so this just re-fires the ring
+        // harmlessly.
+        if (cameraRef) {
+          followPointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+          followPointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+          followRaycaster.setFromCamera(followPointer, cameraRef);
+          const hit = followRaycaster.ray.intersectPlane(
+            GROUND_PLANE,
+            followHit,
+          );
+          if (hit) fireClickIndicator(hit.x, hit.z);
+        }
+        groundFollow = false;
+      }
     };
 
     window.addEventListener('keydown', keyDown);
@@ -352,9 +411,28 @@
   position={[0, -0.5, 0]}
   material={groundMaterials}
   receiveShadow
-  onclick={(e: { point: { x: number; z: number } }) => {
+  onpointerdown={(e: {
+    point: { x: number; z: number };
+    nativeEvent: PointerEvent;
+  }) => {
+    // Trigger on the left button only; right-click is reserved for
+    // the camera-rotation drag handled globally above. Threlte's
+    // event spreads the THREE.Intersection at the top level — the
+    // mouse-button bit lives on `nativeEvent`, not on the event
+    // wrapper itself, so `e.button` would be undefined here.
+    if (e.nativeEvent.button !== 0) return;
+    // Same housekeeping the old onclick used to do: ground click
+    // dismisses chat (click-out-to-close convention), clears any
+    // entity selection, and drops the transient ring marker.
+    if (chat.open) closeChat();
     clearSelection();
+    fireClickIndicator(e.point.x, e.point.z);
     dispatch(world, { kind: 'click_ground', x: e.point.x, z: e.point.z });
+    // Arm drag-follow so the global mousemove handler keeps
+    // re-targeting the player at the cursor's ground projection
+    // until the button is released. Pure-click (no movement) is
+    // still covered by the initial dispatch above.
+    groundFollow = true;
   }}
 >
   <T.BoxGeometry args={[200, 1, 200]} />
@@ -389,6 +467,7 @@
 <DamageNumbers />
 <Spiders />
 <Beasts />
+<ClickIndicator />
 <Death />
 
 {#if selection.value}

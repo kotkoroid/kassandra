@@ -3,11 +3,12 @@
 // behind Janna still gets blocked.
 
 import { getMonster } from '../../monsters';
-import { applyDamageToEntity, applyDamageToPlayer } from '../combat';
+import { applyDamageToEntityRef, applyDamageToPlayer } from '../combat';
 import {
   PROJECTILE_HIT_RADIUS,
   PROJECTILE_MAX_DISTANCE,
 } from '../constants';
+import { grid } from '../spatialGrid';
 import type { World } from '../types';
 
 export function tickProjectiles(world: World, dt: number) {
@@ -21,19 +22,16 @@ export function tickProjectiles(world: World, dt: number) {
     p.z += stepZ;
     p.traveled += Math.hypot(stepX, stepZ);
 
-    // Allies first — they intercept by standing between Swain and
-    // the player. Iterate backward because applyDamageToEntity may
-    // splice the entity on death.
+    // Allies first — they intercept by standing between the caster
+    // and the player. Grid query replaces the full entity scan:
+    // PROJECTILE_HIT_RADIUS is small so at most 1-4 cells are visited.
     let consumed = false;
-    for (let j = world.entities.length - 1; j >= 0; j--) {
-      const t = world.entities[j];
-      if (!t || t.kind !== 'janna') continue;
-      if (Math.hypot(p.x - t.x, p.z - t.z) < PROJECTILE_HIT_RADIUS) {
-        applyDamageToEntity(world, j, p.damage, false);
-        world.projectiles.splice(i, 1);
-        consumed = true;
-        break;
-      }
+    for (const t of grid.queryRadius(p.x, p.z, PROJECTILE_HIT_RADIUS)) {
+      if (t.kind !== 'janna') continue;
+      applyDamageToEntityRef(world, t, p.damage, false);
+      world.projectiles.splice(i, 1);
+      consumed = true;
+      break;
     }
     if (consumed) continue;
 
