@@ -39,7 +39,7 @@ import type { Entity, World } from '../types';
 
 export function tickDeath(world: World, dt: number) {
   // 1. Detect a fresh death and kick off the pipeline.
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   if (world.death.alive && player.health <= 0) {
     triggerDeath(world);
   }
@@ -63,7 +63,7 @@ export function tickDeath(world: World, dt: number) {
 }
 
 function triggerDeath(world: World) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   world.death.alive = false;
   world.death.deathX = p.x;
   world.death.deathZ = p.z;
@@ -110,7 +110,7 @@ function triggerDeath(world: World) {
 }
 
 function respawn(world: World) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   world.death.alive = true;
   // Clear the previous life's recap; the next life starts a fresh
   // attribution log.
@@ -187,7 +187,7 @@ function tickIndicatorBug(world: World, dt: number) {
   if (bug.retargetTimer <= 0) {
     const angle = world.rng.next() * Math.PI * 2;
     const dist = world.rng.next() * BUG_WANDER_RADIUS;
-    const bugPlayer = world.players.get(world.localPlayerId)!;
+    const bugPlayer = world.players[world.localPlayerId];
     let tx = bugPlayer.x + Math.cos(angle) * dist;
     let tz = bugPlayer.z + Math.sin(angle) * dist;
     // Bias the wander target toward the most recent loot bag so

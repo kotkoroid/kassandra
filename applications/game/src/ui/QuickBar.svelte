@@ -6,7 +6,7 @@
   import { world } from '../world.svelte';
 
   function toggleAutoAttack() {
-    dispatch(world, { kind: 'set_auto_attack', on: !world.players.get(world.localPlayerId)!.autoAttack });
+    dispatch(world, { kind: 'set_auto_attack', on: !world.players[world.localPlayerId].autoAttack });
   }
 
   function castSpell(spellId: string) {
@@ -15,10 +15,10 @@
   }
 
   // Class spells for the current player (up to 5 shown in number slots).
-  const classSpells = $derived(CLASS_SPELLS[world.players.get(world.localPlayerId)!.playerClass] ?? []);
+  const classSpells = $derived(CLASS_SPELLS[world.players[world.localPlayerId].playerClass] ?? []);
 
   function cooldownFraction(spellId: string): number {
-    const readyAt = world.players.get(world.localPlayerId)!.spellCooldowns[spellId] ?? 0;
+    const readyAt = world.players[world.localPlayerId].spellCooldowns[spellId] ?? 0;
     if (world.time >= readyAt) return 0;
     // We don't store the cooldown duration per-spell here, so we just
     // clamp to a max so the overlay at least shows "cooling down".
@@ -26,11 +26,11 @@
   }
 
   function isOnCooldown(spellId: string): boolean {
-    return (world.players.get(world.localPlayerId)!.spellCooldowns[spellId] ?? 0) > world.time;
+    return (world.players[world.localPlayerId].spellCooldowns[spellId] ?? 0) > world.time;
   }
 
   function secondsLeft(spellId: string): number {
-    return Math.max(0, Math.ceil((world.players.get(world.localPlayerId)!.spellCooldowns[spellId] ?? 0) - world.time));
+    return Math.max(0, Math.ceil((world.players[world.localPlayerId].spellCooldowns[spellId] ?? 0) - world.time));
   }
 </script>
 
@@ -40,13 +40,13 @@
        click). -->
   <button
     type="button"
-    class="flex h-10 w-10 items-center justify-center border-2 transition {world.players.get(world.localPlayerId)!.autoAttack
+    class="flex h-10 w-10 items-center justify-center border-2 transition {world.players[world.localPlayerId].autoAttack
       ? 'border-amber-400 bg-amber-900/40 text-amber-100'
       : 'border-amber-900/70 bg-neutral-900/80 text-amber-300/70'} hover:border-amber-300 hover:text-amber-100"
     onclick={toggleAutoAttack}
-    aria-pressed={world.players.get(world.localPlayerId)!.autoAttack}
+    aria-pressed={world.players[world.localPlayerId].autoAttack}
     aria-label="Toggle auto-attack"
-    title="Auto-attack: {world.players.get(world.localPlayerId)!.autoAttack ? 'on' : 'off'}"
+    title="Auto-attack: {world.players[world.localPlayerId].autoAttack ? 'on' : 'off'}"
   >
     <!-- Stylised sword icon. -->
     <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true">

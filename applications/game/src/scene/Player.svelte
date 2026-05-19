@@ -22,7 +22,7 @@
   // come in as props instead of reading the live world fields.
   // Cosmetic + identity bits (name, hair, armor, sex, level, level-
   // up trigger) read straight from world.player.
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
 
   interface Props {
     position: [number, number, number];

@@ -105,7 +105,7 @@ function tickMelee(
 
   // Player as candidate target. Water and the city both protect
   // them from melee aggro.
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   if (world.death.alive && !isInWaterAt(p.x, p.z) && !isInCity(p.x, p.z)) {
     bestDist = Math.hypot(e.x - p.x, e.z - p.z);
     bestX = p.x;
@@ -165,7 +165,7 @@ function tickMelee(
 // projectiles on attack-speed cadence. The city shields the player
 // here too — no targeting, no rotation tracking.
 function tickSwain(world: World, e: Entity, dt: number) {
-  const swainPlayer = world.players.get(world.localPlayerId)!;
+  const swainPlayer = world.players[world.localPlayerId];
   const toPlayerX = swainPlayer.x - e.x;
   const toPlayerZ = swainPlayer.z - e.z;
 
@@ -200,7 +200,7 @@ function tickSwain(world: World, e: Entity, dt: number) {
 // healing circle somewhere near herself. The circle's actual
 // effect lives in sim/systems/healingCircles.ts.
 function tickJanna(world: World, e: Entity, dt: number) {
-  const jannaPlayer = world.players.get(world.localPlayerId)!;
+  const jannaPlayer = world.players[world.localPlayerId];
   const toPlayerX = jannaPlayer.x - e.x;
   const toPlayerZ = jannaPlayer.z - e.z;
   e.rotation = Math.atan2(-toPlayerX, -toPlayerZ);

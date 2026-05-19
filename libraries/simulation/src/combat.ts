@@ -53,7 +53,7 @@ export function applyDamageToPlayer(
   attacker: { monsterId: string; name: string },
 ) {
   if (!world.death.alive) return;
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   const before = player.health;
   player.health = Math.max(0, before - amount);
   const dealt = before - player.health;
@@ -85,7 +85,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     // Loot bag at the kill site, stamped with the slayer as owner.
     const drops = rollLoot(e.monsterId);
     if (drops.length > 0) {
-      const owner = world.players.get(world.localPlayerId)!.name;
+      const owner = world.players[world.localPlayerId].name;
       const bag = {
         id: genId(world, 'lb'),
         x: e.x,
@@ -118,7 +118,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     dropPlayerDeathBag(world, e.x, e.z);
   }
 
-  const combatPlayer = world.players.get(world.localPlayerId)!;
+  const combatPlayer = world.players[world.localPlayerId];
   if (combatPlayer.engageTargetId === e.id) {
     combatPlayer.engageTargetId = null;
   }
@@ -182,7 +182,7 @@ export function dropPlayerDeathBag(world: World, x: number, z: number) {
 
 export function grantExperience(world: World, amount: number) {
   if (amount <= 0) return;
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   p.experience += amount;
   while (p.experience >= EXP_PER_LEVEL) {
     p.experience -= EXP_PER_LEVEL;
@@ -206,7 +206,7 @@ const SLASH_STAMINA_COST = 5;
 // neighbourhood around the player — typically 0-3 entities — instead of
 // scanning all entities in the world.
 export function slash(world: World) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   p.slashTrigger++;
   p.lastSlashTime = world.time;
   p.stamina = Math.max(0, p.stamina - SLASH_STAMINA_COST);

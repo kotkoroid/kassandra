@@ -47,7 +47,7 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
   //    player's chunk window, so the player-centred snapshot is correct
   //    for every water check this tick.
   rebuildGrid(world.entities);
-  const localPlayer = world.players.get(world.localPlayerId)!;
+  const localPlayer = world.players[world.localPlayerId];
   primeWaterCache(localPlayer.x, localPlayer.z);
 
   // 1. World clock first so other systems see the new time.
@@ -98,7 +98,7 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
 }
 
 function handleEvent(world: World, ev: SimEvent) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   switch (ev.kind) {
     case 'click_ground':
       p.navTargetX = ev.x;

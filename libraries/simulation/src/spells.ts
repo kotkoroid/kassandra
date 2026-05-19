@@ -34,7 +34,7 @@ const WHIP_SLOW_DURATION = 2.0;
 const MAYHEM_DURATION = 8;
 
 export function castSpell(world: World, spellId: string, targetId: string | null): void {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
 
   // Only warrior can use these spells.
   if (p.playerClass !== 'warrior') return;
@@ -157,7 +157,7 @@ export function castSpell(world: World, spellId: string, targetId: string | null
 }
 
 export function tickSpells(world: World, dt: number): void {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   const spell = p.activeSpell;
   if (!spell) return;
 

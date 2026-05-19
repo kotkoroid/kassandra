@@ -413,7 +413,7 @@ export interface World {
   // Monotonic tick counter, useful for generating stable ids.
   tick: number;
 
-  players: Map<PlayerId, Player>;
+  players: Record<PlayerId, Player>;
   localPlayerId: PlayerId;
   entities: Entity[];
   // O(1) entity lookup by id. Mirrors `entities` — kept in sync by

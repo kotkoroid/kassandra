@@ -26,7 +26,7 @@
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { world } from '../world.svelte';
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
   import Beasts from './Beasts.svelte';
   import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';

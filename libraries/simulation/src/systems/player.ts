@@ -27,7 +27,7 @@ import { findEntity, isHostile, isInWaterAt } from '../util';
 import { isNight } from './time';
 
 export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
 
   // Passive health regen runs whether moving or idle, but only while
   // alive. Tied to stat, capped at PLAYER_MAX_HP.

@@ -16,7 +16,7 @@
   const CULL_DIST_SQ = 40 * 40;
 
   const visiblePops = $derived.by(() => {
-    const dnp = world.players.get(world.localPlayerId)!;
+    const dnp = world.players[world.localPlayerId];
     return damageNumbers.list.filter((pop) => {
       const dx = pop.x - dnp.x;
       const dz = pop.z - dnp.z;

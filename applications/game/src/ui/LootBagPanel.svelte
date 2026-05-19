@@ -49,7 +49,7 @@
   }
 
   const hasOwnedItems = $derived(
-    !!bag && bag.items.some((item) => item.owner === world.players.get(world.localPlayerId)!.name),
+    !!bag && bag.items.some((item) => item.owner === world.players[world.localPlayerId].name),
   );
 </script>
 

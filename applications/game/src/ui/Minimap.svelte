@@ -2,7 +2,7 @@
   import { CITY_RADIUS, CITY_X, CITY_Z, currentHour, isNightHour } from '@kassandra/simulation';
   import { world } from '../world.svelte';
 
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
 
   // Overall clock dial size in CSS pixels. The inner circular
   // minimap is centered inside the ring of hours. SVG viewBox below

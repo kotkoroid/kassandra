@@ -42,20 +42,20 @@
   // non-currency items so coins never occupy bag slots.
   const stacks = $derived.by<Stack[]>(() => {
     const counts = new Map<ItemId, number>();
-    for (const id of world.players.get(world.localPlayerId)!.bag) {
+    for (const id of world.players[world.localPlayerId].bag) {
       if (id === LARS_ID) continue;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
     return [...counts.entries()].map(([id, count]) => ({ id, count }));
   });
 
-  const larsCount = $derived(world.players.get(world.localPlayerId)!.lars);
+  const larsCount = $derived(world.players[world.localPlayerId].lars);
 
   // Equipment paper-doll. Only `weapon` is wired to actual player
   // state today — the rest are visual placeholders matching the
   // inspiration's slot layout so the design intent reads clearly.
   // When more gear slots land on Player they replace these `null`s.
-  const equippedWeapon = $derived(getItem(world.players.get(world.localPlayerId)!.equippedWeaponId));
+  const equippedWeapon = $derived(getItem(world.players[world.localPlayerId].equippedWeaponId));
 
   // Bag grid: fixed pool of slot cells so empty squares render as
   // an honeycomb of placeholders even when the bag is nearly empty.

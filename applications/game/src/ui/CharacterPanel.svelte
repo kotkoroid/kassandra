@@ -7,7 +7,7 @@
   import Player from '../scene/Player.svelte';
   import { world } from '../world.svelte';
 
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
 
   // Slow turntable so the portrait isn't static. The animation loop
   // only runs while the dialog is open.

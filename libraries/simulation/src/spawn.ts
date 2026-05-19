@@ -100,7 +100,7 @@ export function spawnEntity(
   const cfg = KIND_CONFIG[kind];
   const monster = getMonster(cfg.monsterId);
   const stats = snapshot(world, monster.attributes);
-  const spawnPlayer = world.players.get(world.localPlayerId)!;
+  const spawnPlayer = world.players[world.localPlayerId];
   const dx = spawnPlayer.x - x;
   const dz = spawnPlayer.z - z;
   const r =

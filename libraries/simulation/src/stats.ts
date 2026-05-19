@@ -51,7 +51,7 @@ export function getEffectiveStat(player: Player, stat: StatKey): number {
 // their own `expiresAt` are still pruned independently — equipment
 // procs or quest rewards that never showed an icon still time out.
 export function tickModifiers(world: World) {
-  const p = world.players.get(world.localPlayerId)!;
+  const p = world.players[world.localPlayerId];
   const now = world.time;
 
   // Pass 1: prune expired effects, remembering their ids.

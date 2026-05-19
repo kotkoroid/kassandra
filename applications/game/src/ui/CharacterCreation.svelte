@@ -13,7 +13,7 @@
   import { resetWorld, world } from '../world.svelte';
 
   // Local alias so the existing form bindings stay readable.
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
 
   interface Props {
     onCreate: () => void;
@@ -95,7 +95,7 @@
       // before flipping views.
       const { sex, hairColor, armor, playerClass } = player;
       resetWorld();
-      const newPlayer = world.players.get(world.localPlayerId)!;
+      const newPlayer = world.players[world.localPlayerId];
       newPlayer.name = trimmed;
       newPlayer.sex = sex;
       newPlayer.hairColor = hairColor;

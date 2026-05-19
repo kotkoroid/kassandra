@@ -35,7 +35,7 @@ export function getSelectionView(): SelectionView | null {
   const id = selection.value;
   if (!id) return null;
   if (id === 'player') {
-    const player = world.players.get(world.localPlayerId)!;
+    const player = world.players[world.localPlayerId];
     return {
       name: player.name,
       level: player.level,

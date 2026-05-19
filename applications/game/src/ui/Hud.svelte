@@ -4,7 +4,7 @@
   import { world } from '../world.svelte';
 
   // Local alias so the existing markup stays readable.
-  const player = $derived(world.players.get(world.localPlayerId)!);
+  const player = $derived(world.players[world.localPlayerId]);
   const death = world.death;
 
   function requestRespawn() {
@@ -34,8 +34,8 @@
       lootBagOpen.pendingArrival = null;
       return;
     }
-    const dx = world.players.get(world.localPlayerId)!.x - bag.x;
-    const dz = world.players.get(world.localPlayerId)!.z - bag.z;
+    const dx = world.players[world.localPlayerId].x - bag.x;
+    const dz = world.players[world.localPlayerId].z - bag.z;
     if (dx * dx + dz * dz <= BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS) {
       lootBagOpen.value = pendingId;
       lootBagOpen.pendingArrival = null;

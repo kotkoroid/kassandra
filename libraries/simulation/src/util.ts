@@ -65,7 +65,7 @@ export function refreshLootBagFlags(world: World, bag: WorldLootBag): void {
   let lars = 0;
   let hasOther = false;
   let owned = false;
-  const me = world.players.get(world.localPlayerId)!.name;
+  const me = world.players[world.localPlayerId].name;
   for (const it of bag.items) {
     if (it.itemId === LARS_ID) lars++;
     else hasOther = true;

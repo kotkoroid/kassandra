@@ -32,7 +32,7 @@ export function tickProjectiles(world: World, dt: number) {
     }
     if (consumed) continue;
 
-    const lp = world.players.get(world.localPlayerId)!;
+    const lp = world.players[world.localPlayerId];
     if (
       world.death.alive &&
       Math.hypot(p.x - lp.x, p.z - lp.z) < PROJECTILE_HIT_RADIUS

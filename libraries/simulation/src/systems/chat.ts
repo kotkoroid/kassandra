@@ -32,7 +32,7 @@ export function applyChat(world: World, text: string, channel: ChatChannel) {
   }
 
   // Broadcast a normal message + raise the speech bubble.
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   world.chat.messages.push({
     id: genId(world, 'm'),
     author: player.name || 'You',
@@ -114,7 +114,7 @@ function cmdEffect(
   const id = genId(world, 'eff');
   const now = world.time;
   const expiresAt = now + durationSec;
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   const source = player.name || 'Debug';
 
   if (kind === 'buff') {
@@ -171,7 +171,7 @@ function cmdEffect(
 }
 
 function cmdClearBuffs(world: World): string[] {
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   const n = player.effects.length;
   // Drop both the presentation row and any math rows linked to one
   // of the cleared effects. Untagged modifiers (e.g. equipment) stay.
@@ -210,7 +210,7 @@ function cmdSpawnMonster(
   if (!id) return [`Unknown monster id: ${idArg}`];
   const count = parseCount(countArg);
   if (typeof count === 'string') return [count];
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   for (let i = 0; i < count; i++) {
     const angle = world.rng.next() * Math.PI * 2;
     const dist = 4 + world.rng.next() * 4;
@@ -228,7 +228,7 @@ function cmdKill(world: World, name: string | undefined): string[] {
   if (!name) return ['Usage: /kill [NAME]'];
   // Single-player today — only the local player is a candidate. The
   // name match keeps the shape ready for multiplayer.
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   if (player.name !== name) return [`No player named ${name}`];
   if (!world.death.alive) return [`${name} is already dead`];
   player.health = 0;
@@ -243,7 +243,7 @@ function cmdGold(
   if (!nameArg || amountArg === undefined) {
     return ['Usage: /gold [NAME] [+/-AMOUNT]'];
   }
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   if (player.name !== nameArg) return [`No player named ${nameArg}`];
 
   // Parse the signed amount. Leading + adds (the default), leading -
@@ -281,7 +281,7 @@ function cmdPurge(world: World, radiusArg: string | undefined): string[] {
   const r = radiusArg === undefined ? PURGE_DEFAULT_RADIUS : Number.parseFloat(radiusArg);
   if (!Number.isFinite(r) || r <= 0) return [`Invalid radius: ${radiusArg}`];
   const r2 = r * r;
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   const px = player.x;
   const pz = player.z;
   let removed = 0;
@@ -304,7 +304,7 @@ function cmdPurge(world: World, radiusArg: string | undefined): string[] {
 
 function cmdRespawn(world: World, name: string | undefined): string[] {
   if (!name) return ['Usage: /respawn [NAME]'];
-  const player = world.players.get(world.localPlayerId)!;
+  const player = world.players[world.localPlayerId];
   if (player.name !== name) return [`No player named ${name}`];
   if (world.death.alive) return [`${name} is already alive`];
   // Defer the actual revive to the death system so respawn-side
