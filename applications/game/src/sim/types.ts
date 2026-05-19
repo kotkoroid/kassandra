@@ -165,7 +165,8 @@ export interface Player {
 
 export type EntityKind =
   | 'spider-big' | 'spider-medium' | 'spider-tiny'
-  | 'wolf' | 'bear' | 'swain'
+  | 'wolf' | 'bear' | 'warmaiden' | 'shadowmaiden'
+  | 'swain' | 'bowmaiden' | 'spellmaiden'
   | 'janna' | 'azir' | 'troller';
 
 export interface Entity {
@@ -185,6 +186,12 @@ export interface Entity {
   healthRegen: number;
   experience: number;
 
+  // Spawn-point origin id (when the entity came from the fixed
+  // spawn-point system). Used by combat.ts to schedule a respawn on
+  // death. Absent for entities created dynamically — spider-split
+  // children, troller, /m chat spawns.
+  spawnPointId?: string;
+
   // Per-instance attack cooldown in seconds.
   attackCooldown: number;
 
@@ -199,6 +206,14 @@ export interface Entity {
   carriesPlayerBag?: boolean;
   trollerTargetX?: number;
   trollerTargetZ?: number;
+
+  // Ambient NPC chatter. The line currently shown above the head
+  // (cleared when `sayExpiresAt` passes). `nextSayAt` is the sim
+  // time at which the next line should fire — driven by the npcChat
+  // system, lazily initialised on first tick.
+  saying?: string;
+  sayExpiresAt?: number;
+  nextSayAt?: number;
 }
 
 // --- Projectiles, healing circles, world loot bags --------------
@@ -344,15 +359,14 @@ export interface World {
     messages: ChatMessage[];
   };
 
-  // Per-system spawn cooldowns. Each tick we add dt; once the
-  // threshold is crossed, the spawner attempts a spawn.
-  spawnTimers: {
-    spider: number;
-    swain: number;
-    wolf: number;
-    bear: number;
-    janna: number;
-  };
+  // Fixed spawn-point bookkeeping. `spawnPointsInitialized` flips
+  // true after tickSpawners seeds every point on the first tick.
+  // `spawnPointRespawnAt` maps a spawn-point id to the world time
+  // at which it should respawn — populated by combat.ts on the
+  // death of an entity carrying a spawnPointId whose point has a
+  // respawnDelay. Entries are removed when respawned.
+  spawnPointsInitialized: boolean;
+  spawnPointRespawnAt: Map<string, number>;
 
   // Internal id counter. Entities/projectiles/circles/bags pull
   // their ids from here so they stay unique without needing per-

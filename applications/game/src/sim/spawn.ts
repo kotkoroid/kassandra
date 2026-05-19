@@ -6,12 +6,16 @@ import {
   getMonster,
   MONSTER_AZIR,
   MONSTER_BEAR,
+  MONSTER_BOWMAIDEN,
   MONSTER_JANNA,
+  MONSTER_SHADOWMAIDEN,
   MONSTER_SMALL_SPIDER,
+  MONSTER_SPELLMAIDEN,
   MONSTER_SPIDER,
   MONSTER_SWAIN,
   MONSTER_TINY_SPIDER,
   MONSTER_TROLLER,
+  MONSTER_WARMAIDEN,
   MONSTER_WOLF,
   type MonsterAttributes,
   type MonsterId,
@@ -51,7 +55,11 @@ const KIND_CONFIG: Record<Exclude<EntityKind, 'troller'>, KindConfig> = {
   'spider-tiny':   { idPrefix: 's', monsterId: MONSTER_TINY_SPIDER,  facing: 'none',   staggerAttack: false },
   wolf:            { idPrefix: 'b', monsterId: MONSTER_WOLF,         facing: 'toward', staggerAttack: false },
   bear:            { idPrefix: 'b', monsterId: MONSTER_BEAR,         facing: 'toward', staggerAttack: false },
+  warmaiden:       { idPrefix: 'b', monsterId: MONSTER_WARMAIDEN,    facing: 'toward', staggerAttack: false },
+  shadowmaiden:    { idPrefix: 'b', monsterId: MONSTER_SHADOWMAIDEN, facing: 'toward', staggerAttack: false },
   swain:           { idPrefix: 'e', monsterId: MONSTER_SWAIN,        facing: 'away',   staggerAttack: true  },
+  bowmaiden:       { idPrefix: 'e', monsterId: MONSTER_BOWMAIDEN,    facing: 'away',   staggerAttack: true  },
+  spellmaiden:     { idPrefix: 'e', monsterId: MONSTER_SPELLMAIDEN,  facing: 'away',   staggerAttack: true  },
   janna:           { idPrefix: 'j', monsterId: MONSTER_JANNA,        facing: 'away',   staggerAttack: false },
   azir:            { idPrefix: 'a', monsterId: MONSTER_AZIR,         facing: 'toward', staggerAttack: false },
 };
@@ -62,6 +70,7 @@ export function spawnEntity(
   x: number,
   z: number,
   rotation?: number,
+  spawnPointId?: string,
 ): Entity {
   const cfg = KIND_CONFIG[kind];
   const monster = getMonster(cfg.monsterId);
@@ -91,6 +100,7 @@ export function spawnEntity(
     attackCooldown: cfg.staggerAttack
       ? world.rng.next() / Math.max(stats.attackSpeed, 0.0001)
       : 0,
+    ...(spawnPointId !== undefined && { spawnPointId }),
     ...(kind === 'janna' && { healCooldown: world.rng.next() * 7 }),
   };
   world.entities.push(e);
@@ -149,6 +159,10 @@ export function spawnByMonsterId(
     case MONSTER_TINY_SPIDER:  return spawnEntity(world, 'spider-tiny', x, z);
     case MONSTER_JANNA:        return spawnEntity(world, 'janna', x, z);
     case MONSTER_AZIR:         return spawnEntity(world, 'azir', x, z);
+    case MONSTER_BOWMAIDEN:    return spawnEntity(world, 'bowmaiden', x, z);
+    case MONSTER_SPELLMAIDEN:  return spawnEntity(world, 'spellmaiden', x, z);
+    case MONSTER_WARMAIDEN:    return spawnEntity(world, 'warmaiden', x, z);
+    case MONSTER_SHADOWMAIDEN: return spawnEntity(world, 'shadowmaiden', x, z);
     case MONSTER_TROLLER:      return spawnTroller(world, x, z, false);
     default: return null;
   }

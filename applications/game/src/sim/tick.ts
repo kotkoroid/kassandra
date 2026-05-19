@@ -14,6 +14,7 @@ import { tickModifiers } from './stats';
 import { tickHealingCircles } from './systems/healingCircles';
 import { tickLootBags } from './systems/loot';
 import { tickMonsters } from './systems/monsters';
+import { tickNpcChat } from './systems/npcChat';
 import { tickPlayer } from './systems/player';
 import { tickProjectiles } from './systems/projectiles';
 import { tickSpawners } from './systems/spawners';
@@ -58,8 +59,15 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
   // 8. Death pipeline: troller phases, bag/bug bookkeeping.
   tickDeath(world, dt);
 
-  // 9. Spawners (after entities have moved/died this tick).
-  tickSpawners(world, dt);
+  // 9. Spawners (after entities have moved/died this tick). Seeds
+  // every fixed spawn point on first tick, then drains any due
+  // respawns scheduled by combat.ts.
+  tickSpawners(world);
+
+  // 10. Ambient NPC chatter (Azir, …). Reads world.time / pushes
+  // chat messages — must run after the clock + spawners so a fresh
+  // NPC has a chance to schedule its first line.
+  tickNpcChat(world);
 
   world.tick++;
 }

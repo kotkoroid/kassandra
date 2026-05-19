@@ -16,7 +16,7 @@
   import { chat, openChat } from '../chat.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
-  import { BAG_PICKUP_RADIUS } from '../sim/constants';
+  import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../sim/constants';
   import { dispatch } from '../sim/input';
   import { currentHour } from '../sim/systems/time';
   import { tick } from '../sim/tick';
@@ -103,10 +103,24 @@
   }
 
   // Sun rig follows world.time and the player's world position so
-  // shadow coverage stays centered on the camera target.
+  // shadow coverage stays centered on the camera target. The sun's
+  // arc is split so the lit half (sunY ≥ 0) spans the gameplay day
+  // window [NIGHT_END, NIGHT_START] and the dark half spans the
+  // night window — i.e. the world only goes dark after 22:00 to
+  // match the night-start gameplay rules and the lamps.
+  const DAY_HOURS = NIGHT_START - NIGHT_END; // 16
+  const NIGHT_HOURS = 24 - DAY_HOURS;        // 8
   function updateSunRig() {
     const hour = currentHour(world);
-    const alpha = ((hour - 6) / 12) * Math.PI;
+    let alpha: number;
+    if (hour >= NIGHT_END && hour < NIGHT_START) {
+      // Daytime: alpha 0 (dawn) → π (dusk) across 16 hours.
+      alpha = ((hour - NIGHT_END) / DAY_HOURS) * Math.PI;
+    } else {
+      // Nighttime: alpha π → 2π across 8 hours, wrapping midnight.
+      const h = hour < NIGHT_END ? hour + 24 : hour;
+      alpha = Math.PI + ((h - NIGHT_START) / NIGHT_HOURS) * Math.PI;
+    }
     const sunX = Math.cos(alpha);
     const sunY = Math.sin(alpha);
 

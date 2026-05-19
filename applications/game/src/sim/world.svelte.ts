@@ -3,9 +3,7 @@
 // shape itself is plain TypeScript (see ./types.ts) so it could be
 // serialised, replayed, or shipped to a server unchanged.
 
-import { CITY_X, CITY_Z } from '../city';
 import { STARTING_WEAPON_ID } from '../items';
-import { getMonster, MONSTER_AZIR } from '../monsters';
 import {
   BASE_ATTACK_SPEED,
   BASE_DAMAGE,
@@ -15,7 +13,7 @@ import {
   STAMINA_MAX,
 } from './constants';
 import { createRng } from './rng';
-import type { Entity, Player, World } from './types';
+import type { Player, World } from './types';
 
 function defaultPlayer(): Player {
   return {
@@ -57,33 +55,6 @@ function defaultPlayer(): Player {
   };
 }
 
-// One-time city NPC: Azir stands a few units off the city centre,
-// turned to face the respawn point. Inlined here (instead of calling
-// spawn.ts) to avoid a circular import — spawn.ts already imports
-// genId from this module.
-function spawnCityNpcs(world: World) {
-  const azirDef = getMonster(MONSTER_AZIR);
-  const azir: Entity = {
-    id: 'azir',
-    kind: 'azir',
-    monsterId: MONSTER_AZIR,
-    x: CITY_X + 2,
-    z: CITY_Z + 1.5,
-    // Face the city centre so the player sees the front of him on
-    // respawn / on entering town.
-    rotation: Math.atan2(-2, -1.5),
-    hp: azirDef.attributes.health,
-    maxHp: azirDef.attributes.health,
-    damage: 0,
-    attackSpeed: 0,
-    healthRegen: 0,
-    experience: 0,
-    attackCooldown: 0,
-  };
-  world.entities.push(azir);
-  world.entityById.set(azir.id, azir);
-}
-
 export function createWorld(seed: number = Date.now() >>> 0): World {
   const world: World = {
     rng: createRng(seed),
@@ -108,13 +79,11 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     chat: {
       messages: [],
     },
-    spawnTimers: {
-      spider: 0,
-      swain: 0,
-      wolf: 0,
-      bear: 0,
-      janna: 0,
-    },
+    // Fixed spawn-point bookkeeping. tickSpawners flips the flag and
+    // seeds every catalog entry on the first tick; combat.ts pushes
+    // entries into the map when a respawning entity dies.
+    spawnPointsInitialized: false,
+    spawnPointRespawnAt: new Map(),
     nextId: 1,
     inputQueue: [],
     pending: {
@@ -122,7 +91,6 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
       respawn: false,
     },
   };
-  spawnCityNpcs(world);
   return world;
 }
 

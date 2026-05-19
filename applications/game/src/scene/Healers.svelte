@@ -20,6 +20,7 @@
       position={[entity.x, 0, entity.z]}
       rotation={entity.rotation}
       hpPercent={entity.hp / entity.maxHp}
+      saying={entity.saying}
     />
   {/if}
 {/each}

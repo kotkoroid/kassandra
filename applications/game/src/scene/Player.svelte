@@ -20,10 +20,16 @@
     rotation: number;
     moving: boolean;
     slashTrigger: number;
+    // When true, every per-frame animation update on this instance
+    // (walk cycle, slash, level-up effect) is short-circuited so the
+    // model freezes mid-pose. Used by the character-creation preview
+    // so its pause button stops the walk where the legs are, instead
+    // of easing back to idle.
+    paused?: boolean;
     // Optional ref-capture for the top-level Group. Scene.svelte uses
     // it to keep the player's pose updated imperatively in the same
     // useTask as the camera — otherwise Svelte's prop-binding flush
-    // lags one frame behind Threlte's render call, making the model
+    // lags one frame behind Threlte's render call, making the player
     // appear to trail the camera while walking.
     oncreate?: (group: import('three').Group) => void;
   }
@@ -32,6 +38,7 @@
     rotation,
     moving,
     slashTrigger,
+    paused = false,
     oncreate,
   }: Props = $props();
 
@@ -61,6 +68,7 @@
   let lastLevelUpTrigger = $state(0);
 
   useTask((delta) => {
+    if (paused) return;
     if (moving) {
       phase += delta * 9;
       amp = Math.min(1, amp + delta * 8);
@@ -98,11 +106,15 @@
   );
 
   // Wind-up → fast forward swing → recovery, expressed as a piecewise
-  // arc on the right arm's X rotation.
+  // arc on the right arm's X rotation. The model faces +Z, and a
+  // positive rotation.x sweeps an arm hanging at −Y toward −Z (i.e.
+  // behind the character), so "wind up backward, swing forward"
+  // means *positive* angles on the wind-up and *negative* angles on
+  // the strike.
   function slashAngleAt(t: number): number {
-    if (t < 0.25) return (t / 0.25) * -0.6;
-    if (t < 0.6) return -0.6 + ((t - 0.25) / 0.35) * 2.2;
-    return 1.6 * (1 - (t - 0.6) / 0.4);
+    if (t < 0.25) return (t / 0.25) * 0.6;
+    if (t < 0.6) return 0.6 - ((t - 0.25) / 0.35) * 2.2;
+    return -1.6 * (1 - (t - 0.6) / 0.4);
   }
 
   const swing = $derived(Math.sin(phase) * amp * 0.55);

@@ -4,6 +4,7 @@
 // happen in one place regardless of source.
 
 import { rollLoot } from '../loot';
+import { getSpawnPoint } from '../spawnPoints';
 import {
   EXP_PER_LEVEL,
   LOOT_BAG_TTL,
@@ -111,6 +112,19 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     world.player.engageTargetId = null;
   }
 
+  // Schedule respawn for fixed-spawn-point entities whose point
+  // defines a respawnDelay. Spider-split children, troller, and
+  // /m chat spawns have no spawnPointId so they fall through.
+  if (e.spawnPointId !== undefined) {
+    const point = getSpawnPoint(e.spawnPointId);
+    if (point.respawnDelay !== undefined) {
+      world.spawnPointRespawnAt.set(
+        e.spawnPointId,
+        world.time + point.respawnDelay,
+      );
+    }
+  }
+
   emit(world, { kind: 'entity-killed', entityKind: e.kind, monsterId: e.monsterId, x: e.x, z: e.z, byPlayer });
   removeEntity(world, index);
 }
@@ -175,12 +189,20 @@ export function grantExperience(world: World, amount: number) {
   }
 }
 
+// Per-swing stamina cost. Drained from `world.player.stamina`,
+// clamped at zero — running out doesn't gate the swing itself,
+// it just leaves the player exhausted so movement slows until
+// stamina regenerates.
+const SLASH_STAMINA_COST = 5;
+
 // Sword swing: damages every hostile entity inside the forward cone
 // within sword reach.
 export function slash(world: World) {
   const p = world.player;
   p.slashTrigger++;
   p.lastSlashTime = world.time;
+  p.stamina = Math.max(0, p.stamina - SLASH_STAMINA_COST);
+  if (p.stamina === 0) p.exhausted = true;
 
   const fwdX = Math.sin(p.rotation);
   const fwdZ = Math.cos(p.rotation);

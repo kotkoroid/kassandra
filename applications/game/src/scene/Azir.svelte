@@ -5,6 +5,8 @@
   // staff) follow the inspiration so he's identifiable at a glance.
 
   import { T } from '@threlte/core';
+  import { HTML } from '@threlte/extras';
+  import { AZIR_GREETING, openDialog } from '../dialog.svelte';
   import { selection } from '../selection.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
 
@@ -13,8 +15,11 @@
     position: [number, number, number];
     rotation: number;
     hpPercent: number;
+    // Ambient line currently floating above the head (set by the
+    // npcChat sim system, expires after SAY_TTL seconds).
+    saying?: string;
   }
-  let { id, position, rotation, hpPercent }: Props = $props();
+  let { id, position, rotation, hpPercent, saying }: Props = $props();
 
   const featherGold = '#d4a23a';
   const featherDark = '#8a6618';
@@ -35,6 +40,7 @@
   onclick={(e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     selection.value = id;
+    openDialog(AZIR_GREETING);
   }}
 >
   <EntityNameplate
@@ -43,6 +49,19 @@
     level={20}
     {hpPercent}
   />
+
+  <!-- Ambient speech bubble. Sits just under the nameplate (which
+       lives at y=2.7) so it doesn't compete with the level/name
+       readout. Pointer-events off so clicks still hit the body. -->
+  {#if saying}
+    <HTML position={[0, 2.45, 0]} center pointerEvents="none" zIndexRange={[40, 0]}>
+      <div
+        class="max-w-[240px] border border-amber-900/70 bg-black/85 px-2 py-0.5 text-xs whitespace-pre-wrap text-white [text-shadow:0_1px_2px_rgb(0_0_0_/_0.85)]"
+      >
+        {saying}
+      </div>
+    </HTML>
+  {/if}
 
   <!-- Boots -->
   <T.Mesh position={[-0.13, 0.1, 0]} castShadow>

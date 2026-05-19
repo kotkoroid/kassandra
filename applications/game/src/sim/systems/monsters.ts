@@ -1,7 +1,9 @@
-// Per-kind AI dispatch. Despawn-by-distance, regen, target picking,
-// movement, and attack apply in a uniform shape across every
-// entity; the per-kind specifics (melee vs ranged vs ally) live in
-// the small handlers below.
+// Per-kind AI dispatch. Regen, target picking, movement, and attack
+// apply in a uniform shape across every entity; the per-kind
+// specifics (melee vs ranged vs ally) live in the small handlers
+// below. Distance-based despawn is intentionally gone — entities
+// are pinned to fixed spawn points, so they persist wherever the
+// catalog placed them regardless of where the player roams.
 
 import { isInCity } from '../../city';
 import { getMonster } from '../../monsters';
@@ -13,29 +15,28 @@ import {
   PROJECTILE_SPEED,
 } from '../constants';
 import type { Entity, EntityKind, World } from '../types';
-import { isInWaterAt, removeEntity } from '../util';
+import { isInWaterAt } from '../util';
 import { genId } from '../world.svelte';
 
 // Movement / engagement profile for every entity kind. Kept here
 // (not on the entity itself) so the same shape applies to every
 // instance and a tweak to e.g. wolf speed is a one-line change.
-const PROFILE: Record<
-  EntityKind,
-  { speed: number; attackRange: number; despawnDist: number }
-> = {
-  'spider-big':    { speed: 2.6, attackRange: 0.6, despawnDist: 40 },
-  'spider-medium': { speed: 3.1, attackRange: 0.6, despawnDist: 40 },
-  'spider-tiny':   { speed: 3.6, attackRange: 0.6, despawnDist: 40 },
-  wolf:            { speed: 3.0, attackRange: 0.9, despawnDist: 40 },
-  bear:            { speed: 1.8, attackRange: 0.9, despawnDist: 40 },
+const PROFILE: Record<EntityKind, { speed: number; attackRange: number }> = {
+  'spider-big':    { speed: 2.6, attackRange: 0.6 },
+  'spider-medium': { speed: 3.1, attackRange: 0.6 },
+  'spider-tiny':   { speed: 3.6, attackRange: 0.6 },
+  wolf:            { speed: 3.0, attackRange: 0.9 },
+  bear:            { speed: 1.8, attackRange: 0.9 },
+  warmaiden:       { speed: 2.4, attackRange: 0.9 },
+  shadowmaiden:    { speed: 2.1, attackRange: 1.0 },
   // Ranged / stationary kinds — handled in their own handlers.
-  swain:           { speed: 0,   attackRange: 0,   despawnDist: 35 },
-  janna:           { speed: 0,   attackRange: 0,   despawnDist: 35 },
-  // Azir is a permanent city NPC — never despawn no matter how far
-  // the player roams.
-  azir:            { speed: 0,   attackRange: 0,   despawnDist: Infinity },
+  swain:           { speed: 0, attackRange: 0 },
+  bowmaiden:       { speed: 0, attackRange: 0 },
+  spellmaiden:     { speed: 0, attackRange: 0 },
+  janna:           { speed: 0, attackRange: 0 },
+  azir:            { speed: 0, attackRange: 0 },
   // Troller pipeline runs in sim/systems/death.ts.
-  troller:         { speed: 0,   attackRange: 0,   despawnDist: Infinity },
+  troller:         { speed: 0, attackRange: 0 },
 };
 
 export function tickMonsters(world: World, dt: number) {
@@ -46,15 +47,6 @@ export function tickMonsters(world: World, dt: number) {
     if (e.kind === 'troller') continue;
 
     const profile = PROFILE[e.kind];
-
-    // Despawn if wandered too far from the player.
-    if (
-      Math.hypot(e.x - world.player.x, e.z - world.player.z) >
-      profile.despawnDist
-    ) {
-      removeEntity(world, i);
-      continue;
-    }
 
     // Passive regen toward each entity's locked-in max hp.
     if (e.hp < e.maxHp && e.healthRegen > 0) {
@@ -67,9 +59,16 @@ export function tickMonsters(world: World, dt: number) {
       case 'spider-tiny':
       case 'wolf':
       case 'bear':
+      case 'warmaiden':
+      case 'shadowmaiden':
         tickMelee(world, e, profile.speed, profile.attackRange, dt);
         break;
       case 'swain':
+      case 'bowmaiden':
+      case 'spellmaiden':
+        // Same stationary-ranged AI for the whole ranged roster;
+        // the projectile renderer paints orbs / arrows / motes
+        // differently per `ownerMonsterId`.
         tickSwain(world, e, dt);
         break;
       case 'janna':

@@ -47,23 +47,6 @@ export const LOOT_BAG_TTL = 3 * 60;
 export const BAG_XP_RECOVERY = 0.7;
 export const BAG_PICKUP_RADIUS = 1.2;
 
-// --- Spawner caps and intervals ---
-
-export const SPAWN = {
-  spider: { interval: 7, max: 20, treeOffset: 1.5 },
-  swain:  { interval: 5, max: 5, distMin: 12, distMax: 22 },
-  wolf:   { interval: 8, max: 4, distMin: 14, distMax: 24 },
-  bear:   { interval: 20, max: 2, distMin: 14, distMax: 24 },
-  janna:  { interval: 10, max: 2, distMin: 10, distMax: 20 },
-} as const;
-
-export const DESPAWN_DISTANCE = {
-  spider: 40,
-  beast: 40,
-  swain: 35,
-  janna: 35,
-} as const;
-
 // --- Swain projectile ---
 
 export const PROJECTILE_SPEED = 8;

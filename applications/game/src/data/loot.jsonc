@@ -38,6 +38,31 @@
   "MONSTER000007": {
     // Troller — L1
     "ITEM000001": { "chance": 50, "min": 1, "max": 3 }
+  },
+  // MONSTER000008 (Janna) and MONSTER000009 (Azir) are ALLY — no drops.
+  "MONSTER000010": {
+    // Angendal Bowmaiden — L8
+    "ITEM000001": { "chance": 60, "min": 5, "max": 14 },
+    "ITEM000003": 8,
+    "ITEM000004": 2
+  },
+  "MONSTER000011": {
+    // Angendal Warmaiden — L7
+    "ITEM000001": { "chance": 55, "min": 4, "max": 10 },
+    "ITEM000003": 12,
+    "ITEM000004": 3
+  },
+  "MONSTER000012": {
+    // Angendal Shadowmaiden — L10
+    "ITEM000001": { "chance": 65, "min": 8, "max": 20 },
+    "ITEM000003": 18,
+    "ITEM000004": 6,
+    "ITEM000005": 1
+  },
+  "MONSTER000013": {
+    // Angendal Spellmaiden — L9
+    "ITEM000001": { "chance": 60, "min": 7, "max": 16 },
+    "ITEM000003": 12,
+    "ITEM000004": 5
   }
-  // MONSTER000008 (Janna) is an ALLY — no drops.
 }

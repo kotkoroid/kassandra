@@ -109,5 +109,53 @@
       "healthRegen": 0,
       "experience": 0
     }
+  },
+  "MONSTER000010": {
+    "name": "Angendal Bowmaiden",
+    "type": "ANIMAL",
+    "level": 8,
+    "attributes": {
+      "damage": 8,
+      "attackSpeed": 0.6,
+      "health": 18,
+      "healthRegen": 2,
+      "experience": 40
+    }
+  },
+  "MONSTER000011": {
+    "name": "Angendal Warmaiden",
+    "type": "ANIMAL",
+    "level": 7,
+    "attributes": {
+      "damage": 6,
+      "attackSpeed": 0.9,
+      "health": 22,
+      "healthRegen": 0.5,
+      "experience": 30
+    }
+  },
+  "MONSTER000012": {
+    "name": "Angendal Shadowmaiden",
+    "type": "ANIMAL",
+    "level": 10,
+    "attributes": {
+      "damage": 9,
+      "attackSpeed": 0.7,
+      "health": 35,
+      "healthRegen": 1,
+      "experience": 60
+    }
+  },
+  "MONSTER000013": {
+    "name": "Angendal Spellmaiden",
+    "type": "ANIMAL",
+    "level": 9,
+    "attributes": {
+      "damage": 14,
+      "attackSpeed": 0.35,
+      "health": 25,
+      "healthRegen": 3,
+      "experience": 55
+    }
   }
 }

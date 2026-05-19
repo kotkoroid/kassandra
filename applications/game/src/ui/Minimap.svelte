@@ -6,13 +6,16 @@
   const player = world.player;
 
   // Overall clock dial size in CSS pixels. The inner circular
-  // minimap is centered inside the ring of hours.
-  const SIZE = 260;
+  // minimap is centered inside the ring of hours. SVG viewBox below
+  // stays at its original 260×260 user units, so shrinking SIZE
+  // (and the radar inset accordingly) rescales the whole widget —
+  // ring, ticks, labels, font — uniformly without touching the SVG.
+  const SIZE = 182;
   // One pixel smaller than the ring's inner edge so a single-pixel
   // amber border sits between the radar and the hour ring (filled by
   // a circle in the SVG below, matching the outer rim color).
-  const MINIMAP_PX = 202;
-  const MINIMAP_INSET = (SIZE - MINIMAP_PX) / 2; // 29
+  const MINIMAP_PX = 141;
+  const MINIMAP_INSET = (SIZE - MINIMAP_PX) / 2;
 
   // SVG coordinates for the outer clock face. The ring sits between
   // RING_INNER and RING_OUTER; the hour labels float at LABEL_RADIUS
