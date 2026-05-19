@@ -22,14 +22,10 @@
   import { CLASS_SPELLS } from '../classSpells';
   import { chat, closeChat, openChat } from '../chat.svelte';
   import { fireClickIndicator } from '../clickIndicator.svelte';
-  import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
+  import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, tick } from '@kassandra/simulation';
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
-  import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../simulation/constants';
-  import { dispatch } from '../simulation/input';
-  import { currentHour } from '../simulation/systems/time';
-  import { tick } from '../simulation/tick';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
   import Beasts from './Beasts.svelte';
   import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';

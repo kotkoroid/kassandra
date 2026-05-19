@@ -2,8 +2,8 @@
   import { chat, toggleChat } from '../chat.svelte';
   import { CLASS_SPELLS } from '../classSpells';
   import { selection } from '../selection.svelte';
-  import { dispatch } from '../simulation/input';
-  import { world } from '../simulation/world.svelte';
+  import { dispatch } from '@kassandra/simulation';
+  import { world } from '../world.svelte';
 
   function toggleAutoAttack() {
     dispatch(world, { kind: 'set_auto_attack', on: !world.player.autoAttack });

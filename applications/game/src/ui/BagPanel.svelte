@@ -1,10 +1,9 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import { bagOpen } from '../bag.svelte';
-  import { getItem, LARS_ID, type ItemId } from '../items';
+  import { getItem, LARS_ID, type ItemId, dispatch } from '@kassandra/simulation';
   import Player from '../scene/Player.svelte';
-  import { dispatch } from '../simulation/input';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 
   // Max coins droppable in one go from the UI. Matches the spec.
   const DROP_MAX = 50;

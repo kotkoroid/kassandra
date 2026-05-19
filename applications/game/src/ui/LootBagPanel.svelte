@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { getItem, type ItemId } from '../items';
+  import { getItem, type ItemId, dispatch } from '@kassandra/simulation';
   import { lootBagOpen } from '../lootBagOpen.svelte';
-  import { dispatch } from '../simulation/input';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 
   interface Stack {
     id: ItemId;

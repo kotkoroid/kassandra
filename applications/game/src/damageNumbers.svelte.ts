@@ -3,7 +3,7 @@
 // systems don't have to know anything about how (or whether) the
 // numbers are rendered — turning them off is a one-line change.
 
-import { subscribe } from './simulation/events';
+import { subscribe } from '@kassandra/simulation';
 
 export interface DamagePop {
   id: number;

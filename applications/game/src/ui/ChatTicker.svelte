@@ -11,8 +11,8 @@
 
   import { onMount } from 'svelte';
   import { chat } from '../chat.svelte';
-  import type { ChatMessage } from '../simulation/types';
-  import { world } from '../simulation/world.svelte';
+  import type { ChatMessage } from '@kassandra/simulation';
+  import { world } from '../world.svelte';
 
   const TTL_MS = 5000;
   const FADE_MS = 600;

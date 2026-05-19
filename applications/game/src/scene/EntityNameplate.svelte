@@ -1,7 +1,7 @@
 <script lang="ts">
   import { HTML } from '@threlte/extras';
   import { settings } from '../settings.svelte';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 
   // Floating `Level X | Name` label + hp bar shared by every world
   // entity (Player keeps its own variant because of the chat

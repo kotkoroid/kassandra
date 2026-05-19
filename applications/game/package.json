@@ -10,6 +10,8 @@
     "types:check": "svelte-check --tsconfig ./tsconfig.app.json"
   },
   "dependencies": {
+    "@kassandra/protocol": "workspace:*",
+    "@kassandra/simulation": "workspace:*",
     "@threlte/core": "8.1.4",
     "@threlte/extras": "9.4.1",
     "alchemy": "2.0.0-beta.40",

@@ -13,11 +13,9 @@
   import { T, useTask } from '@threlte/core';
   import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
   import { hover } from '../hover.svelte';
-  import { getMonster } from '../monsters';
+  import { getMonster, dispatch, type Entity, type EntityKind } from '@kassandra/simulation';
   import { selection } from '../selection.svelte';
-  import { dispatch } from '../simulation/input';
-  import type { Entity, EntityKind } from '../simulation/types';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import type { PartDef } from './entityMeshDefs';
 

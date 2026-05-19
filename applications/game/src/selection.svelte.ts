@@ -8,9 +8,13 @@
 // 'player' covering the local character — which never appears in
 // `world.entities` because it has its own slot.
 
-import { getMonster, MONSTER_JANNA, MONSTER_TROLLER } from './monsters';
-import { getEffectiveStat } from './simulation/stats';
-import { world } from './simulation/world.svelte';
+import {
+  getMonster,
+  MONSTER_JANNA,
+  MONSTER_TROLLER,
+  getEffectiveStat,
+} from '@kassandra/simulation';
+import { world } from './world.svelte';
 
 export type SelectionId = 'player' | string;
 

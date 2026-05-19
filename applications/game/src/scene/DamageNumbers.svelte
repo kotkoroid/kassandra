@@ -2,7 +2,7 @@
   import { useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
   import { DAMAGE_TTL, damageNumbers, pruneDamageNumbers } from '../damageNumbers.svelte';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 
   // Total vertical rise (world units) over a popup's lifetime.
   const RISE = 1.4;

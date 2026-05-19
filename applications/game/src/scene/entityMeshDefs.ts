@@ -48,14 +48,7 @@ export interface PartDef {
 }
 
 // Local-matrix factory: position + Euler rotation, scale 1.
-function local(
-  px: number,
-  py: number,
-  pz: number,
-  rx = 0,
-  ry = 0,
-  rz = 0,
-): Matrix4 {
+function local(px: number, py: number, pz: number, rx = 0, ry = 0, rz = 0): Matrix4 {
   return new Matrix4().compose(
     new Vector3(px, py, pz),
     new Quaternion().setFromEuler(new Euler(rx, ry, rz)),
@@ -67,8 +60,8 @@ function local(
 // One invisible cylinder per entity kind used as a uniform click target.
 // Sized to generously cover the entity's silhouette so targeting feels
 // consistent regardless of which body part the cursor lands on.
-const WOLF_HITBOX_GEO   = new CylinderGeometry(0.5, 0.5, 1.0, 8);
-const BEAR_HITBOX_GEO   = new CylinderGeometry(0.65, 0.65, 1.5, 8);
+const WOLF_HITBOX_GEO = new CylinderGeometry(0.5, 0.5, 1.0, 8);
+const BEAR_HITBOX_GEO = new CylinderGeometry(0.65, 0.65, 1.5, 8);
 const SPIDER_HITBOX_GEO = new CylinderGeometry(0.38, 0.38, 0.42, 8);
 
 // ── Wolf ─────────────────────────────────────────────────────────────────
@@ -88,7 +81,12 @@ export const WOLF_DEFS: PartDef[] = [
   { geo: WOLF_HITBOX_GEO, mat: HITBOX_MAT, castShadow: false, locals: [local(0, 0.5, 0)] },
   { geo: WOLF_BODY_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.5, 0)] },
   { geo: WOLF_BELLY_GEO, mat: FUR_WOLF_BELLY_MAT, castShadow: true, locals: [local(0, 0.32, 0)] },
-  { geo: WOLF_NECK_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.62, 0.38, 0.3, 0, 0)] },
+  {
+    geo: WOLF_NECK_GEO,
+    mat: FUR_WOLF_MAT,
+    castShadow: true,
+    locals: [local(0, 0.62, 0.38, 0.3, 0, 0)],
+  },
   { geo: WOLF_HEAD_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.72, 0.55)] },
   { geo: WOLF_SNOUT_GEO, mat: FUR_WOLF_DARK_MAT, castShadow: true, locals: [local(0, 0.66, 0.74)] },
   { geo: WOLF_NOSE_GEO, mat: NEAR_BLACK_MAT, castShadow: false, locals: [local(0, 0.7, 0.84)] },
@@ -121,7 +119,12 @@ export const WOLF_DEFS: PartDef[] = [
       local(0.15, 0.18, 0.3),
     ],
   },
-  { geo: WOLF_TAIL_GEO, mat: FUR_WOLF_MAT, castShadow: true, locals: [local(0, 0.62, -0.5, -0.5, 0, 0)] },
+  {
+    geo: WOLF_TAIL_GEO,
+    mat: FUR_WOLF_MAT,
+    castShadow: true,
+    locals: [local(0, 0.62, -0.5, -0.5, 0, 0)],
+  },
 ];
 
 // ── Bear ─────────────────────────────────────────────────────────────────

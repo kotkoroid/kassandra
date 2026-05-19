@@ -3,11 +3,9 @@
   import { characterOpen } from '../character.svelte';
   import { CLASS_SPELLS, MAX_CLASS_SPELLS } from '../classSpells';
   import { PLAYER_CLASSES } from '../cosmetics';
-  import { getItem } from '../items';
+  import { getItem, EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX, getEffectiveStat } from '@kassandra/simulation';
   import Player from '../scene/Player.svelte';
-  import { EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX } from '../simulation/constants';
-  import { getEffectiveStat } from '../simulation/stats';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 
   const player = world.player;
 

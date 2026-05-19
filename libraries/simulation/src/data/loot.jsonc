@@ -1,0 +1,68 @@
+// Loot tables keyed by MonsterId. Each entry maps an ItemId to its
+// drop rule. The simplest form is a bare number — that's a flat
+// drop chance in percent (0–100), one item on success. The object
+// form supports a count or a [min, max] range, used for currency
+// stacks like Lars.
+//
+// Rolls are independent: every line is evaluated on its own when
+// the monster dies, so a kill may yield several distinct items.
+{
+  "MONSTER000001": {
+    // Wolf — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 3 },
+    "ITEM000002": 10,
+    "ITEM000003": 1,
+  },
+  "MONSTER000002": {
+    // Bear — L3
+    "ITEM000001": { "chance": 50, "min": 3, "max": 8 },
+    "ITEM000003": 50,
+    "ITEM000004": 20,
+  },
+  "MONSTER000003": {
+    // Swain — L10
+    "ITEM000001": { "chance": 50, "min": 10, "max": 25 },
+  },
+  "MONSTER000004": {
+    // Spider — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 2 },
+  },
+  "MONSTER000005": {
+    // Small Spider — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 2 },
+  },
+  "MONSTER000006": {
+    // Tiny Spider — L1
+    "ITEM000001": { "chance": 50, "count": 1 },
+  },
+  "MONSTER000007": {
+    // Troller — L1
+    "ITEM000001": { "chance": 50, "min": 1, "max": 3 },
+  },
+  // MONSTER000008 (Janna) and MONSTER000009 (Azir) are ALLY — no drops.
+  "MONSTER000010": {
+    // Angendal Bowmaiden — L8
+    "ITEM000001": { "chance": 60, "min": 5, "max": 14 },
+    "ITEM000003": 8,
+    "ITEM000004": 2,
+  },
+  "MONSTER000011": {
+    // Angendal Warmaiden — L7
+    "ITEM000001": { "chance": 55, "min": 4, "max": 10 },
+    "ITEM000003": 12,
+    "ITEM000004": 3,
+  },
+  "MONSTER000012": {
+    // Angendal Shadowmaiden — L10
+    "ITEM000001": { "chance": 65, "min": 8, "max": 20 },
+    "ITEM000003": 18,
+    "ITEM000004": 6,
+    "ITEM000005": 1,
+  },
+  "MONSTER000013": {
+    // Angendal Spellmaiden — L9
+    "ITEM000001": { "chance": 60, "min": 7, "max": 16 },
+    "ITEM000003": 12,
+    "ITEM000004": 5,
+  },
+}

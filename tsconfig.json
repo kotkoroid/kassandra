@@ -4,6 +4,12 @@
   "references": [
     {
       "path": "./applications/game"
+    },
+    {
+      "path": "./libraries/simulation"
+    },
+    {
+      "path": "./libraries/protocol"
     }
   ]
 }

@@ -2,8 +2,8 @@
   import { T } from '@threlte/core';
   import { hover } from '../hover.svelte';
   import { selection } from '../selection.svelte';
-  import { dispatch } from '../simulation/input';
-  import { world } from '../simulation/world.svelte';
+  import { dispatch } from '@kassandra/simulation';
+  import { world } from '../world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import {
     CRIMSON_MAT,

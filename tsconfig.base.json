@@ -15,7 +15,9 @@
     "noPropertyAccessFromIndexSignature": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "@applications/game/*": ["./applications/game/*"]
+      "@applications/game/*": ["./applications/game/*"],
+      "@kassandra/simulation": ["./libraries/simulation/src/index.ts"],
+      "@kassandra/protocol": ["./libraries/protocol/src/index.ts"]
     },
     "resolveJsonModule": true,
     "resolvePackageJsonExports": true,

@@ -1,7 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["src/**/*.ts", "src/**/*.svelte"],
-  "references": [],
+  "references": [
+    {
+      "path": "../../libraries/simulation"
+    },
+    {
+      "path": "../../libraries/protocol"
+    }
+  ],
   "compilerOptions": {
     "outDir": "./tsbuild",
     "types": ["bun", "vite/client", "svelte"]

@@ -3,9 +3,8 @@
 // is the panel open, what is currently typed, which channel is
 // selected — live here.
 
-import { dispatch } from './simulation/input';
-import type { ChatChannel } from './simulation/types';
-import { world } from './simulation/world.svelte';
+import { dispatch, type ChatChannel } from '@kassandra/simulation';
+import { world } from './world.svelte';
 
 export type { ChatChannel };
 

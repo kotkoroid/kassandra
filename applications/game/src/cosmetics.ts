@@ -1,7 +1,7 @@
 // Character cosmetic palettes shared by CharacterCreation, the
 // Player view, and any future portrait UI. Pure data — no state.
 
-import type { ArmorColor, HairColor, PlayerClass } from './simulation/types';
+import type { ArmorColor, HairColor, PlayerClass } from '@kassandra/simulation';
 
 export const HAIR_COLORS: Record<HairColor, string> = {
   black: '#1a1a1a',

@@ -5,7 +5,7 @@
   // BuffTile.svelte so each tile can own its own $effect.
 
   import BuffTile from './BuffTile.svelte';
-  import { world } from '../simulation/world.svelte';
+  import { world } from '../world.svelte';
 </script>
 
 <div class="absolute top-4 left-4 flex gap-1">

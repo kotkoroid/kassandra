@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
-  import { currentHour, isNightHour } from '../simulation/systems/time';
-  import { world } from '../simulation/world.svelte';
+  import { CITY_RADIUS, CITY_X, CITY_Z, currentHour, isNightHour } from '@kassandra/simulation';
+  import { world } from '../world.svelte';
 
   const player = world.player;
 

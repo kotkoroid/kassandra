@@ -1,7 +1,7 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { getMonster } from '../monsters';
-  import { world } from '../simulation/world.svelte';
+  import { getMonster } from '@kassandra/simulation';
+  import { world } from '../world.svelte';
   import Troller from './Troller.svelte';
 
   // Death.svelte is now a pure view: blood pool, troller(s), bug.

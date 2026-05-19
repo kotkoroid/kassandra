@@ -1,0 +1,161 @@
+// Canonical monster catalog. Each entry is keyed by a MONSTER######
+// id. Attributes are *absolute* stats for a freshly spawned monster
+// (not bonuses on top of a base — monsters have no base profile).
+{
+  "MONSTER000001": {
+    "name": "Wolf",
+    "type": "ANIMAL",
+    "level": 1,
+    "attributes": {
+      "damage": 1,
+      "attackSpeed": 0.5,
+      "health": 3,
+      "healthRegen": 0.3,
+      "experience": 5,
+    },
+  },
+  "MONSTER000002": {
+    "name": "Bear",
+    "type": "ANIMAL",
+    "level": 3,
+    "attributes": {
+      "damage": 3,
+      "attackSpeed": 0.2,
+      "health": 10,
+      "healthRegen": 0.3,
+      "experience": 20,
+    },
+  },
+  "MONSTER000003": {
+    "name": "Swain",
+    "type": "ANIMAL",
+    "level": 10,
+    "attributes": {
+      "damage": 10,
+      "attackSpeed": 0.5,
+      "health": 20,
+      "healthRegen": 5,
+      "experience": 50,
+    },
+  },
+  "MONSTER000004": {
+    "name": "Spider",
+    "type": "ANIMAL",
+    "level": 1,
+    "attributes": {
+      "damage": 3,
+      "attackSpeed": 1,
+      "health": 5,
+      "healthRegen": 0,
+      "experience": 10,
+    },
+  },
+  "MONSTER000005": {
+    "name": "Small Spider",
+    "type": "ANIMAL",
+    "level": 1,
+    "attributes": {
+      "damage": 2,
+      "attackSpeed": 1.25,
+      "health": 3,
+      "healthRegen": 0,
+      "experience": 5,
+    },
+  },
+  "MONSTER000006": {
+    "name": "Tiny Spider",
+    "type": "ANIMAL",
+    "level": 1,
+    "attributes": {
+      "damage": 1,
+      "attackSpeed": 1.5,
+      "health": 3,
+      "healthRegen": 0,
+      "experience": 3,
+    },
+  },
+  "MONSTER000007": {
+    "name": "Troller",
+    "type": "ANIMAL",
+    "level": 1,
+    "attributes": {
+      "damage": 0,
+      "attackSpeed": 0,
+      "health": 3,
+      "healthRegen": 0,
+      "experience": 5,
+    },
+  },
+  "MONSTER000008": {
+    "name": "Janna",
+    "type": "ALLY",
+    "level": 10,
+    "attributes": {
+      "damage": 0,
+      "attackSpeed": 0,
+      "health": 50,
+      "healthRegen": 0,
+      "experience": 0,
+    },
+  },
+  "MONSTER000009": {
+    "name": "Azir",
+    "type": "ALLY",
+    "level": 20,
+    "attributes": {
+      "damage": 0,
+      "attackSpeed": 0,
+      "health": 500,
+      "healthRegen": 0,
+      "experience": 0,
+    },
+  },
+  "MONSTER000010": {
+    "name": "Angendal Bowmaiden",
+    "type": "ANIMAL",
+    "level": 8,
+    "attributes": {
+      "damage": 8,
+      "attackSpeed": 0.6,
+      "health": 18,
+      "healthRegen": 2,
+      "experience": 40,
+    },
+  },
+  "MONSTER000011": {
+    "name": "Angendal Warmaiden",
+    "type": "ANIMAL",
+    "level": 7,
+    "attributes": {
+      "damage": 6,
+      "attackSpeed": 0.9,
+      "health": 22,
+      "healthRegen": 0.5,
+      "experience": 30,
+    },
+  },
+  "MONSTER000012": {
+    "name": "Angendal Shadowmaiden",
+    "type": "ANIMAL",
+    "level": 10,
+    "attributes": {
+      "damage": 9,
+      "attackSpeed": 0.7,
+      "health": 35,
+      "healthRegen": 1,
+      "experience": 60,
+    },
+  },
+  "MONSTER000013": {
+    "name": "Angendal Spellmaiden",
+    "type": "ANIMAL",
+    "level": 9,
+    "attributes": {
+      "damage": 14,
+      "attackSpeed": 0.35,
+      "health": 25,
+      "healthRegen": 3,
+      "experience": 55,
+    },
+  },
+}

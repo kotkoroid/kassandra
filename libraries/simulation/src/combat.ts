@@ -1,0 +1,227 @@
+// Damage application + per-kind death effects. Everything that
+// reduces an entity's hp routes through `applyDamageToEntity` so
+// death side-effects (loot, xp, spider split, troller bag drop)
+// happen in one place regardless of source.
+
+import { rollLoot } from './loot';
+import { getSpawnPoint } from './spawnPoints';
+import { EXP_PER_LEVEL, LOOT_BAG_TTL, SWORD_DOT_THRESHOLD, SWORD_REACH } from './constants';
+import { emit } from './events';
+import { spawnEntity, type SpiderKind } from './spawn';
+import { getEffectiveStat } from './stats';
+import type { Entity, World } from './types';
+import { isHostile, refreshLootBagFlags, removeEntity } from './util';
+import { grid } from './spatialGrid';
+import { genId } from './world';
+
+const SPIDER_CHILD_COUNT = 3;
+const SPIDER_CHILD_DIST = 0.4;
+
+export function applyDamageToEntity(
+  world: World,
+  index: number,
+  amount: number,
+  byPlayer: boolean,
+) {
+  const e = world.entities[index];
+  if (!e) return;
+  e.hp -= amount;
+  emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
+  if (e.hp <= 0) onEntityDeath(world, index, byPlayer);
+}
+
+// Entity-reference variant. Avoids holding an array index across
+// intermediate code that may splice. `indexOf` is O(N) but called only
+// on death (rare), and the subsequent splice is also O(N) — no extra cost.
+export function applyDamageToEntityRef(world: World, e: Entity, amount: number, byPlayer: boolean) {
+  // Look up canonical index before mutating so we always operate on
+  // world.entities[index] — the authoritative proxy. Comparing by id
+  // avoids Svelte 5 proxy-identity mismatches between entityById and
+  // entities array access paths.
+  const index = world.entities.findIndex((ent) => ent.id === e.id);
+  if (index < 0) return;
+  applyDamageToEntity(world, index, amount, byPlayer);
+}
+
+// Single chokepoint for damage taken by the player. Emits the popup
+// event AND attributes the damage to the named attacker so the
+// death-summary in world.death.attackers stays accurate without
+// every caller remembering to update it. A no-op while dead.
+export function applyDamageToPlayer(
+  world: World,
+  amount: number,
+  attacker: { monsterId: string; name: string },
+) {
+  if (!world.death.alive) return;
+  const before = world.player.health;
+  world.player.health = Math.max(0, before - amount);
+  const dealt = before - world.player.health;
+  if (dealt <= 0) return;
+  emit(world, {
+    kind: 'damage-dealt',
+    x: world.player.x,
+    z: world.player.z,
+    amount: dealt,
+    byPlayer: false,
+  });
+  if (world.death.fightStartedAt === null) {
+    world.death.fightStartedAt = world.time;
+  }
+  let entry = world.death.attackers.find((a) => a.monsterId === attacker.monsterId);
+  if (!entry) {
+    entry = { monsterId: attacker.monsterId, name: attacker.name, total: 0, hits: 0 };
+    world.death.attackers.push(entry);
+  }
+  entry.total += dealt;
+  entry.hits += 1;
+}
+
+function onEntityDeath(world: World, index: number, byPlayer: boolean) {
+  const e = world.entities[index];
+  if (!e) return;
+
+  if (byPlayer) {
+    // Loot bag at the kill site, stamped with the slayer as owner.
+    const drops = rollLoot(e.monsterId);
+    if (drops.length > 0) {
+      const owner = world.player.name;
+      const bag = {
+        id: genId(world, 'lb'),
+        x: e.x,
+        z: e.z,
+        items: drops.map((itemId) => ({ owner, itemId })),
+        ttl: LOOT_BAG_TTL,
+        isDeathBag: false,
+        bagXp: 0,
+        isCurrencyOnly: false,
+        larsCount: 0,
+        hasOwnerItems: false,
+      };
+      world.lootBags.push(bag);
+      refreshLootBagFlags(world, bag);
+    }
+    grantExperience(world, e.experience);
+  }
+
+  // Spider split — happens regardless of who delivered the killing
+  // blow. Big → medium x3, medium → tiny x3. Tiny is terminal.
+  if (e.kind === 'spider-big') {
+    splitSpider(world, 'spider-medium', e.x, e.z);
+  } else if (e.kind === 'spider-medium') {
+    splitSpider(world, 'spider-tiny', e.x, e.z);
+  }
+
+  // Troller drop: when killed mid-delivery, the player's bag lands
+  // wherever the troller fell so it stays reclaimable.
+  if (e.kind === 'troller' && e.carriesPlayerBag) {
+    dropPlayerDeathBag(world, e.x, e.z);
+  }
+
+  if (world.player.engageTargetId === e.id) {
+    world.player.engageTargetId = null;
+  }
+
+  // Schedule respawn for fixed-spawn-point entities whose point
+  // defines a respawnDelay. Spider-split children, troller, and
+  // /m chat spawns have no spawnPointId so they fall through.
+  if (e.spawnPointId !== undefined) {
+    const point = getSpawnPoint(e.spawnPointId);
+    if (point.respawnDelay !== undefined) {
+      world.spawnPointRespawnAt.set(e.spawnPointId, world.time + point.respawnDelay);
+    }
+  }
+
+  emit(world, {
+    kind: 'entity-killed',
+    entityKind: e.kind,
+    monsterId: e.monsterId,
+    x: e.x,
+    z: e.z,
+    byPlayer,
+  });
+  removeEntity(world, index);
+}
+
+function splitSpider(world: World, kind: SpiderKind, x: number, z: number) {
+  for (let i = 0; i < SPIDER_CHILD_COUNT; i++) {
+    const angle = (i / SPIDER_CHILD_COUNT) * Math.PI * 2;
+    spawnEntity(
+      world,
+      kind,
+      x + Math.cos(angle) * SPIDER_CHILD_DIST,
+      z + Math.sin(angle) * SPIDER_CHILD_DIST,
+      angle,
+    );
+  }
+}
+
+// Drop the player's death-bag at (x, z), transferring whatever XP
+// the troller (or the world.death state) was carrying onto the bag.
+// Bag pickup logic recovers BAG_XP_RECOVERY of that XP.
+export function dropPlayerDeathBag(world: World, x: number, z: number) {
+  const bag = {
+    id: genId(world, 'lb'),
+    x,
+    z,
+    items: [],
+    ttl: LOOT_BAG_TTL,
+    isDeathBag: true,
+    bagXp: world.death.bagXp,
+    isCurrencyOnly: false,
+    larsCount: 0,
+    hasOwnerItems: false,
+  };
+  world.lootBags.push(bag);
+  // Empty death bag — flags default to false; no items to scan.
+  // The bag carries the XP from here on — clear the staging slot
+  // so a future death doesn't double-count it.
+  world.death.bagXp = 0;
+}
+
+export function grantExperience(world: World, amount: number) {
+  if (amount <= 0) return;
+  const p = world.player;
+  p.experience += amount;
+  while (p.experience >= EXP_PER_LEVEL) {
+    p.experience -= EXP_PER_LEVEL;
+    p.level += 1;
+    p.health = getEffectiveStat(p, 'maxHealth');
+    p.mana = getEffectiveStat(p, 'maxMana');
+    p.stamina = getEffectiveStat(p, 'maxStamina');
+    p.levelUpTrigger += 1;
+    emit(world, { kind: 'player-level-up', level: p.level });
+  }
+}
+
+// Per-swing stamina cost. Drained from `world.player.stamina`,
+// clamped at zero — running out doesn't gate the swing itself,
+// it just leaves the player exhausted so movement slows until
+// stamina regenerates.
+const SLASH_STAMINA_COST = 5;
+
+// Sword swing: damages every hostile entity inside the forward cone
+// within sword reach. The spatial grid narrows candidates to the cell
+// neighbourhood around the player — typically 0-3 entities — instead of
+// scanning all entities in the world.
+export function slash(world: World) {
+  const p = world.player;
+  p.slashTrigger++;
+  p.lastSlashTime = world.time;
+  p.stamina = Math.max(0, p.stamina - SLASH_STAMINA_COST);
+  if (p.stamina === 0) p.exhausted = true;
+
+  const fwdX = Math.sin(p.rotation);
+  const fwdZ = Math.cos(p.rotation);
+  const damage = getEffectiveStat(p, 'damage');
+
+  for (const e of grid.queryRadius(p.x, p.z, SWORD_REACH)) {
+    if (!isHostile(e.kind)) continue;
+    const dx = e.x - p.x;
+    const dz = e.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.001) continue;
+    const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
+    if (dot < SWORD_DOT_THRESHOLD) continue;
+    applyDamageToEntityRef(world, e, damage, true);
+  }
+}

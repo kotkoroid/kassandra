@@ -9,8 +9,9 @@
 // load (imported from main.ts) so it captures errors from the
 // very first frame.
 
-import type { ChatMessage } from './simulation/types';
-import { genId, world } from './simulation/world.svelte';
+import type { ChatMessage } from '@kassandra/simulation';
+import { genId } from '@kassandra/simulation';
+import { world } from './world.svelte';
 
 // Hard cap on a single chat line. Long enough to keep most error
 // messages readable; short enough that a stack trace doesn't push
@@ -86,10 +87,7 @@ console.warn = (...args: unknown[]) => {
 // is usually the thrown value; `event.message` is the formatted
 // fallback for cross-origin scripts where the value is hidden.
 window.addEventListener('error', (event) => {
-  const value =
-    event.error !== undefined && event.error !== null
-      ? event.error
-      : event.message;
+  const value = event.error !== undefined && event.error !== null ? event.error : event.message;
   push('Error', [value]);
 });
 

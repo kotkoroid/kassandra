@@ -10,7 +10,7 @@
       type PlayerClass,
   } from '../cosmetics';
   import Player from '../scene/Player.svelte';
-  import { resetWorld, world } from '../simulation/world.svelte';
+  import { resetWorld, world } from '../world.svelte';
 
   // Local alias so the existing form bindings stay readable.
   const player = world.player;
