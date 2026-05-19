@@ -9,8 +9,8 @@
 // `world.entities` because it has its own slot.
 
 import { getMonster, MONSTER_JANNA, MONSTER_TROLLER } from './monsters';
-import { getEffectiveStat } from './sim/stats';
-import { world } from './sim/world.svelte';
+import { getEffectiveStat } from './simulation/stats';
+import { world } from './simulation/world.svelte';
 
 export type SelectionId = 'player' | string;
 

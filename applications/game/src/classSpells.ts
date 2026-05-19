@@ -4,7 +4,7 @@
 // until each class's gameplay identity lands. The 6-slot ceiling
 // is enforced by the UI, not the type.
 
-import type { Ability, PlayerClass } from './sim/types';
+import type { Ability, PlayerClass } from './simulation/types';
 
 export const MAX_CLASS_SPELLS = 6;
 

@@ -9,8 +9,8 @@
 // load (imported from main.ts) so it captures errors from the
 // very first frame.
 
-import type { ChatMessage } from './sim/types';
-import { genId, world } from './sim/world.svelte';
+import type { ChatMessage } from './simulation/types';
+import { genId, world } from './simulation/world.svelte';
 
 // Hard cap on a single chat line. Long enough to keep most error
 // messages readable; short enough that a stack trace doesn't push

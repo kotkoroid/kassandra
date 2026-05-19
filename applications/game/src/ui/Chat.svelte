@@ -8,7 +8,7 @@
     historyPrev,
     sendMessage,
   } from '../chat.svelte';
-  import { world } from '../sim/world.svelte';
+  import { world } from '../simulation/world.svelte';
 
   // Messages live on the world (so multiplayer would broadcast
   // them); everything else in this panel is local UI state.

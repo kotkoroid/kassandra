@@ -1,8 +1,8 @@
 <script lang="ts">
   import { T } from '@threlte/core';
   import { getMonster, MONSTER_BOWMAIDEN, MONSTER_SPELLMAIDEN } from '../monsters';
-  import { PROJECTILE_HEIGHT } from '../sim/constants';
-  import { world } from '../sim/world.svelte';
+  import { PROJECTILE_HEIGHT } from '../simulation/constants';
+  import { world } from '../simulation/world.svelte';
   import Bowmaiden from './Bowmaiden.svelte';
   import Enemy from './Enemy.svelte';
   import {

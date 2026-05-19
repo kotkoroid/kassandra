@@ -5,9 +5,9 @@
   import { PLAYER_CLASSES } from '../cosmetics';
   import { getItem } from '../items';
   import Player from '../scene/Player.svelte';
-  import { EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX } from '../sim/constants';
-  import { getEffectiveStat } from '../sim/stats';
-  import { world } from '../sim/world.svelte';
+  import { EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX } from '../simulation/constants';
+  import { getEffectiveStat } from '../simulation/stats';
+  import { world } from '../simulation/world.svelte';
 
   const player = world.player;
 

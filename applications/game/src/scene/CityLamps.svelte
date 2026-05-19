@@ -12,9 +12,9 @@
     CITY_Z,
     isGateAngle,
   } from '../city';
-  import { isNightHour, currentHour } from '../sim/systems/time';
-  import { NIGHT_END, NIGHT_START } from '../sim/constants';
-  import { world } from '../sim/world.svelte';
+  import { isNightHour, currentHour } from '../simulation/systems/time';
+  import { NIGHT_END, NIGHT_START } from '../simulation/constants';
+  import { world } from '../simulation/world.svelte';
   import Lamp from './Lamp.svelte';
 
   // Six lamps, offset by half-spacing so none of them sit on

@@ -11,8 +11,8 @@
   // races that left the tile invisible — keeping everything in the
   // template removes that whole class of bug.
 
-  import type { ActiveEffect } from '../sim/types';
-  import { world } from '../sim/world.svelte';
+  import type { ActiveEffect } from '../simulation/types';
+  import { world } from '../simulation/world.svelte';
 
   interface Props {
     effect: ActiveEffect;

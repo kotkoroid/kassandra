@@ -3,8 +3,8 @@
   import { bagOpen } from '../bag.svelte';
   import { getItem, LARS_ID, type ItemId } from '../items';
   import Player from '../scene/Player.svelte';
-  import { dispatch } from '../sim/input';
-  import { world } from '../sim/world.svelte';
+  import { dispatch } from '../simulation/input';
+  import { world } from '../simulation/world.svelte';
 
   // Max coins droppable in one go from the UI. Matches the spec.
   const DROP_MAX = 50;

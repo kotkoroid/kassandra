@@ -1,7 +1,7 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { HEAL_CIRCLE_RADIUS } from '../sim/constants';
-  import { world } from '../sim/world.svelte';
+  import { HEAL_CIRCLE_RADIUS } from '../simulation/constants';
+  import { world } from '../simulation/world.svelte';
   import Azir from './Azir.svelte';
   import Healer from './Healer.svelte';
 </script>

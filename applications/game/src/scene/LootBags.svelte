@@ -2,9 +2,9 @@
   import { T, useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
   import { lootBagOpen } from '../lootBagOpen.svelte';
-  import { BAG_PICKUP_RADIUS } from '../sim/constants';
-  import { dispatch } from '../sim/input';
-  import { world } from '../sim/world.svelte';
+  import { BAG_PICKUP_RADIUS } from '../simulation/constants';
+  import { dispatch } from '../simulation/input';
+  import { world } from '../simulation/world.svelte';
   import Coin from './Coin.svelte';
   import { rockSnapshot, type RockSnapshot } from './rockPhysics';
 

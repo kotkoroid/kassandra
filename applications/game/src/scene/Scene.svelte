@@ -25,11 +25,11 @@
   import { CITY_RADIUS, CITY_X, CITY_Z } from '../city';
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
-  import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../sim/constants';
-  import { dispatch } from '../sim/input';
-  import { currentHour } from '../sim/systems/time';
-  import { tick } from '../sim/tick';
-  import { world } from '../sim/world.svelte';
+  import { BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START } from '../simulation/constants';
+  import { dispatch } from '../simulation/input';
+  import { currentHour } from '../simulation/systems/time';
+  import { tick } from '../simulation/tick';
+  import { world } from '../simulation/world.svelte';
   import Beasts from './Beasts.svelte';
   import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';

@@ -15,9 +15,9 @@
   import { hover } from '../hover.svelte';
   import { getMonster } from '../monsters';
   import { selection } from '../selection.svelte';
-  import { dispatch } from '../sim/input';
-  import type { Entity, EntityKind } from '../sim/types';
-  import { world } from '../sim/world.svelte';
+  import { dispatch } from '../simulation/input';
+  import type { Entity, EntityKind } from '../simulation/types';
+  import { world } from '../simulation/world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import type { PartDef } from './entityMeshDefs';
 

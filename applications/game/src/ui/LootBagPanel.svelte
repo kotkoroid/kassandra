@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getItem, type ItemId } from '../items';
   import { lootBagOpen } from '../lootBagOpen.svelte';
-  import { dispatch } from '../sim/input';
-  import { world } from '../sim/world.svelte';
+  import { dispatch } from '../simulation/input';
+  import { world } from '../simulation/world.svelte';
 
   interface Stack {
     id: ItemId;

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { STAMINA_MAX } from '../sim/constants';
-  import { dispatch } from '../sim/input';
-  import { getEffectiveStat } from '../sim/stats';
-  import { world } from '../sim/world.svelte';
+  import { STAMINA_MAX } from '../simulation/constants';
+  import { dispatch } from '../simulation/input';
+  import { getEffectiveStat } from '../simulation/stats';
+  import { world } from '../simulation/world.svelte';
 
   // Local alias so the existing markup stays readable.
   const player = world.player;
@@ -16,7 +16,7 @@
   import { characterOpen } from '../character.svelte';
   import { lootBagOpen } from '../lootBagOpen.svelte';
   import { socialOpen } from '../social.svelte';
-  import { BAG_PICKUP_RADIUS } from '../sim/constants';
+  import { BAG_PICKUP_RADIUS } from '../simulation/constants';
   import BagPanel from './BagPanel.svelte';
   import BuffBar from './BuffBar.svelte';
   import CharacterPanel from './CharacterPanel.svelte';

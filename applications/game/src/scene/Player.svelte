@@ -14,8 +14,8 @@
   } from './materials';
   import { selection } from '../selection.svelte';
   import { settings } from '../settings.svelte';
-  import { getEffectiveStat } from '../sim/stats';
-  import { world } from '../sim/world.svelte';
+  import { getEffectiveStat } from '../simulation/stats';
+  import { world } from '../simulation/world.svelte';
 
   // Player.svelte is reused by the CharacterCreation preview, which
   // controls position/rotation/slashTrigger externally — so those

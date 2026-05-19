@@ -8,7 +8,7 @@
 // respawn iff the point has a `respawnDelay`.
 
 import rawCatalog from './data/spawnPoints.jsonc?raw';
-import type { EntityKind } from './sim/types';
+import type { EntityKind } from './simulation/types';
 
 export interface SpawnPoint {
   kind: Exclude<EntityKind, 'troller'>;
