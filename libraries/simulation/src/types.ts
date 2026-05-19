@@ -8,6 +8,8 @@ import type { ItemId } from './items';
 import type { MonsterId } from './monsters';
 import type { Rng } from './rng';
 
+export type PlayerId = string;
+
 // --- Stat modifier stack ----------------------------------------
 
 export type StatKey =
@@ -411,7 +413,8 @@ export interface World {
   // Monotonic tick counter, useful for generating stable ids.
   tick: number;
 
-  player: Player;
+  players: Map<PlayerId, Player>;
+  localPlayerId: PlayerId;
   entities: Entity[];
   // O(1) entity lookup by id. Mirrors `entities` — kept in sync by
   // spawn.ts (add) and removeEntity() in util.ts (remove).

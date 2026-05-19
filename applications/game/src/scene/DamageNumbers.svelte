@@ -15,13 +15,14 @@
   // <HTML> portal overhead is pure waste.
   const CULL_DIST_SQ = 40 * 40;
 
-  const visiblePops = $derived(
-    damageNumbers.list.filter((pop) => {
-      const dx = pop.x - world.player.x;
-      const dz = pop.z - world.player.z;
+  const visiblePops = $derived.by(() => {
+    const dnp = world.players.get(world.localPlayerId)!;
+    return damageNumbers.list.filter((pop) => {
+      const dx = pop.x - dnp.x;
+      const dz = pop.z - dnp.z;
       return dx * dx + dz * dz <= CULL_DIST_SQ;
-    }),
-  );
+    });
+  });
 
   useTask(() => {
     pruneDamageNumbers(world.time);

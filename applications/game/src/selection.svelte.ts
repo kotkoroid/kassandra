@@ -35,13 +35,14 @@ export function getSelectionView(): SelectionView | null {
   const id = selection.value;
   if (!id) return null;
   if (id === 'player') {
+    const player = world.players.get(world.localPlayerId)!;
     return {
-      name: world.player.name,
-      level: world.player.level,
-      hp: world.player.health,
-      maxHp: getEffectiveStat(world.player, 'maxHealth'),
-      x: world.player.x,
-      z: world.player.z,
+      name: player.name,
+      level: player.level,
+      hp: player.health,
+      maxHp: getEffectiveStat(player, 'maxHealth'),
+      x: player.x,
+      z: player.z,
     };
   }
   const entity = world.entityById.get(id);

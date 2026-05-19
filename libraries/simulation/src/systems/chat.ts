@@ -32,14 +32,15 @@ export function applyChat(world: World, text: string, channel: ChatChannel) {
   }
 
   // Broadcast a normal message + raise the speech bubble.
+  const player = world.players.get(world.localPlayerId)!;
   world.chat.messages.push({
     id: genId(world, 'm'),
-    author: world.player.name || 'You',
+    author: player.name || 'You',
     text: trimmed,
     channel,
   });
-  world.player.saying = trimmed;
-  world.player.sayExpiresAt = world.time + SAY_TTL;
+  player.saying = trimmed;
+  player.sayExpiresAt = world.time + SAY_TTL;
 }
 
 function pushSystem(world: World, text: string, channel: ChatChannel) {
@@ -113,10 +114,11 @@ function cmdEffect(
   const id = genId(world, 'eff');
   const now = world.time;
   const expiresAt = now + durationSec;
-  const source = world.player.name || 'Debug';
+  const player = world.players.get(world.localPlayerId)!;
+  const source = player.name || 'Debug';
 
   if (kind === 'buff') {
-    world.player.effects.push({
+    player.effects.push({
       id,
       name: 'Strength of the Hunt',
       icon: '⚔️',
@@ -131,14 +133,14 @@ function cmdEffect(
     });
     // Math side. Tagged with effectId so the math row is dropped in
     // lockstep when the effect expires.
-    world.player.modifiers.push({
+    player.modifiers.push({
       stat: 'damage',
       kind: 'add',
       value: 3,
       expiresAt,
       effectId: id,
     });
-    world.player.modifiers.push({
+    player.modifiers.push({
       stat: 'attackSpeed',
       kind: 'add',
       value: 0.1,
@@ -148,7 +150,7 @@ function cmdEffect(
     return [`Applied buff: Strength of the Hunt (${durationSec}s)`];
   }
 
-  world.player.effects.push({
+  player.effects.push({
     id,
     name: 'Bleeding',
     icon: '🩸',
@@ -158,7 +160,7 @@ function cmdEffect(
     source,
     stats: [{ label: 'Health Regen', delta: -2 }],
   });
-  world.player.modifiers.push({
+  player.modifiers.push({
     stat: 'healthRegen',
     kind: 'add',
     value: -2,
@@ -169,12 +171,13 @@ function cmdEffect(
 }
 
 function cmdClearBuffs(world: World): string[] {
-  const n = world.player.effects.length;
+  const player = world.players.get(world.localPlayerId)!;
+  const n = player.effects.length;
   // Drop both the presentation row and any math rows linked to one
   // of the cleared effects. Untagged modifiers (e.g. equipment) stay.
-  const clearedIds = new Set(world.player.effects.map((e) => e.id));
-  world.player.effects = [];
-  world.player.modifiers = world.player.modifiers.filter(
+  const clearedIds = new Set(player.effects.map((e) => e.id));
+  player.effects = [];
+  player.modifiers = player.modifiers.filter(
     (m) => m.effectId === undefined || !clearedIds.has(m.effectId),
   );
   return [n === 0 ? 'No active effects' : `Cleared ${n} effect(s)`];
@@ -207,11 +210,12 @@ function cmdSpawnMonster(
   if (!id) return [`Unknown monster id: ${idArg}`];
   const count = parseCount(countArg);
   if (typeof count === 'string') return [count];
+  const player = world.players.get(world.localPlayerId)!;
   for (let i = 0; i < count; i++) {
     const angle = world.rng.next() * Math.PI * 2;
     const dist = 4 + world.rng.next() * 4;
-    const x = world.player.x + Math.cos(angle) * dist;
-    const z = world.player.z + Math.sin(angle) * dist;
+    const x = player.x + Math.cos(angle) * dist;
+    const z = player.z + Math.sin(angle) * dist;
     if (!spawnByMonsterId(world, id, x, z)) {
       return [`Monster ${id} has no spawn handler`];
     }
@@ -224,9 +228,10 @@ function cmdKill(world: World, name: string | undefined): string[] {
   if (!name) return ['Usage: /kill [NAME]'];
   // Single-player today — only the local player is a candidate. The
   // name match keeps the shape ready for multiplayer.
-  if (world.player.name !== name) return [`No player named ${name}`];
+  const player = world.players.get(world.localPlayerId)!;
+  if (player.name !== name) return [`No player named ${name}`];
   if (!world.death.alive) return [`${name} is already dead`];
-  world.player.health = 0;
+  player.health = 0;
   return [`Killed ${name}`];
 }
 
@@ -238,7 +243,8 @@ function cmdGold(
   if (!nameArg || amountArg === undefined) {
     return ['Usage: /gold [NAME] [+/-AMOUNT]'];
   }
-  if (world.player.name !== nameArg) return [`No player named ${nameArg}`];
+  const player = world.players.get(world.localPlayerId)!;
+  if (player.name !== nameArg) return [`No player named ${nameArg}`];
 
   // Parse the signed amount. Leading + adds (the default), leading -
   // subtracts; a bare number is treated as +. Only integers; the
@@ -256,12 +262,12 @@ function cmdGold(
   }
   const delta = sign * n;
 
-  const have = world.player.lars;
+  const have = player.lars;
   if (have + delta < 0) {
     return [`${nameArg} only has ${have} Lars (cannot remove ${n})`];
   }
-  world.player.lars = have + delta;
-  return [`${nameArg}: ${have} → ${world.player.lars} Lars (${delta >= 0 ? '+' : ''}${delta})`];
+  player.lars = have + delta;
+  return [`${nameArg}: ${have} → ${player.lars} Lars (${delta >= 0 ? '+' : ''}${delta})`];
 }
 
 // Silent removal of every hostile entity inside `radius` of the
@@ -275,8 +281,9 @@ function cmdPurge(world: World, radiusArg: string | undefined): string[] {
   const r = radiusArg === undefined ? PURGE_DEFAULT_RADIUS : Number.parseFloat(radiusArg);
   if (!Number.isFinite(r) || r <= 0) return [`Invalid radius: ${radiusArg}`];
   const r2 = r * r;
-  const px = world.player.x;
-  const pz = world.player.z;
+  const player = world.players.get(world.localPlayerId)!;
+  const px = player.x;
+  const pz = player.z;
   let removed = 0;
   // Reverse iteration — removeEntity splices, so indexes shift forward.
   for (let i = world.entities.length - 1; i >= 0; i--) {
@@ -285,8 +292,8 @@ function cmdPurge(world: World, radiusArg: string | undefined): string[] {
     const dx = e.x - px;
     const dz = e.z - pz;
     if (dx * dx + dz * dz > r2) continue;
-    if (world.player.engageTargetId === e.id) {
-      world.player.engageTargetId = null;
+    if (player.engageTargetId === e.id) {
+      player.engageTargetId = null;
     }
     removeEntity(world, i);
     removed++;
@@ -297,7 +304,8 @@ function cmdPurge(world: World, radiusArg: string | undefined): string[] {
 
 function cmdRespawn(world: World, name: string | undefined): string[] {
   if (!name) return ['Usage: /respawn [NAME]'];
-  if (world.player.name !== name) return [`No player named ${name}`];
+  const player = world.players.get(world.localPlayerId)!;
+  if (player.name !== name) return [`No player named ${name}`];
   if (world.death.alive) return [`${name} is already alive`];
   // Defer the actual revive to the death system so respawn-side
   // effects (city teleport, bug spawn) all run in one place.

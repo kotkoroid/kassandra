@@ -9,7 +9,7 @@
 </script>
 
 <div class="absolute top-4 left-4 flex gap-1">
-  {#each world.player.effects as effect (effect.id)}
+  {#each world.players.get(world.localPlayerId)!.effects as effect (effect.id)}
     <BuffTile {effect} />
   {/each}
 </div>

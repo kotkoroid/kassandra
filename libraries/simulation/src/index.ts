@@ -127,6 +127,7 @@ export { createRng, type Rng } from './rng';
 export type {
   World,
   Player,
+  PlayerId,
   Entity,
   EntityKind,
   Projectile,

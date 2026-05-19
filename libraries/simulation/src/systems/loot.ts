@@ -9,7 +9,7 @@ import { BAG_PICKUP_RADIUS, BAG_XP_RECOVERY } from '../constants';
 import type { World } from '../types';
 
 export function tickLootBags(world: World, dt: number) {
-  const p = world.player;
+  const p = world.players.get(world.localPlayerId)!;
   for (let i = world.lootBags.length - 1; i >= 0; i--) {
     const b = world.lootBags[i];
     if (!b) continue;

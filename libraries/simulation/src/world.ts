@@ -16,7 +16,7 @@ import {
   STAMINA_MAX,
 } from './constants';
 import { createRng } from './rng';
-import type { Player, World } from './types';
+import type { Player, PlayerId, World } from './types';
 
 function defaultPlayer(): Player {
   return {
@@ -63,11 +63,13 @@ function defaultPlayer(): Player {
 }
 
 export function createWorld(seed: number = Date.now() >>> 0): World {
+  const localPlayerId: PlayerId = crypto.randomUUID();
   const world: World = {
     rng: createRng(seed),
     time: 0,
     tick: 0,
-    player: defaultPlayer(),
+    localPlayerId,
+    players: new Map([[localPlayerId, defaultPlayer()]]),
     entities: [],
     entityById: new Map(),
     projectiles: [],

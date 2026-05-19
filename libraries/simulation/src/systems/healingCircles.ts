@@ -5,7 +5,7 @@ import { getEffectiveStat } from '../stats';
 import type { World } from '../types';
 
 export function tickHealingCircles(world: World, dt: number) {
-  const p = world.player;
+  const p = world.players.get(world.localPlayerId)!;
   for (let i = world.healingCircles.length - 1; i >= 0; i--) {
     const c = world.healingCircles[i];
     if (!c) continue;

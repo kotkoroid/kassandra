@@ -105,7 +105,7 @@ function tickMelee(
 
   // Player as candidate target. Water and the city both protect
   // them from melee aggro.
-  const p = world.player;
+  const p = world.players.get(world.localPlayerId)!;
   if (world.death.alive && !isInWaterAt(p.x, p.z) && !isInCity(p.x, p.z)) {
     bestDist = Math.hypot(e.x - p.x, e.z - p.z);
     bestX = p.x;
@@ -165,10 +165,11 @@ function tickMelee(
 // projectiles on attack-speed cadence. The city shields the player
 // here too — no targeting, no rotation tracking.
 function tickSwain(world: World, e: Entity, dt: number) {
-  const toPlayerX = world.player.x - e.x;
-  const toPlayerZ = world.player.z - e.z;
+  const swainPlayer = world.players.get(world.localPlayerId)!;
+  const toPlayerX = swainPlayer.x - e.x;
+  const toPlayerZ = swainPlayer.z - e.z;
 
-  if (!world.death.alive || isInCity(world.player.x, world.player.z)) {
+  if (!world.death.alive || isInCity(swainPlayer.x, swainPlayer.z)) {
     // Freeze rotation alongside the fire gate so it doesn't keep
     // staring at the city wall.
     return;
@@ -199,8 +200,9 @@ function tickSwain(world: World, e: Entity, dt: number) {
 // healing circle somewhere near herself. The circle's actual
 // effect lives in sim/systems/healingCircles.ts.
 function tickJanna(world: World, e: Entity, dt: number) {
-  const toPlayerX = world.player.x - e.x;
-  const toPlayerZ = world.player.z - e.z;
+  const jannaPlayer = world.players.get(world.localPlayerId)!;
+  const toPlayerX = jannaPlayer.x - e.x;
+  const toPlayerZ = jannaPlayer.z - e.z;
   e.rotation = Math.atan2(-toPlayerX, -toPlayerZ);
 
   const cooldown = (e.healCooldown ?? 0) - dt;

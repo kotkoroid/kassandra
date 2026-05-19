@@ -47,7 +47,8 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
   //    player's chunk window, so the player-centred snapshot is correct
   //    for every water check this tick.
   rebuildGrid(world.entities);
-  primeWaterCache(world.player.x, world.player.z);
+  const localPlayer = world.players.get(world.localPlayerId)!;
+  primeWaterCache(localPlayer.x, localPlayer.z);
 
   // 1. World clock first so other systems see the new time.
   tickTime(world, dt);
@@ -97,21 +98,22 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
 }
 
 function handleEvent(world: World, ev: SimEvent) {
+  const p = world.players.get(world.localPlayerId)!;
   switch (ev.kind) {
     case 'click_ground':
-      world.player.navTargetX = ev.x;
-      world.player.navTargetZ = ev.z;
-      world.player.engageTargetId = null;
-      world.player.engageActive = true;
+      p.navTargetX = ev.x;
+      p.navTargetZ = ev.z;
+      p.engageTargetId = null;
+      p.engageActive = true;
       break;
     case 'engage':
-      world.player.engageTargetId = ev.targetId;
-      world.player.engageActive = true;
-      world.player.navTargetX = null;
-      world.player.navTargetZ = null;
+      p.engageTargetId = ev.targetId;
+      p.engageActive = true;
+      p.navTargetX = null;
+      p.navTargetZ = null;
       break;
     case 'set_auto_attack':
-      world.player.autoAttack = ev.on;
+      p.autoAttack = ev.on;
       break;
     case 'manual_attack':
       world.pending.manualAttack = true;
@@ -123,23 +125,23 @@ function handleEvent(world: World, ev: SimEvent) {
       world.pending.respawn = true;
       break;
     case 'kill_player':
-      if (world.death.alive) world.player.health = 0;
+      if (world.death.alive) p.health = 0;
       break;
     case 'pickup_loot': {
       const bagIdx = world.lootBags.findIndex((b) => b.id === ev.bagId);
       if (bagIdx < 0) break;
       const bag = world.lootBags[bagIdx]!;
-      const playerName = world.player.name;
+      const playerName = p.name;
       let larsGained = 0;
       const kept = bag.items.filter((item) => {
         if (item.owner !== playerName) return true;
         // Currency items roll into the Lars counter; everything else
         // lands as an inventory slot in the player bag.
         if (item.itemId === LARS_ID) {
-          world.player.lars += 1;
+          p.lars += 1;
           larsGained += 1;
         } else {
-          world.player.bag.push(item.itemId);
+          p.bag.push(item.itemId);
         }
         return false;
       });
@@ -169,24 +171,24 @@ function handleEvent(world: World, ev: SimEvent) {
       // Stamps the player as owner so they can reclaim the coins.
       let have: number;
       if (ev.itemId === LARS_ID) {
-        have = world.player.lars;
+        have = p.lars;
       } else {
-        have = world.player.bag.reduce((n, id) => n + (id === ev.itemId ? 1 : 0), 0);
+        have = p.bag.reduce((n, id) => n + (id === ev.itemId ? 1 : 0), 0);
       }
       const n = Math.max(0, Math.min(ev.count, have));
       if (n === 0) break;
       if (ev.itemId === LARS_ID) {
-        world.player.lars -= n;
+        p.lars -= n;
       } else {
-        removeBagItems(world.player.bag, ev.itemId, n);
+        removeBagItems(p.bag, ev.itemId, n);
       }
-      const owner = world.player.name;
+      const owner = p.name;
       const items = [] as { owner: string; itemId: string }[];
       for (let i = 0; i < n; i++) items.push({ owner, itemId: ev.itemId });
       const newBag = {
         id: genId(world, 'lb'),
-        x: world.player.x,
-        z: world.player.z,
+        x: p.x,
+        z: p.z,
         items,
         ttl: LOOT_BAG_TTL,
         isDeathBag: false,

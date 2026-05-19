@@ -41,8 +41,9 @@
 
   const visible = $derived.by(() => {
     if (entityX === undefined || entityZ === undefined) return true;
-    const dx = world.player.x - entityX;
-    const dz = world.player.z - entityZ;
+    const np = world.players.get(world.localPlayerId)!;
+    const dx = np.x - entityX;
+    const dz = np.z - entityZ;
     return dx * dx + dz * dz <= CULL_DIST_SQ;
   });
 </script>

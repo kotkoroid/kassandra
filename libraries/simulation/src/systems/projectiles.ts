@@ -32,9 +32,10 @@ export function tickProjectiles(world: World, dt: number) {
     }
     if (consumed) continue;
 
+    const lp = world.players.get(world.localPlayerId)!;
     if (
       world.death.alive &&
-      Math.hypot(p.x - world.player.x, p.z - world.player.z) < PROJECTILE_HIT_RADIUS
+      Math.hypot(p.x - lp.x, p.z - lp.z) < PROJECTILE_HIT_RADIUS
     ) {
       applyDamageToPlayer(world, p.damage, {
         monsterId: p.ownerMonsterId,

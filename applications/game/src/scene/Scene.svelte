@@ -26,6 +26,7 @@
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { world } from '../world.svelte';
+  const player = $derived(world.players.get(world.localPlayerId)!);
   import Beasts from './Beasts.svelte';
   import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';
@@ -110,8 +111,8 @@
   // water drag and exhaustion without coupling the renderer to sim
   // constants.
   let playerSpeed = $state(0);
-  let lastPlayerX = world.player.x;
-  let lastPlayerZ = world.player.z;
+  let lastPlayerX = 0;
+  let lastPlayerZ = 0;
 
   // Inputs collected outside the sim: keys held, mouse drag for the
   // camera. The render loop steps the sim once per frame with the
@@ -187,11 +188,11 @@
 
     if (lightRef) {
       lightRef.position.set(
-        world.player.x + sunX * SUN_DISTANCE,
+        player.x + sunX * SUN_DISTANCE,
         Math.max(2, sunY * SUN_DISTANCE),
-        world.player.z - SUN_DISTANCE * 0.15,
+        player.z - SUN_DISTANCE * 0.15,
       );
-      lightRef.target.position.set(world.player.x, 0, world.player.z);
+      lightRef.target.position.set(player.x, 0, player.z);
       lightRef.target.updateMatrixWorld();
       const dayWeight = Math.max(0, sunY);
       lightRef.intensity = NIGHT_INTENSITY + dayWeight * PEAK_INTENSITY;
@@ -221,8 +222,8 @@
   // `hasOwnerItems` is precomputed on the bag so the inner check is
   // O(1) instead of scanning items per bag per keypress.
   function pickupNearbyOwnedLoot() {
-    const px = world.player.x;
-    const pz = world.player.z;
+    const px = player.x;
+    const pz = player.z;
     const radius2 = BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS;
     for (const bag of world.lootBags) {
       if (!bag.hasOwnerItems) continue;
@@ -245,7 +246,7 @@
       }
       if (!e.repeat && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
-        const spells = CLASS_SPELLS[world.player.playerClass] ?? [];
+        const spells = CLASS_SPELLS[player.playerClass] ?? [];
         const spell = spells[parseInt(e.key, 10) - 1];
         if (spell) {
           const targetId = selection.value && selection.value !== 'player' ? selection.value : null;
@@ -380,10 +381,10 @@
     tick(world, frameDt, { moveX: move.x, moveZ: move.z });
 
     // Speed in world-units/sec for the walk-cycle phase advance.
-    const dist = Math.hypot(world.player.x - lastPlayerX, world.player.z - lastPlayerZ);
+    const dist = Math.hypot(player.x - lastPlayerX, player.z - lastPlayerZ);
     playerSpeed = frameDt > 0.001 ? dist / frameDt : 0;
-    lastPlayerX = world.player.x;
-    lastPlayerZ = world.player.z;
+    lastPlayerX = player.x;
+    lastPlayerZ = player.z;
 
     // Imperative pose update for the local player. Bypasses Svelte's
     // prop-binding flush (which would land one render frame later)
@@ -392,18 +393,18 @@
     // model by one frame while walking and the player visibly "slides
     // back" relative to the camera.
     if (playerGroupRef) {
-      playerGroupRef.position.set(world.player.x, 0, world.player.z);
-      playerGroupRef.rotation.y = world.player.rotation;
+      playerGroupRef.position.set(player.x, 0, player.z);
+      playerGroupRef.rotation.y = player.rotation;
     }
 
     if (cameraRef) {
       const cp = Math.cos(cameraPitch);
       cameraRef.position.set(
-        world.player.x + Math.sin(cameraYaw) * cp * cameraDistance,
+        player.x + Math.sin(cameraYaw) * cp * cameraDistance,
         cameraTargetHeight + Math.sin(cameraPitch) * cameraDistance,
-        world.player.z + Math.cos(cameraYaw) * cp * cameraDistance,
+        player.z + Math.cos(cameraYaw) * cp * cameraDistance,
       );
-      lookAtTarget.set(world.player.x, cameraTargetHeight, world.player.z);
+      lookAtTarget.set(player.x, cameraTargetHeight, player.z);
       cameraRef.lookAt(lookAtTarget);
     }
 
@@ -527,16 +528,16 @@
 <CityLamps />
 
 <Player
-  position={[world.player.x, 0, world.player.z]}
-  rotation={world.player.rotation}
+  position={[player.x, 0, player.z]}
+  rotation={player.rotation}
   speed={playerSpeed}
-  slashTrigger={world.player.slashTrigger}
+  slashTrigger={player.slashTrigger}
   oncreate={(g) => {
     playerGroupRef = g;
   }}
 />
-<Water playerX={world.player.x} playerZ={world.player.z} />
-<Props playerX={world.player.x} playerZ={world.player.z} />
+<Water playerX={player.x} playerZ={player.z} />
+<Props playerX={player.x} playerZ={player.z} />
 <Enemies />
 <Healers />
 <LootBags />

@@ -79,8 +79,9 @@
     // that stray point. If the player is already there, the player
     // system's arrive logic clears navTarget on the next tick.
     dispatch(world, { kind: 'click_ground', x, z });
-    const dx = world.player.x - x;
-    const dz = world.player.z - z;
+    const lp = world.players.get(world.localPlayerId)!;
+    const dx = lp.x - x;
+    const dz = lp.z - z;
     if (dx * dx + dz * dz <= BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS) {
       lootBagOpen.value = bagId;
       lootBagOpen.pendingArrival = null;
@@ -95,8 +96,9 @@
     if (delta <= 0) return;
     pulse += delta;
 
-    const px = world.player.x;
-    const pz = world.player.z;
+    const lp2 = world.players.get(world.localPlayerId)!;
+    const px = lp2.x;
+    const pz = lp2.z;
     const playerVx = (px - lastPlayerX) / delta;
     const playerVz = (pz - lastPlayerZ) / delta;
     lastPlayerX = px;
