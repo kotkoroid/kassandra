@@ -4,6 +4,8 @@ import { world } from './world.svelte';
 export const realm = $state({ connected: false, partyId: null as string | null });
 
 let ws: WebSocket | null = null;
+// Events queued before the socket opens (e.g. create_character sent right after connect()).
+let pendingEvents: SimEvent[] = [];
 
 export function connect(id: string) {
   if (ws) {
@@ -27,6 +29,10 @@ export function connect(id: string) {
 
   ws.onopen = () => {
     realm.connected = true;
+    // Flush any events that were queued before the socket opened.
+    if (pendingEvents.length > 0) {
+      sendFrame(0, 0, pendingEvents.splice(0));
+    }
   };
 
   ws.onmessage = (e: MessageEvent<string>) => {
@@ -54,12 +60,17 @@ export function disconnect() {
     ws.close();
     ws = null;
   }
+  pendingEvents = [];
   realm.connected = false;
   realm.partyId = null;
 }
 
 export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    // Socket not open yet — queue events so they are sent once it opens.
+    if (events.length > 0) pendingEvents.push(...events);
+    return;
+  }
   const msg: ClientMessageType = {
     kind: 'inputs',
     tick: world.tick,
