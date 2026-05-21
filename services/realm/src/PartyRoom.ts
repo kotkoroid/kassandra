@@ -1,65 +1,63 @@
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
+import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
 import {
+  addPlayer,
   createWorld,
   tick,
   type ClientMessageType,
   type FrameInputs,
   type PlayerId,
-  type ServerMessageType,
+  type SimEvent,
   type World,
 } from '@kassandra/simulation-domain-library';
 
 // --- Snapshot builder -------------------------------------------
-// Maps the simulation World to the protocol Snapshot shape.
-// Done as plain JSON-compatible objects so JSON.stringify works
-// without going through the Effect Schema encoder.
 
 function worldToSnapshot(world: World) {
-  const players = Object.entries(world.players).map(([id, p]) => {
-    const isLocal = id === world.localPlayerId;
-    return {
-      id,
-      name: p.name,
-      sex: p.sex,
-      hairColor: p.hairColor,
-      armor: p.armor,
-      playerClass: p.playerClass,
-      level: p.level,
-      experience: p.experience,
-      health: p.health,
-      mana: p.mana,
-      stamina: p.stamina,
-      x: p.x,
-      z: p.z,
-      rotation: p.rotation,
-      attackSpeed: p.attackSpeed,
-      healthRegen: p.healthRegen,
-      damage: p.damage,
-      equippedWeaponId: p.equippedWeaponId,
-      bag: [...p.bag],
-      lars: p.lars,
-      skillPoints: p.skillPoints,
-      classSpellPoints: p.classSpellPoints,
-      autoAttack: p.autoAttack,
-      engageTargetId: p.engageTargetId,
-      engageActive: p.engageActive,
-      navTargetX: p.navTargetX,
-      navTargetZ: p.navTargetZ,
-      lastSlashTime: p.lastSlashTime,
-      slashTrigger: p.slashTrigger,
-      exhausted: p.exhausted,
-      saying: p.saying,
-      sayExpiresAt: p.sayExpiresAt,
-      levelUpTrigger: p.levelUpTrigger,
-      spellAnimTrigger: p.spellAnimTrigger,
-      spellCooldowns: { ...p.spellCooldowns },
-      activeSpell: p.activeSpell,
-      alive: isLocal ? world.death.alive : true,
-      deathX: isLocal ? world.death.deathX : 0,
-      deathZ: isLocal ? world.death.deathZ : 0,
-    };
-  });
+  const players = Object.entries(world.players).map(([id, p]) => ({
+    id,
+    name: p.name,
+    sex: p.sex,
+    hairColor: p.hairColor,
+    armor: p.armor,
+    playerClass: p.playerClass,
+    level: p.level,
+    experience: p.experience,
+    health: p.health,
+    mana: p.mana,
+    stamina: p.stamina,
+    x: p.x,
+    z: p.z,
+    rotation: p.rotation,
+    attackSpeed: p.attackSpeed,
+    healthRegen: p.healthRegen,
+    damage: p.damage,
+    equippedWeaponId: p.equippedWeaponId,
+    bag: [...p.bag],
+    lars: p.lars,
+    skillPoints: p.skillPoints,
+    classSpellPoints: p.classSpellPoints,
+    autoAttack: p.autoAttack,
+    engageTargetId: p.engageTargetId,
+    engageActive: p.engageActive,
+    navTargetX: p.navTargetX,
+    navTargetZ: p.navTargetZ,
+    lastSlashTime: p.lastSlashTime,
+    slashTrigger: p.slashTrigger,
+    exhausted: p.exhausted,
+    saying: p.saying,
+    sayExpiresAt: p.sayExpiresAt,
+    levelUpTrigger: p.levelUpTrigger,
+    spellAnimTrigger: p.spellAnimTrigger,
+    spellCooldowns: { ...p.spellCooldowns },
+    activeSpell: p.activeSpell,
+    // Death state is keyed to world.localPlayerId on the server.
+    // Only that player gets live death tracking; others show as alive.
+    alive: id === world.localPlayerId ? world.death.alive : true,
+    deathX: id === world.localPlayerId ? world.death.deathX : 0,
+    deathZ: id === world.localPlayerId ? world.death.deathZ : 0,
+  }));
 
   return {
     kind: 'snapshot',
@@ -126,15 +124,16 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
       const world = createWorld();
       const sessions = new Map<string, { socket: Cloudflare.DurableWebSocket; playerId: PlayerId }>();
-      // Latest frame inputs per session, consumed at the top of each tick.
       const pendingInputs = new Map<string, FrameInputs>();
+      const pendingEvents = new Map<string, SimEvent[]>();
 
-      // Rehydrate in-memory session map after hibernation.
+      // Rehydrate session map after hibernation.
       for (const socket of yield* state.getWebSockets()) {
         const data = socket.deserializeAttachment<SessionData>();
         if (data) {
           sessions.set(data.sessionId, { socket, playerId: data.playerId });
           pendingInputs.set(data.sessionId, { moveX: 0, moveZ: 0 });
+          pendingEvents.set(data.sessionId, []);
         }
       }
 
@@ -152,20 +151,20 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         lastTickAt = Date.now();
         tickInterval = setInterval(() => {
           const now = Date.now();
-          // Cap dt so a long pause doesn't cause a physics explosion.
           const dt = Math.min((now - lastTickAt) / 1000, 1 / 5);
           lastTickAt = now;
 
-          // Phase 3: route the first connected player's inputs to the sim.
-          // Full per-player input dispatch comes in a later phase.
-          let inputs: FrameInputs = { moveX: 0, moveZ: 0 };
-          for (const v of pendingInputs.values()) {
-            inputs = v;
-            break;
+          // Build per-player inputs and events from pending maps.
+          const allInputs: Record<PlayerId, FrameInputs> = {};
+          const allEvents: Record<PlayerId, SimEvent[]> = {};
+          for (const [sid, { playerId }] of sessions) {
+            allInputs[playerId] = pendingInputs.get(sid) ?? { moveX: 0, moveZ: 0 };
+            allEvents[playerId] = pendingEvents.get(sid) ?? [];
+            pendingInputs.set(sid, { moveX: 0, moveZ: 0 });
+            pendingEvents.set(sid, []);
           }
-          pendingInputs.forEach((_, k) => pendingInputs.set(k, { moveX: 0, moveZ: 0 }));
 
-          tick(world, dt, inputs);
+          tick(world, dt, allInputs, allEvents);
           broadcast(JSON.stringify(worldToSnapshot(world)));
         }, 50); // 20 Hz
       }
@@ -176,20 +175,33 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         tickInterval = null;
       }
 
-      // Resume the loop if sessions survived hibernation.
       if (sessions.size > 0) startTickLoop();
 
       return {
         fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const url = new URL(request.url, 'http://localhost');
+          // Client passes its locally-generated UUID so both sides
+          // agree on the player identity without an extra roundtrip.
+          const playerId: PlayerId = url.searchParams.get('playerId') ?? crypto.randomUUID();
+
           const [response, socket] = yield* Cloudflare.upgrade();
+
           const sessionId = crypto.randomUUID();
-          // First connection re-uses the world's local player id so the
-          // existing simulation systems work without modification.
-          const playerId = sessions.size === 0 ? world.localPlayerId : crypto.randomUUID();
           const data: SessionData = { sessionId, playerId };
           socket.serializeAttachment(data);
           sessions.set(sessionId, { socket, playerId });
           pendingInputs.set(sessionId, { moveX: 0, moveZ: 0 });
+          pendingEvents.set(sessionId, []);
+
+          // Add the player slot; create_character will fill in identity.
+          addPlayer(world, playerId);
+          // First player to connect anchors localPlayerId for world systems
+          // (death tracking, monster proximity, NPC chat).
+          if (Object.keys(world.players).length === 1) {
+            world.localPlayerId = playerId;
+          }
+
           startTickLoop();
           return response;
         }),
@@ -208,10 +220,29 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             return;
           }
           if (parsed.kind !== 'inputs') return;
+
           pendingInputs.set(data.sessionId, { moveX: parsed.moveX, moveZ: parsed.moveZ });
-          for (const event of parsed.events) {
-            world.inputQueue.push(event);
+
+          // Handle create_character directly — it mutates player identity
+          // and must not be deferred into perPlayerEvents.
+          const regularEvents: SimEvent[] = [];
+          for (const ev of parsed.events) {
+            if (ev.kind === 'create_character') {
+              const p = world.players[data.playerId];
+              if (p) {
+                p.name = ev.name;
+                p.sex = ev.sex;
+                p.hairColor = ev.hairColor;
+                p.armor = ev.armor;
+                p.playerClass = ev.playerClass;
+              }
+            } else {
+              regularEvents.push(ev);
+            }
           }
+
+          const existing = pendingEvents.get(data.sessionId) ?? [];
+          pendingEvents.set(data.sessionId, [...existing, ...regularEvents]);
         }),
 
         webSocketClose: Effect.fnUntraced(function* (
@@ -223,6 +254,11 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           if (data) {
             sessions.delete(data.sessionId);
             pendingInputs.delete(data.sessionId);
+            pendingEvents.delete(data.sessionId);
+            delete world.players[data.playerId];
+            // Re-anchor localPlayerId to any remaining player.
+            const remaining = Object.keys(world.players)[0];
+            if (remaining) world.localPlayerId = remaining;
           }
           if (sessions.size === 0) stopTickLoop();
           yield* ws.close(code, reason);

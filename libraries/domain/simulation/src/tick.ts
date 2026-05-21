@@ -1,9 +1,7 @@
-// The single simulation entry point. `tick` advances the world by
-// one variable-sized step. On the client we call it once per render
-// frame with `dt = frameDt`, so render and sim are aligned by con-
-// struction — no interpolation, no fixed-step beating. A future
-// authoritative server would call `tick` on a fixed schedule with a
-// fixed dt; the same function works either way.
+// The authoritative simulation entry point. The realm Worker calls
+// `tick` on a fixed 20 Hz schedule. `allInputs` maps each connected
+// player's id to their movement vector for this frame; `perPlayerEvents`
+// carries the discrete SimEvents each client sent since the last tick.
 
 import { LARS_ID } from './items.ts';
 import { LOOT_BAG_TTL } from './constants.ts';
@@ -20,7 +18,7 @@ import { tickProjectiles } from './systems/projectiles.ts';
 import { tickSpawners } from './systems/spawners.ts';
 import { tickTime } from './systems/time.ts';
 import { castSpell, tickSpells } from './spells.ts';
-import type { FrameInputs, SimEvent, World } from './types.ts';
+import type { FrameInputs, PlayerId, SimEvent, World } from './types.ts';
 import { rebuildGrid } from './spatialGrid.ts';
 import { primeWaterCache } from './util.ts';
 import { genId, localPlayer } from './world.ts';
@@ -29,7 +27,14 @@ import { genId, localPlayer } from './world.ts';
 // catch-up after a tab unfreeze where frameDt could be seconds long.
 const MAX_STEP = 1 / 20;
 
-export function tick(world: World, dt: number, inputs: FrameInputs) {
+const NO_INPUT: FrameInputs = { moveX: 0, moveZ: 0 };
+
+export function tick(
+  world: World,
+  dt: number,
+  allInputs: Record<PlayerId, FrameInputs>,
+  perPlayerEvents: Record<PlayerId, SimEvent[]> = {},
+) {
   if (dt > MAX_STEP) dt = MAX_STEP;
 
   // 0. Per-tick caches — built before any system runs so every lookup
@@ -54,14 +59,23 @@ export function tick(world: World, dt: number, inputs: FrameInputs) {
   tickTime(world, dt);
   tickModifiers(world);
 
-  // 2. Drain queued events. Some set per-tick flags on world.pending
-  // that downstream systems read this same tick.
-  const events = world.inputQueue;
-  world.inputQueue = [];
-  for (const ev of events) handleEvent(world, ev);
+  // 2. Process per-player events. Temporarily swap localPlayerId so
+  //    handleEvent targets the right player record for each sender.
+  const savedId = world.localPlayerId;
+  for (const [pid, events] of Object.entries(perPlayerEvents)) {
+    if (!world.players[pid]) continue;
+    world.localPlayerId = pid;
+    for (const ev of events) handleEvent(world, ev);
+  }
+  world.localPlayerId = savedId;
 
-  // 3. Player input + movement + engage + slash cadence.
-  tickPlayer(world, dt, inputs);
+  // 3. Player input + movement for every connected player.
+  for (const [pid, inputs] of Object.entries(allInputs)) {
+    if (!world.players[pid]) continue;
+    world.localPlayerId = pid;
+    tickPlayer(world, dt, inputs);
+  }
+  world.localPlayerId = savedId;
 
   // 3b. Advance channelled spells (Rush dash lerp, Hail ticks).
   //     Runs after player movement so the channel overrides position.

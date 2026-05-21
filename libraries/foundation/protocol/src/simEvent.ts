@@ -7,6 +7,35 @@ export const ChatChannel = Schema.Union([
 ]);
 
 export const SimEvent = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('create_character'),
+    name: Schema.String,
+    sex: Schema.Union([Schema.Literal('male'), Schema.Literal('female')]),
+    hairColor: Schema.Union([
+      Schema.Literal('black'),
+      Schema.Literal('brown'),
+      Schema.Literal('blonde'),
+      Schema.Literal('red'),
+      Schema.Literal('gray'),
+      Schema.Literal('white'),
+    ]),
+    armor: Schema.Union([
+      Schema.Literal('silver'),
+      Schema.Literal('gold'),
+      Schema.Literal('black'),
+      Schema.Literal('brown'),
+      Schema.Literal('red'),
+      Schema.Literal('green'),
+      Schema.Literal('blue'),
+      Schema.Literal('white'),
+    ]),
+    playerClass: Schema.Union([
+      Schema.Literal('warrior'),
+      Schema.Literal('assassin'),
+      Schema.Literal('mage'),
+      Schema.Literal('bruiser'),
+    ]),
+  }),
   Schema.Struct({ kind: Schema.Literal('click_ground'), x: Schema.Number, z: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal('engage'), targetId: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('manual_attack') }),

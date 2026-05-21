@@ -155,7 +155,7 @@ export type {
 } from './types.ts';
 
 // --- World factory + helpers ---
-export { createWorld, genId, localPlayer } from './world.ts';
+export { addPlayer, createWorld, defaultPlayer, genId, localPlayer } from './world.ts';
 
 // --- Stats ---
 export { getEffectiveStat, tickModifiers } from './stats.ts';

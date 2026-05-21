@@ -11,15 +11,17 @@
   } from '../cosmetics';
   import { localPlayer } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
-  import { resetWorld, world } from '../world.svelte';
+  import { connect, sendFrame } from '../realm.svelte';
+  import { world } from '../world.svelte';
 
   // Local alias so the existing form bindings stay readable.
   const player = $derived(localPlayer(world));
 
   interface Props {
+    activePartyId: string;
     onCreate: () => void;
   }
-  let { onCreate }: Props = $props();
+  let { activePartyId, onCreate }: Props = $props();
 
   const NAMES = [
     'Aldric',
@@ -88,20 +90,15 @@
     if (!trimmed) return;
     if (activating) return; // ignore double-clicks during the animation
     activating = true;
-    // Hold the click for the duration of the platform's "powering
-    // up" ring spin before swapping to the game canvas.
     setTimeout(() => {
-      // Snapshot the chosen identity, reset the world to start a
-      // fresh run, then write the identity onto the new world.player
-      // before flipping views.
       const { sex, hairColor, armor, playerClass } = player;
-      resetWorld();
-      const newPlayer = localPlayer(world);
-      newPlayer.name = trimmed;
-      newPlayer.sex = sex;
-      newPlayer.hairColor = hairColor;
-      newPlayer.armor = armor;
-      newPlayer.playerClass = playerClass;
+      // Open WS connection; server will populate the world via snapshots.
+      connect(activePartyId);
+      // Send identity as the first ClientMessage so the server can spawn
+      // the player with the chosen appearance before the first tick.
+      sendFrame(0, 0, [
+        { kind: 'create_character', name: trimmed, sex, hairColor, armor, playerClass },
+      ]);
       onCreate();
     }, ACTIVATION_DURATION_MS);
   }

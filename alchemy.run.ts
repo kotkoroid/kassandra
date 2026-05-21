@@ -10,14 +10,17 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const realm = yield* Realm;
+
     const game = yield* Cloudflare.Vite('Game', {
       rootDir: './applications/game',
       compatibility: {
         flags: ['nodejs_compat'],
       },
+      env: {
+        VITE_REALM_URL: realm.url,
+      },
     });
-
-    const realm = yield* Realm;
 
     return {
       url: game.url,

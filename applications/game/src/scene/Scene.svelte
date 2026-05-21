@@ -22,7 +22,8 @@
   import { CLASS_SPELLS } from '../classSpells';
   import { chat, closeChat, openChat } from '../chat.svelte';
   import { fireClickIndicator } from '../clickIndicator.svelte';
-  import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, tick, localPlayer } from '@kassandra/simulation-domain-library';
+  import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, localPlayer } from '@kassandra/simulation-domain-library';
+  import { sendFrame } from '../realm.svelte';
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { world } from '../world.svelte';
@@ -370,19 +371,17 @@
     return { x: nx * cosY + nz * sinY, z: -nx * sinY + nz * cosY };
   }
 
-  useTask((frameDt) => {
-    // One sim step per frame, sized to the actual frame delta. Sim
-    // and render are aligned by construction — no interpolation, no
-    // fixed-step beating, no input-lag from a leftover accumulator.
-    // tick() caps frameDt internally so a tab unfreeze can't warp
-    // the simulation forward by seconds. Queued SimEvents are
-    // drained off world.inputQueue inside tick().
+  useTask((_frameDt) => {
+    // Drain events queued by dispatch() calls this frame and send them
+    // along with the movement vector to the realm server. The server
+    // runs the authoritative tick and broadcasts snapshots back.
     const move = computeMove();
-    tick(world, frameDt, { moveX: move.x, moveZ: move.z });
+    const events = world.inputQueue.splice(0);
+    sendFrame(move.x, move.z, events);
 
     // Speed in world-units/sec for the walk-cycle phase advance.
     const dist = Math.hypot(player.x - lastPlayerX, player.z - lastPlayerZ);
-    playerSpeed = frameDt > 0.001 ? dist / frameDt : 0;
+    playerSpeed = _frameDt > 0.001 ? dist / _frameDt : 0;
     lastPlayerX = player.x;
     lastPlayerZ = player.z;
 

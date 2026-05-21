@@ -24,7 +24,7 @@ export function localPlayer(world: World): Player {
   return p;
 }
 
-function defaultPlayer(): Player {
+export function defaultPlayer(): Player {
   return {
     name: '',
     sex: 'male',
@@ -107,6 +107,12 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     },
   };
   return world;
+}
+
+export function addPlayer(world: World, playerId: PlayerId): void {
+  if (!world.players[playerId]) {
+    world.players[playerId] = defaultPlayer();
+  }
 }
 
 // Cheap unique-id helper. Sim systems pass `world` and ask for an

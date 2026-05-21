@@ -4,10 +4,11 @@
   import Scene from './scene/Scene.svelte';
   import CharacterCreation from './ui/CharacterCreation.svelte';
   import Hud from './ui/Hud.svelte';
+  import PartySetup from './ui/PartySetup.svelte';
 
-  // Show character creation first; the canvas only mounts after the
-  // player clicks Create so game systems start with a fresh state.
-  let view = $state<'creation' | 'game'>('creation');
+  type View = 'party' | 'creation' | 'game';
+  let view = $state<View>('party');
+  let activePartyId = $state('');
 
   // Cap render DPR. Low-poly art doesn't benefit from the 2-3x fill
   // cost of native pixel density on Retina/4K — 1.5 is the sweet
@@ -16,8 +17,10 @@
 </script>
 
 <div class="stage">
-  {#if view === 'creation'}
-    <CharacterCreation onCreate={() => (view = 'game')} />
+  {#if view === 'party'}
+    <PartySetup onReady={(id) => { activePartyId = id; view = 'creation'; }} />
+  {:else if view === 'creation'}
+    <CharacterCreation {activePartyId} onCreate={() => (view = 'game')} />
   {:else}
     <Canvas shadows={PCFSoftShadowMap} toneMapping={ACESFilmicToneMapping} {dpr}>
       <Scene />
