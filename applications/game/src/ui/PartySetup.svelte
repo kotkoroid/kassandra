@@ -19,7 +19,8 @@
     creating = true;
     error = '';
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/parties`, {
+      const apiBase = import.meta.env.DEV ? '/api' : import.meta.env.VITE_API_URL;
+      const res = await fetch(`${apiBase}/parties`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error(`${res.status}`);
