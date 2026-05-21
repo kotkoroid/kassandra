@@ -16,6 +16,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
         changeOrigin: true,
       },
+      '/realm': {
+        target: 'http://realm.localhost:1337',
+        rewrite: (path) => path.replace(/^\/realm/, ''),
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

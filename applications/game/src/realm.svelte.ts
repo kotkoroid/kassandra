@@ -12,10 +12,14 @@ export function connect(id: string) {
   }
 
   realm.partyId = id;
-  const realmUrl = import.meta.env.VITE_REALM_URL.replace(/\/$/, '');
-  const wsUrl = realmUrl
-    .replace(/^http:\/\//, 'ws://')
-    .replace(/^https:\/\//, 'wss://');
+
+  // In dev, proxy through the game origin to avoid ad blocker blocks on
+  // realm.localhost. In production, connect directly to the realm URL.
+  const wsUrl = import.meta.env.DEV
+    ? `ws://${window.location.host}/realm`
+    : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
+        .replace(/^http:\/\//, 'ws://')
+        .replace(/^https:\/\//, 'wss://');
 
   ws = new WebSocket(
     `${wsUrl}/parties/${id}/ws?playerId=${encodeURIComponent(world.localPlayerId)}`,
