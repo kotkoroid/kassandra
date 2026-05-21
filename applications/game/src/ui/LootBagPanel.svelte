@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getItem, type ItemId, dispatch } from '@kassandra/simulation';
+  import { getItem, type ItemId, dispatch, localPlayer } from '@kassandra/simulation-domain-library';
   import { lootBagOpen } from '../lootBagOpen.svelte';
   import { world } from '../world.svelte';
 
@@ -49,7 +49,7 @@
   }
 
   const hasOwnedItems = $derived(
-    !!bag && bag.items.some((item) => item.owner === world.players[world.localPlayerId].name),
+    !!bag && bag.items.some((item) => item.owner === localPlayer(world).name),
   );
 </script>
 

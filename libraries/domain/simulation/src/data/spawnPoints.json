@@ -1,0 +1,26 @@
+{
+  "SPAWN000001": {
+    "kind": "azir",
+    "x": 2,
+    "z": 1.5,
+    "rotation": -2.214297
+  },
+  "SPAWN000002": {
+    "kind": "janna",
+    "x": 14,
+    "z": 8,
+    "respawnDelay": 120
+  },
+  "SPAWN000003": { "kind": "wolf", "x": -22, "z": -4, "respawnDelay": 60 },
+  "SPAWN000004": { "kind": "wolf", "x": -28, "z": 6, "respawnDelay": 60 },
+  "SPAWN000005": { "kind": "wolf", "x": -18, "z": 14, "respawnDelay": 60 },
+  "SPAWN000006": { "kind": "bear", "x": -34, "z": -16, "respawnDelay": 180 },
+  "SPAWN000007": { "kind": "bear", "x": 30, "z": 28, "respawnDelay": 180 },
+  "SPAWN000008": { "kind": "spider-big", "x": 22, "z": -18, "respawnDelay": 90 },
+  "SPAWN000009": { "kind": "spider-big", "x": 26, "z": -22, "respawnDelay": 90 },
+  "SPAWN000010": { "kind": "warmaiden", "x": -4, "z": -28, "respawnDelay": 120 },
+  "SPAWN000011": { "kind": "bowmaiden", "x": 4, "z": -32, "respawnDelay": 120 },
+  "SPAWN000012": { "kind": "shadowmaiden", "x": 8, "z": -26, "respawnDelay": 150 },
+  "SPAWN000013": { "kind": "spellmaiden", "x": -8, "z": -34, "respawnDelay": 150 },
+  "SPAWN000014": { "kind": "swain", "x": 6, "z": 30, "respawnDelay": 90 }
+}

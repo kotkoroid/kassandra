@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "outDir": "./tsbuild",
+    "types": ["bun"],
+    "allowImportingTsExtensions": true,
+    "emitDeclarationOnly": true
+  },
+  "references": [
+    {
+      "path": "../../libraries/domain/simulation/tsconfig.lib.json"
+    }
+  ]
+}

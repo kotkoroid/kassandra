@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "applications/*",
-    "libraries/*",
+    "libraries/domain/*",
+    "libraries/foundation/*",
     "orchestrators/*",
     "services/*"
   ],

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { getMonster } from '@kassandra/simulation';
+  import { getMonster } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
   import Troller from './Troller.svelte';
 

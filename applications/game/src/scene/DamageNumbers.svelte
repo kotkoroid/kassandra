@@ -2,6 +2,7 @@
   import { useTask } from '@threlte/core';
   import { HTML } from '@threlte/extras';
   import { DAMAGE_TTL, damageNumbers, pruneDamageNumbers } from '../damageNumbers.svelte';
+  import { localPlayer } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
 
   // Total vertical rise (world units) over a popup's lifetime.
@@ -16,7 +17,7 @@
   const CULL_DIST_SQ = 40 * 40;
 
   const visiblePops = $derived.by(() => {
-    const dnp = world.players[world.localPlayerId];
+    const dnp = localPlayer(world);
     return damageNumbers.list.filter((pop) => {
       const dx = pop.x - dnp.x;
       const dz = pop.z - dnp.z;

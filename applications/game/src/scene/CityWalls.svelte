@@ -24,7 +24,7 @@
     CITY_X,
     CITY_Z,
     isGateAngle,
-  } from '@kassandra/simulation';
+  } from '@kassandra/simulation-domain-library';
 
   const stone = '#9a9a9a';
   const stoneDark = '#6a6a6a';

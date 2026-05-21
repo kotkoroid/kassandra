@@ -1,0 +1,15 @@
+{
+  "name": "@kassandra/realm-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/Realm.ts",
+  "exports": {
+    ".": "./src/Realm.ts"
+  },
+  "dependencies": {
+    "@kassandra/simulation-domain-library": "workspace:*",
+    "alchemy": "2.0.0-beta.40",
+    "effect": "4.0.0-beta.66"
+  }
+}

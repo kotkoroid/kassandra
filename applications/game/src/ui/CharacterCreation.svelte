@@ -9,11 +9,12 @@
       PLAYER_CLASSES,
       type PlayerClass,
   } from '../cosmetics';
+  import { localPlayer } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
   import { resetWorld, world } from '../world.svelte';
 
   // Local alias so the existing form bindings stay readable.
-  const player = $derived(world.players[world.localPlayerId]);
+  const player = $derived(localPlayer(world));
 
   interface Props {
     onCreate: () => void;
@@ -95,7 +96,7 @@
       // before flipping views.
       const { sex, hairColor, armor, playerClass } = player;
       resetWorld();
-      const newPlayer = world.players[world.localPlayerId];
+      const newPlayer = localPlayer(world);
       newPlayer.name = trimmed;
       newPlayer.sex = sex;
       newPlayer.hairColor = hairColor;

@@ -11,7 +11,7 @@
   // races that left the tile invisible — keeping everything in the
   // template removes that whole class of bug.
 
-  import type { ActiveEffect } from '@kassandra/simulation';
+  import type { ActiveEffect } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
 
   interface Props {

@@ -1,4 +1,4 @@
-import { createWorld, type World } from '@kassandra/simulation';
+import { createWorld, type World } from '@kassandra/simulation-domain-library';
 export const world = $state<World>(createWorld());
 export function resetWorld(seed: number = Date.now() >>> 0) {
   const fresh = createWorld(seed);

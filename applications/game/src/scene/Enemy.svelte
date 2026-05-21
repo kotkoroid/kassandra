@@ -2,7 +2,7 @@
   import { T } from '@threlte/core';
   import { hover } from '../hover.svelte';
   import { selection } from '../selection.svelte';
-  import { dispatch } from '@kassandra/simulation';
+  import { dispatch } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';
   import {

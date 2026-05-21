@@ -10,7 +10,7 @@ export default defineConfig({
       {
         test: {
           name: 'simulation',
-          include: ['libraries/simulation/src/**/*.test.ts'],
+          include: ['libraries/domain/simulation/src/**/*.test.ts'],
           browser: {
             enabled: true,
             // TODO: Remove `never`: https://github.com/voidzero-dev/vite-plus/issues/1634

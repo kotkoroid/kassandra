@@ -15,7 +15,7 @@
     currentHour,
     NIGHT_END,
     NIGHT_START,
-  } from '@kassandra/simulation';
+  } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
   import Lamp from './Lamp.svelte';
 

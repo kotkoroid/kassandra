@@ -5,11 +5,14 @@
   // BuffTile.svelte so each tile can own its own $effect.
 
   import BuffTile from './BuffTile.svelte';
+  import { localPlayer } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
+
+  const player = $derived(localPlayer(world));
 </script>
 
 <div class="absolute top-4 left-4 flex gap-1">
-  {#each world.players[world.localPlayerId].effects as effect (effect.id)}
+  {#each player.effects as effect (effect.id)}
     <BuffTile {effect} />
   {/each}
 </div>

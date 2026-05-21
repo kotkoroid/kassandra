@@ -1,5 +1,6 @@
 <script lang="ts">
   import { HTML } from '@threlte/extras';
+  import { localPlayer } from '@kassandra/simulation-domain-library';
   import { settings } from '../settings.svelte';
   import { world } from '../world.svelte';
 
@@ -41,7 +42,7 @@
 
   const visible = $derived.by(() => {
     if (entityX === undefined || entityZ === undefined) return true;
-    const np = world.players[world.localPlayerId];
+    const np = localPlayer(world);
     const dx = np.x - entityX;
     const dz = np.z - entityZ;
     return dx * dx + dz * dz <= CULL_DIST_SQ;

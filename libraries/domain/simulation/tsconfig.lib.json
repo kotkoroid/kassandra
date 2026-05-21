@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "include": ["src/**/*", "src/**/*.json"],
+  "compilerOptions": {
+    "outDir": "./tsbuild",
+    "allowImportingTsExtensions": true,
+    "emitDeclarationOnly": true
+  },
+  "references": [
+    {
+      "path": "../../foundation/protocol/tsconfig.lib.json"
+    }
+  ]
+}

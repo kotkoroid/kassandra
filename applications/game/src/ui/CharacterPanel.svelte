@@ -3,11 +3,11 @@
   import { characterOpen } from '../character.svelte';
   import { CLASS_SPELLS, MAX_CLASS_SPELLS } from '../classSpells';
   import { PLAYER_CLASSES } from '../cosmetics';
-  import { getItem, EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX, getEffectiveStat } from '@kassandra/simulation';
+  import { getItem, EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX, getEffectiveStat, localPlayer } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
   import { world } from '../world.svelte';
 
-  const player = $derived(world.players[world.localPlayerId]);
+  const player = $derived(localPlayer(world));
 
   // Slow turntable so the portrait isn't static. The animation loop
   // only runs while the dialog is open.

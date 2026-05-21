@@ -28,8 +28,7 @@
       "name": "@kassandra/game-application",
       "version": "0.0.0",
       "dependencies": {
-        "@kassandra/protocol": "workspace:*",
-        "@kassandra/simulation": "workspace:*",
+        "@kassandra/simulation-domain-library": "workspace:*",
         "@threlte/core": "8.1.4",
         "@threlte/extras": "9.4.1",
         "alchemy": "2.0.0-beta.40",
@@ -48,13 +47,28 @@
         "vite": "8.0.13",
       },
     },
-    "libraries/protocol": {
-      "name": "@kassandra/protocol",
+    "libraries/domain/simulation": {
+      "name": "@kassandra/simulation-domain-library",
       "version": "0.0.0",
+      "dependencies": {
+        "@kassandra/protocol-foundation-library": "workspace:*",
+      },
     },
-    "libraries/simulation": {
-      "name": "@kassandra/simulation",
+    "libraries/foundation/protocol": {
+      "name": "@kassandra/protocol-foundation-library",
       "version": "0.0.0",
+      "dependencies": {
+        "effect": "4.0.0-beta.66",
+      },
+    },
+    "services/realm": {
+      "name": "@kassandra/realm-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@kassandra/simulation-domain-library": "workspace:*",
+        "alchemy": "2.0.0-beta.40",
+        "effect": "4.0.0-beta.66",
+      },
     },
   },
   "packages": {
@@ -472,9 +486,11 @@
 
     "@kassandra/game-application": ["@kassandra/game-application@workspace:applications/game"],
 
-    "@kassandra/protocol": ["@kassandra/protocol@workspace:libraries/protocol"],
+    "@kassandra/protocol-foundation-library": ["@kassandra/protocol-foundation-library@workspace:libraries/foundation/protocol"],
 
-    "@kassandra/simulation": ["@kassandra/simulation@workspace:libraries/simulation"],
+    "@kassandra/realm-service": ["@kassandra/realm-service@workspace:services/realm"],
+
+    "@kassandra/simulation-domain-library": ["@kassandra/simulation-domain-library@workspace:libraries/domain/simulation"],
 
     "@libsql/client": ["@libsql/client@0.17.3", "", { "dependencies": { "@libsql/core": "^0.17.3", "@libsql/hrana-client": "^0.10.0", "js-base64": "^3.7.5", "libsql": "^0.5.28", "promise-limit": "^2.7.0" } }, "sha512-HXk9wiAoJbKFbyBH4O+aEhN6ir5ERXuXvwE5OD2eR4/5RUa3Pw/8L9zrnVdU+iNJitRvisPWaIwmhkO3bH7giA=="],
 

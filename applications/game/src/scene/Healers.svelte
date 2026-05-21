@@ -1,6 +1,6 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { HEAL_CIRCLE_RADIUS } from '@kassandra/simulation';
+  import { HEAL_CIRCLE_RADIUS } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
   import Azir from './Azir.svelte';
   import Healer from './Healer.svelte';
@@ -20,7 +20,7 @@
       position={[entity.x, 0, entity.z]}
       rotation={entity.rotation}
       hpPercent={entity.hp / entity.maxHp}
-      saying={entity.saying}
+      saying={entity.saying ?? ''}
     />
   {/if}
 {/each}

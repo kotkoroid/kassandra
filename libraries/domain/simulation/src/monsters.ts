@@ -1,0 +1,43 @@
+import catalog from './data/monsters.json' with { type: 'json' };
+
+export type MonsterType = 'ANIMAL' | 'ALLY';
+
+export interface MonsterAttributes {
+  damage: number;
+  attackSpeed: number;
+  health: number;
+  healthRegen: number;
+  experience: number;
+}
+
+export interface Monster {
+  name: string;
+  type: MonsterType;
+  level: number;
+  attributes: MonsterAttributes;
+}
+
+export type MonsterId = string;
+
+export const MONSTERS: Record<MonsterId, Monster> = catalog as Record<MonsterId, Monster>;
+
+// Stable id constants so call sites don't sprinkle magic strings.
+export const MONSTER_WOLF: MonsterId = 'MONSTER000001';
+export const MONSTER_BEAR: MonsterId = 'MONSTER000002';
+export const MONSTER_SWAIN: MonsterId = 'MONSTER000003';
+export const MONSTER_SPIDER: MonsterId = 'MONSTER000004';
+export const MONSTER_SMALL_SPIDER: MonsterId = 'MONSTER000005';
+export const MONSTER_TINY_SPIDER: MonsterId = 'MONSTER000006';
+export const MONSTER_TROLLER: MonsterId = 'MONSTER000007';
+export const MONSTER_JANNA: MonsterId = 'MONSTER000008';
+export const MONSTER_AZIR: MonsterId = 'MONSTER000009';
+export const MONSTER_BOWMAIDEN: MonsterId = 'MONSTER000010';
+export const MONSTER_WARMAIDEN: MonsterId = 'MONSTER000011';
+export const MONSTER_SHADOWMAIDEN: MonsterId = 'MONSTER000012';
+export const MONSTER_SPELLMAIDEN: MonsterId = 'MONSTER000013';
+
+export function getMonster(id: MonsterId): Monster {
+  const m = MONSTERS[id];
+  if (!m) throw new Error(`Unknown monster: ${id}`);
+  return m;
+}

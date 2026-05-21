@@ -22,11 +22,11 @@
   import { CLASS_SPELLS } from '../classSpells';
   import { chat, closeChat, openChat } from '../chat.svelte';
   import { fireClickIndicator } from '../clickIndicator.svelte';
-  import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, tick } from '@kassandra/simulation';
+  import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, tick, localPlayer } from '@kassandra/simulation-domain-library';
   import { hover } from '../hover.svelte';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { world } from '../world.svelte';
-  const player = $derived(world.players[world.localPlayerId]);
+  const player = $derived(localPlayer(world));
   import Beasts from './Beasts.svelte';
   import ClickIndicator from './ClickIndicator.svelte';
   import Death from './Death.svelte';

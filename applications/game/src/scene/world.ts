@@ -1,5 +1,5 @@
 // Re-export passthrough. Procedural world-gen has moved to
-// @kassandra/simulation. Scene consumers (Props.svelte, Water.svelte)
+// @kassandra/simulation-domain-library. Scene consumers (Props.svelte, Water.svelte)
 // that import from './world' continue to work unchanged.
 export {
   CHUNK_SIZE,
@@ -11,4 +11,4 @@ export {
   type PropInstance,
   type PropType,
   type WaterPatch,
-} from '@kassandra/simulation';
+} from '@kassandra/simulation-domain-library';

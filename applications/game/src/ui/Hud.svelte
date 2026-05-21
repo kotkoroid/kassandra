@@ -1,10 +1,10 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { STAMINA_MAX, dispatch, getEffectiveStat } from '@kassandra/simulation';
+  import { STAMINA_MAX, dispatch, getEffectiveStat, localPlayer } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
 
   // Local alias so the existing markup stays readable.
-  const player = $derived(world.players[world.localPlayerId]);
+  const player = $derived(localPlayer(world));
   const death = world.death;
 
   function requestRespawn() {
@@ -14,7 +14,7 @@
   import { characterOpen } from '../character.svelte';
   import { lootBagOpen } from '../lootBagOpen.svelte';
   import { socialOpen } from '../social.svelte';
-  import { BAG_PICKUP_RADIUS } from '@kassandra/simulation';
+  import { BAG_PICKUP_RADIUS } from '@kassandra/simulation-domain-library';
   import BagPanel from './BagPanel.svelte';
   import BuffBar from './BuffBar.svelte';
   import CharacterPanel from './CharacterPanel.svelte';
@@ -34,8 +34,8 @@
       lootBagOpen.pendingArrival = null;
       return;
     }
-    const dx = world.players[world.localPlayerId].x - bag.x;
-    const dz = world.players[world.localPlayerId].z - bag.z;
+    const dx = player.x - bag.x;
+    const dz = player.z - bag.z;
     if (dx * dx + dz * dz <= BAG_PICKUP_RADIUS * BAG_PICKUP_RADIUS) {
       lootBagOpen.value = pendingId;
       lootBagOpen.pendingArrival = null;

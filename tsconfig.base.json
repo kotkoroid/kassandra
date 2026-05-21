@@ -16,8 +16,9 @@
     "noUncheckedIndexedAccess": true,
     "paths": {
       "@applications/game/*": ["./applications/game/*"],
-      "@kassandra/simulation": ["./libraries/simulation/src/index.ts"],
-      "@kassandra/protocol": ["./libraries/protocol/src/index.ts"]
+      "@kassandra/simulation-domain-library": ["./libraries/domain/simulation/src/index.ts"],
+      "@kassandra/protocol-foundation-library": ["./libraries/foundation/protocol/src/index.ts"],
+      "@kassandra/realm-service": ["./services/realm/src/Realm.ts"]
     },
     "resolveJsonModule": true,
     "resolvePackageJsonExports": true,

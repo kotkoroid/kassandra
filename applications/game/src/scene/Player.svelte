@@ -14,7 +14,7 @@
   } from './materials';
   import { selection } from '../selection.svelte';
   import { settings } from '../settings.svelte';
-  import { getEffectiveStat } from '@kassandra/simulation';
+  import { getEffectiveStat, localPlayer } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
 
   // Player.svelte is reused by the CharacterCreation preview, which
@@ -22,7 +22,7 @@
   // come in as props instead of reading the live world fields.
   // Cosmetic + identity bits (name, hair, armor, sex, level, level-
   // up trigger) read straight from world.player.
-  const player = $derived(world.players[world.localPlayerId]);
+  const player = $derived(localPlayer(world));
 
   interface Props {
     position: [number, number, number];

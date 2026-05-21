@@ -18,6 +18,12 @@
   let { position, rotation = 0, lit = 0 }: Props = $props();
 
   const bulb = '#f0c060';
+  const frameCorners: [number, number, number][] = [
+    [-0.085, 0, -0.085],
+    [0.085, 0, -0.085],
+    [-0.085, 0, 0.085],
+    [0.085, 0, 0.085],
+  ];
 </script>
 
 <T.Group {position} rotation.y={rotation}>
@@ -60,13 +66,8 @@
     </T.Mesh>
     <!-- Frame bars: thin black boxes hugging the four vertical edges
          so the lantern reads as caged. -->
-    {#each [
-      [-0.085, 0, -0.085],
-      [0.085, 0, -0.085],
-      [-0.085, 0, 0.085],
-      [0.085, 0, 0.085],
-    ] as p (`${p[0]},${p[2]}`)}
-      <T.Mesh position={[p[0], p[1], p[2]]} castShadow material={NEAR_BLACK_MAT}>
+    {#each frameCorners as p (`${p[0]},${p[2]}`)}
+      <T.Mesh position={p} castShadow material={NEAR_BLACK_MAT}>
         <T.BoxGeometry args={[0.025, 0.32, 0.025]} />
       </T.Mesh>
     {/each}

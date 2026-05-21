@@ -13,7 +13,7 @@
   import { T, useTask } from '@threlte/core';
   import { InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
   import { hover } from '../hover.svelte';
-  import { getMonster, dispatch, type Entity, type EntityKind } from '@kassandra/simulation';
+  import { getMonster, dispatch, type Entity, type EntityKind } from '@kassandra/simulation-domain-library';
   import { selection } from '../selection.svelte';
   import { world } from '../world.svelte';
   import EntityNameplate from './EntityNameplate.svelte';

@@ -3,10 +3,7 @@
   "include": ["src/**/*.ts", "src/**/*.svelte"],
   "references": [
     {
-      "path": "../../libraries/simulation"
-    },
-    {
-      "path": "../../libraries/protocol"
+      "path": "../../libraries/domain/simulation/tsconfig.lib.json"
     }
   ],
   "compilerOptions": {

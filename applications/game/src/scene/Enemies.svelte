@@ -1,6 +1,6 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import { getMonster, MONSTER_BOWMAIDEN, MONSTER_SPELLMAIDEN, PROJECTILE_HEIGHT } from '@kassandra/simulation';
+  import { getMonster, MONSTER_BOWMAIDEN, MONSTER_SPELLMAIDEN, PROJECTILE_HEIGHT } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
   import Bowmaiden from './Bowmaiden.svelte';
   import Enemy from './Enemy.svelte';

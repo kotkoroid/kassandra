@@ -9,8 +9,8 @@
 // load (imported from main.ts) so it captures errors from the
 // very first frame.
 
-import type { ChatMessage } from '@kassandra/simulation';
-import { genId } from '@kassandra/simulation';
+import type { ChatMessage } from '@kassandra/simulation-domain-library';
+import { genId } from '@kassandra/simulation-domain-library';
 import { world } from './world.svelte';
 
 // Hard cap on a single chat line. Long enough to keep most error

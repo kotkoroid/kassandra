@@ -13,7 +13,8 @@ import {
   MONSTER_JANNA,
   MONSTER_TROLLER,
   getEffectiveStat,
-} from '@kassandra/simulation';
+  localPlayer,
+} from '@kassandra/simulation-domain-library';
 import { world } from './world.svelte';
 
 export type SelectionId = 'player' | string;
@@ -35,7 +36,7 @@ export function getSelectionView(): SelectionView | null {
   const id = selection.value;
   if (!id) return null;
   if (id === 'player') {
-    const player = world.players[world.localPlayerId];
+    const player = localPlayer(world);
     return {
       name: player.name,
       level: player.level,
