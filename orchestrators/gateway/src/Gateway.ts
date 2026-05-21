@@ -15,7 +15,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 });
 
 export default class Gateway extends Cloudflare.Worker<Gateway>()(
-  'Gateway',
+  'Api',
   {
     main: import.meta.path,
     compatibility: {

@@ -19,7 +19,7 @@
     creating = true;
     error = '';
     try {
-      const res = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/parties`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/parties`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error(`${res.status}`);

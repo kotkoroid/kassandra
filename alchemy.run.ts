@@ -20,7 +20,7 @@ export default Alchemy.Stack(
         flags: ['nodejs_compat'],
       },
       env: {
-        VITE_GATEWAY_URL: gateway.url,
+        VITE_API_URL: gateway.url,
         VITE_REALM_URL: realm.url,
       },
     });
