@@ -61,6 +61,14 @@
         "effect": "4.0.0-beta.66",
       },
     },
+    "services/gateway": {
+      "name": "@kassandra/gateway-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "alchemy": "2.0.0-beta.40",
+        "effect": "4.0.0-beta.66",
+      },
+    },
     "services/realm": {
       "name": "@kassandra/realm-service",
       "version": "0.0.0",
@@ -485,6 +493,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@kassandra/game-application": ["@kassandra/game-application@workspace:applications/game"],
+
+    "@kassandra/gateway-service": ["@kassandra/gateway-service@workspace:services/gateway"],
 
     "@kassandra/protocol-foundation-library": ["@kassandra/protocol-foundation-library@workspace:libraries/foundation/protocol"],
 

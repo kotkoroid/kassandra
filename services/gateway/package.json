@@ -1,0 +1,14 @@
+{
+  "name": "@kassandra/gateway-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/Gateway.ts",
+  "exports": {
+    ".": "./src/Gateway.ts"
+  },
+  "dependencies": {
+    "alchemy": "2.0.0-beta.40",
+    "effect": "4.0.0-beta.66"
+  }
+}

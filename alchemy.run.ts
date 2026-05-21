@@ -1,6 +1,7 @@
 import * as Alchemy from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
+import Gateway from './services/gateway/src/Gateway.ts';
 import Realm from './services/realm/src/Realm.ts';
 
 export default Alchemy.Stack(
@@ -10,6 +11,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const gateway = yield* Gateway;
     const realm = yield* Realm;
 
     const game = yield* Cloudflare.Vite('Game', {
@@ -18,12 +20,14 @@ export default Alchemy.Stack(
         flags: ['nodejs_compat'],
       },
       env: {
+        VITE_GATEWAY_URL: gateway.url,
         VITE_REALM_URL: realm.url,
       },
     });
 
     return {
       url: game.url,
+      gatewayUrl: gateway.url,
       realmUrl: realm.url,
     };
   }),

@@ -13,15 +13,28 @@
 
   let joinCode = $state('');
   let error = $state('');
+  let creating = $state(false);
 
-  function createParty() {
-    const id = Math.random().toString(36).slice(2, 8).toUpperCase();
-    applyParty(id);
+  async function createParty() {
+    creating = true;
+    error = '';
+    try {
+      const res = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/parties`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const { id } = (await res.json()) as { id: string };
+      applyParty(id);
+    } catch {
+      error = 'Could not create party. Is the server running?';
+    } finally {
+      creating = false;
+    }
   }
 
   function joinParty() {
-    const id = joinCode.trim().toUpperCase();
-    if (!id) { error = 'Enter a party code.'; return; }
+    const id = joinCode.trim();
+    if (!id) { error = 'Enter a party ID.'; return; }
     applyParty(id);
   }
 
@@ -37,11 +50,13 @@
   <h1>Kassandra</h1>
 
   <div class="card">
-    <button onclick={createParty}>Create Party</button>
+    <button onclick={createParty} disabled={creating}>
+      {creating ? 'Creating…' : 'Create Party'}
+    </button>
     <p class="divider">— or join one —</p>
     <input
       type="text"
-      placeholder="Party code"
+      placeholder="Party ID"
       bind:value={joinCode}
       onkeydown={(e) => e.key === 'Enter' && joinParty()}
       spellcheck={false}
@@ -110,10 +125,9 @@
     background: rgba(255 255 255 / 0.07);
     border: 1px solid rgba(255 255 255 / 0.15);
     color: #e8e0d0;
-    font-size: 1rem;
+    font-size: 0.85rem;
     text-align: center;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .divider {
