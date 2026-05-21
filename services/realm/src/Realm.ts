@@ -29,11 +29,11 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = new URL(request.url);
+        const pathname = new URL(request.url, 'http://localhost').pathname;
 
         // WebSocket upgrade for a party session.
         // Path: /parties/:partyId/ws
-        const wsMatch = url.pathname.match(/^\/parties\/([^/]+)\/ws$/);
+        const wsMatch = pathname.match(/^\/parties\/([^/]+)\/ws$/);
         if (wsMatch) {
           const upgradeHeader = request.headers['upgrade'];
           if (upgradeHeader?.toLowerCase() !== 'websocket') {
