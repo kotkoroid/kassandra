@@ -18,7 +18,7 @@
       "@applications/game/*": ["./applications/game/*"],
       "@kassandra/simulation-domain-library": ["./libraries/domain/simulation/src/index.ts"],
       "@kassandra/protocol-foundation-library": ["./libraries/foundation/protocol/src/index.ts"],
-      "@kassandra/gateway-service": ["./services/gateway/src/Gateway.ts"],
+      "@kassandra/gateway-orchestrator": ["./orchestrators/gateway/src/Gateway.ts"],
       "@kassandra/realm-service": ["./services/realm/src/Realm.ts"]
     },
     "resolveJsonModule": true,

@@ -1,8 +1,7 @@
 import type { ClientMessageType, SimEvent } from '@kassandra/simulation-domain-library';
 import { world } from './world.svelte';
 
-export let connected = $state(false);
-export let partyId = $state<string | null>(null);
+export const realm = $state({ connected: false, partyId: null as string | null });
 
 let ws: WebSocket | null = null;
 
@@ -12,7 +11,7 @@ export function connect(id: string) {
     ws.close();
   }
 
-  partyId = id;
+  realm.partyId = id;
   const realmUrl = import.meta.env.VITE_REALM_URL.replace(/\/$/, '');
   const wsUrl = realmUrl
     .replace(/^http:\/\//, 'ws://')
@@ -23,7 +22,7 @@ export function connect(id: string) {
   );
 
   ws.onopen = () => {
-    connected = true;
+    realm.connected = true;
   };
 
   ws.onmessage = (e: MessageEvent<string>) => {
@@ -37,11 +36,11 @@ export function connect(id: string) {
   };
 
   ws.onclose = () => {
-    connected = false;
+    realm.connected = false;
   };
 
   ws.onerror = () => {
-    connected = false;
+    realm.connected = false;
   };
 }
 
@@ -51,8 +50,8 @@ export function disconnect() {
     ws.close();
     ws = null;
   }
-  connected = false;
-  partyId = null;
+  realm.connected = false;
+  realm.partyId = null;
 }
 
 export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
