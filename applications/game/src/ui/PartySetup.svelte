@@ -5,11 +5,10 @@
   const { onReady }: Props = $props();
 
   // If the URL already has ?party=... skip the setup screen entirely.
-  const params = new URLSearchParams(window.location.search);
-  const urlParty = params.get('party');
-  if (urlParty) {
-    onReady(urlParty);
-  }
+  $effect(() => {
+    const urlParty = new URLSearchParams(window.location.search).get('party');
+    if (urlParty) onReady(urlParty);
+  });
 
   let joinCode = $state('');
   let error = $state('');
