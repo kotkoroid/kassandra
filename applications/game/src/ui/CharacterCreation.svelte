@@ -9,8 +9,10 @@
       PLAYER_CLASSES,
       type PlayerClass,
   } from '../cosmetics';
+  import type { CharacterRecord } from '@kassandra/protocol-foundation-library';
   import { localPlayer } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
+  import { saveCharacter } from '../profile.svelte';
   import { connect, sendFrame } from '../realm.svelte';
   import { world } from '../world.svelte';
 
@@ -85,17 +87,48 @@
     player.playerClass = randomClass();
   }
 
-  function create() {
+  async function create() {
     const trimmed = player.name.trim();
     if (!trimmed) return;
     if (activating) return; // ignore double-clicks during the animation
     activating = true;
+    const { sex, hairColor, armor, playerClass } = player;
+    // PR-G3: persist the freshly-created character to the PlayerProfile
+    // DO BEFORE opening the party WS. The save vault is the source of
+    // truth for identity across parties — if SaveCharacter fails, we
+    // unwind the activating flag and let the user retry instead of
+    // proceeding into a session whose identity is not durably stored.
+    // Progression fields are stubbed with the same defaults the world
+    // starts a fresh Player at; PR-G4 will replace these with the
+    // server's snapshot on disconnect/save-back.
+    const record: CharacterRecord = {
+      name: trimmed,
+      sex,
+      hairColor,
+      armor,
+      playerClass,
+      level: 1,
+      experience: 0,
+      bag: [],
+      lars: 0,
+      equippedWeaponId: '',
+      abilities: [],
+      skillPoints: 0,
+      classSpellPoints: 0,
+      spellLevels: {},
+    };
+    try {
+      await saveCharacter(record);
+    } catch (err) {
+      console.error('SaveCharacter failed', err);
+      activating = false;
+      return;
+    }
+    // Run the platform activation animation in parallel with opening
+    // the party WS. The visual still gets its full ACTIVATION_DURATION_MS
+    // beat; the network round-trip to PartyRoom kicks off immediately.
     setTimeout(() => {
-      const { sex, hairColor, armor, playerClass } = player;
-      // Open WS connection; server will populate the world via snapshots.
       connect(activePartyId);
-      // Send identity as the first ClientMessage so the server can spawn
-      // the player with the chosen appearance before the first tick.
       sendFrame(0, 0, [
         { kind: 'create_character', name: trimmed, sex, hairColor, armor, playerClass },
       ]);

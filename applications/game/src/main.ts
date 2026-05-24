@@ -7,6 +7,7 @@ import './consoleBridge';
 import './styles.css';
 
 import { auth, initAuth } from './auth.svelte';
+import { initProfile } from './profile.svelte';
 import { world } from './world.svelte';
 
 const target = document.getElementById('app');
@@ -22,5 +23,11 @@ if (!target) {
 // race against an unfinished `auth` object.
 await initAuth();
 world.localPlayerId = auth.accountId;
+
+// PR-G3: load the persisted CharacterRecord (if any) before mount so
+// App.svelte can decide whether to show CharacterCreation or skip
+// straight to game on PartySetup.onReady. Failure here is fatal —
+// without a known load state we can't decide which view to render.
+await initProfile();
 
 export default mount(App, { target });

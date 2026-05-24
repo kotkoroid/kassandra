@@ -1,7 +1,8 @@
 <script lang="ts">
   import { Canvas } from '@threlte/core';
   import { ACESFilmicToneMapping, PCFSoftShadowMap } from 'three';
-  import { realm } from './realm.svelte';
+  import { profile } from './profile.svelte';
+  import { connect, realm, sendFrame } from './realm.svelte';
   import Scene from './scene/Scene.svelte';
   import CharacterCreation from './ui/CharacterCreation.svelte';
   import Hud from './ui/Hud.svelte';
@@ -10,6 +11,32 @@
   type View = 'party' | 'creation' | 'game';
   let view = $state<View>('party');
   let activePartyId = $state('');
+
+  // PR-G3: when the player already has a persisted character (loaded
+  // by `initProfile()` during boot), skip the CharacterCreation panel
+  // and jump straight to the game view. The same connect + identity
+  // dispatch CharacterCreation.create() does, just sourced from the
+  // PlayerProfile DO instead of fresh form input.
+  function onPartyReady(id: string) {
+    activePartyId = id;
+    const cached = profile.character;
+    if (cached !== null) {
+      connect(id);
+      sendFrame(0, 0, [
+        {
+          kind: 'create_character',
+          name: cached.name,
+          sex: cached.sex,
+          hairColor: cached.hairColor,
+          armor: cached.armor,
+          playerClass: cached.playerClass,
+        },
+      ]);
+      view = 'game';
+    } else {
+      view = 'creation';
+    }
+  }
 
   // Cap render DPR. Low-poly art doesn't benefit from the 2-3x fill
   // cost of native pixel density on Retina/4K — 1.5 is the sweet
@@ -36,7 +63,7 @@
 
 <div class="stage">
   {#if view === 'party'}
-    <PartySetup onReady={(id) => { activePartyId = id; view = 'creation'; }} />
+    <PartySetup onReady={onPartyReady} />
   {:else if view === 'creation'}
     <CharacterCreation {activePartyId} onCreate={() => (view = 'game')} />
   {:else}
