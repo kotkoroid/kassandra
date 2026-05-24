@@ -57,6 +57,10 @@ export const SimEvent = Schema.Union([
     kind: Schema.Literal('level_up_spell'),
     spellId: Schema.String,
   }),
+  // Party-owner-only: ask the realm to tear down the party. Server
+  // verifies sender === ownerId, then broadcasts ServerMessage 'disbanded'
+  // and closes every socket. Non-owner senders are silently ignored.
+  Schema.Struct({ kind: Schema.Literal('disband_party') }),
 ]);
 
 export type ChatChannel = typeof ChatChannel.Type;

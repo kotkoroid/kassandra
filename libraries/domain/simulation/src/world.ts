@@ -76,6 +76,7 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     time: 0,
     tick: 0,
     localPlayerId,
+    ownerId: null,
     players: { [localPlayerId]: defaultPlayer() },
     entities: [],
     entityById: new Map(),

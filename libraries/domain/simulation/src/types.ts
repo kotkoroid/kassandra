@@ -411,6 +411,10 @@ export interface World {
 
   players: Record<PlayerId, Player>;
   localPlayerId: PlayerId;
+  // The party owner. Set on the realm side when the first player connects
+  // to a fresh party (persisted in DO storage). Null for solo / pre-connect
+  // worlds. Only the owner is allowed to disband the party.
+  ownerId: PlayerId | null;
   entities: Entity[];
   // O(1) entity lookup by id. Mirrors `entities` — kept in sync by
   // spawn.ts (add) and removeEntity() in util.ts (remove).

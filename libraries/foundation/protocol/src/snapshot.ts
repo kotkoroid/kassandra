@@ -205,6 +205,10 @@ export const ChatMessageSnapshot = Schema.Struct({
 export const Snapshot = Schema.Struct({
   tick: Schema.Number,
   time: Schema.Number,
+  // Party owner — the first player to connect. Null only while the realm
+  // has not yet accepted its first session (rare; clients normally see
+  // this populated by the first snapshot they receive).
+  ownerId: Schema.NullOr(Schema.String),
   players: Schema.Array(PlayerSnapshot),
   entities: Schema.Array(EntitySnapshot),
   projectiles: Schema.Array(ProjectileSnapshot),

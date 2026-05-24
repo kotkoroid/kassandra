@@ -28,6 +28,12 @@ export const ServerMessage = Schema.Union([
     kind: Schema.Literal('ack'),
     tick: Schema.Number,
   }),
+  // Sent right before the realm closes every socket and deletes DO
+  // storage. Clients react by disconnecting and clearing ?party= from
+  // the URL so the next refresh lands back on PartySetup.
+  Schema.Struct({
+    kind: Schema.Literal('disbanded'),
+  }),
 ]);
 
 export type ClientMessage = typeof ClientMessage.Type;

@@ -3,6 +3,7 @@ export const world = $state<World>(createWorld());
 export function resetWorld(seed: number = Date.now() >>> 0) {
   const fresh = createWorld(seed);
   world.localPlayerId = fresh.localPlayerId;
+  world.ownerId = fresh.ownerId;
   world.players = fresh.players;
   world.rng = fresh.rng;
   world.time = fresh.time;

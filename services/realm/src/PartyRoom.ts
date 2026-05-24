@@ -66,6 +66,7 @@ function worldToSnapshot(world: World) {
     snapshot: {
       tick: world.tick,
       time: world.time,
+      ownerId: world.ownerId,
       players,
       entities: world.entities.map((e) => ({
         id: e.id,
@@ -128,6 +129,12 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       const sessions = new Map<string, { socket: Cloudflare.DurableWebSocket; playerId: PlayerId }>();
       const pendingInputs = new Map<string, FrameInputs>();
       const pendingEvents = new Map<string, SimEvent[]>();
+
+      // Restore the party owner from storage. Persisted on first connect
+      // (see fetch handler below) so the owner survives DO hibernation and
+      // re-connects. Null on a brand-new room.
+      const storedOwner = yield* state.storage.get<PlayerId>('ownerId');
+      if (storedOwner) world.ownerId = storedOwner;
 
       // Rehydrate session map after hibernation.
       for (const socket of yield* state.getWebSockets()) {
@@ -211,6 +218,16 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             world.localPlayerId = playerId;
           }
 
+          // Anchor the party owner. The first player ever to connect
+          // becomes the owner for the lifetime of the room — persisted
+          // in DO storage so it survives hibernation and is not lost on
+          // re-connect. Only the owner is allowed to disband (see
+          // webSocketMessage handler for 'disband_party').
+          if (!world.ownerId) {
+            world.ownerId = playerId;
+            yield* state.storage.put('ownerId', playerId);
+          }
+
           startTickLoop();
           return response;
         }),
@@ -232,9 +249,11 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
           pendingInputs.set(data.sessionId, { moveX: parsed.moveX, moveZ: parsed.moveZ });
 
-          // Handle create_character directly — it mutates player identity
-          // and must not be deferred into perPlayerEvents.
+          // Handle create_character and disband_party directly — they
+          // mutate identity / lifecycle state and must not be deferred
+          // into perPlayerEvents (which is drained by the tick).
           const regularEvents: SimEvent[] = [];
+          let disbandRequested = false;
           for (const ev of parsed.events) {
             if (ev.kind === 'create_character') {
               const p = world.players[data.playerId];
@@ -254,6 +273,13 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
                   pushSystem(world, `${p.name} joined the realm.`);
                 }
               }
+            } else if (ev.kind === 'disband_party') {
+              // Owner-only. Silently ignore from any other sender —
+              // we don't surface unauthorized attempts to the chat so
+              // a forged event from a non-owner just goes nowhere.
+              if (data.playerId === world.ownerId) {
+                disbandRequested = true;
+              }
             } else {
               regularEvents.push(ev);
             }
@@ -261,6 +287,23 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
           const existing = pendingEvents.get(data.sessionId) ?? [];
           pendingEvents.set(data.sessionId, [...existing, ...regularEvents]);
+
+          // Disband flow: broadcast the terminal 'disbanded' message,
+          // stop the tick loop, close every socket, and wipe DO storage
+          // so the next connect to the same party ID starts fresh.
+          // Done after queueing regular events so the owner's final
+          // frame still gets processed.
+          if (disbandRequested) {
+            broadcast(JSON.stringify({ kind: 'disbanded' }));
+            stopTickLoop();
+            for (const { socket: s } of [...sessions.values()]) {
+              yield* s.close(1000, 'party disbanded');
+            }
+            sessions.clear();
+            pendingInputs.clear();
+            pendingEvents.clear();
+            yield* state.storage.deleteAll();
+          }
         }),
 
         webSocketClose: Effect.fnUntraced(function* (

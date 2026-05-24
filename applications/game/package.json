@@ -13,7 +13,7 @@
     "@kassandra/simulation-domain-library": "workspace:*",
     "@threlte/core": "8.1.4",
     "@threlte/extras": "9.4.1",
-    "alchemy": "2.0.0-beta.40",
+    "alchemy": "2.0.0-beta.44",
     "effect": "4.0.0-beta.66",
     "svelte": "5.55.4",
     "three": "0.172.0"

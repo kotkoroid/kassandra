@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@kassandra/simulation-domain-library": "workspace:*",
-    "alchemy": "2.0.0-beta.40",
+    "alchemy": "2.0.0-beta.44",
     "effect": "4.0.0-beta.66"
   }
 }

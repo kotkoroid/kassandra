@@ -1,7 +1,16 @@
 import type { ClientMessageType, SimEvent } from '@kassandra/simulation-domain-library';
 import { world } from './world.svelte';
 
-export const realm = $state({ connected: false, partyId: null as string | null });
+export const realm = $state({
+  connected: false,
+  partyId: null as string | null,
+  // Monotonic counter bumped each time we receive a 'disbanded' message
+  // from the realm. App.svelte watches this to redirect back to
+  // PartySetup. A counter (not a boolean) avoids the "edge missed
+  // because the flag was already true" footgun if disbands ever
+  // happen in close succession.
+  disbandCount: 0,
+});
 
 let ws: WebSocket | null = null;
 // Events queued before the socket opens (e.g. create_character sent right after connect()).
@@ -42,7 +51,21 @@ export function connect(id: string) {
     } catch {
       return;
     }
-    if (msg.kind === 'snapshot') applySnapshot(msg as ReturnType<typeof buildSnapshotShape>);
+    if (msg.kind === 'snapshot') {
+      applySnapshot(msg as ReturnType<typeof buildSnapshotShape>);
+    } else if (msg.kind === 'disbanded') {
+      // Owner has disbanded the party. Server is about to close every
+      // socket — preempt by disconnecting locally, clear ?party= from
+      // the URL, and bump the disband counter so App.svelte can route
+      // back to PartySetup. Order: bump first, then disconnect, so the
+      // App's $effect sees the counter change in the same micro-task
+      // batch as partyId becoming null.
+      realm.disbandCount += 1;
+      disconnect();
+      const url = new URL(window.location.href);
+      url.searchParams.delete('party');
+      window.history.replaceState(null, '', url.toString());
+    }
   };
 
   ws.onclose = () => {
@@ -91,6 +114,7 @@ function buildSnapshotShape() {
     snapshot: {
       tick: number;
       time: number;
+      ownerId: string | null;
       players: Array<{
         id: string;
         name: string;
@@ -165,6 +189,7 @@ function applySnapshot(msg: SnapshotMsg) {
 
   world.tick = s.tick;
   world.time = s.time;
+  world.ownerId = s.ownerId;
 
   // Full-replace players. Fields not in the snapshot (modifiers, effects,
   // abilities, activeQuests) default to empty — they are server-only.

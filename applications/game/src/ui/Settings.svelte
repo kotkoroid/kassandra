@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { dispatch } from '@kassandra/simulation-domain-library';
   import { settings } from '../settings.svelte';
+  import { world } from '../world.svelte';
 
   interface Props {
     onClose: () => void;
@@ -14,6 +16,21 @@
     { keys: 'Space', action: 'Attack' },
     { keys: 'Right Mouse Drag', action: 'Rotate camera' },
   ];
+
+  // Owner-only Disband button visibility. world.ownerId is set by the
+  // realm on first connect and arrives in the first snapshot — until
+  // then it's null and nobody sees the button.
+  const isOwner = $derived(
+    world.ownerId !== null && world.ownerId === world.localPlayerId,
+  );
+
+  function disbandParty() {
+    // Dispatch goes onto world.inputQueue; Scene.svelte drains it on the
+    // next animation frame and forwards via sendFrame. Server verifies
+    // sender === ownerId, broadcasts 'disbanded', and closes every socket.
+    dispatch(world, { kind: 'disband_party' });
+    onClose();
+  }
 </script>
 
 <!-- Backdrop. Clicking outside the dialog closes it. The dialog role
@@ -92,6 +109,26 @@
           {/each}
         </ul>
       </section>
+
+      {#if isOwner}
+        <section>
+          <h3
+            class="mb-2 text-xs font-semibold tracking-widest text-amber-200/80 uppercase"
+          >
+            Party
+          </h3>
+          <button
+            type="button"
+            class="w-full border border-red-700/60 bg-red-900/30 px-3 py-1.5 text-sm font-semibold tracking-wider text-red-200 uppercase hover:bg-red-900/60"
+            onclick={disbandParty}
+          >
+            Disband Party
+          </button>
+          <p class="mt-1 text-xs text-amber-200/60">
+            Disconnects every player and deletes the party. Cannot be undone.
+          </p>
+        </section>
+      {/if}
     </div>
   </div>
 </div>
