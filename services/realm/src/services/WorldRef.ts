@@ -8,6 +8,7 @@
 // SimLayer can subscribe to changes; for now PR-B keeps it simple — the
 // server only has one consumer (the tick fiber) so plain Ref suffices.
 
+import type { Snapshot } from '@kassandra/protocol-foundation-library';
 import {
   createWorld,
   type PlayerId,
@@ -27,7 +28,7 @@ export interface WorldRefShape {
    */
   readonly modify: (f: (w: World) => World) => Effect.Effect<void>;
   /** Build the wire-shape snapshot from the current world. */
-  readonly snapshot: Effect.Effect<SnapshotEnvelope>;
+  readonly snapshot: Effect.Effect<Snapshot>;
 }
 
 /**
@@ -57,16 +58,16 @@ export const makeWorldRef = (storedOwner: PlayerId | null): Effect.Effect<WorldR
   });
 
 // ---------------------------------------------------------------------
-// Snapshot envelope (extracted verbatim from old PartyRoom.ts:16-112).
+// Snapshot derivation (extracted verbatim from old PartyRoom.ts:16-112).
 //
-// Kept co-located with WorldRef because the envelope IS derived state
-// of the world — putting it here keeps PartyRoom free of derivation
-// boilerplate and gives the snapshot one clear owner.
+// Returns the inner Snapshot shape (NO {kind: 'snapshot', snapshot: …}
+// envelope — that envelope was a JSON wire artifact of the pre-RPC
+// protocol; effect/unstable/rpc handles framing now). The shape here
+// matches the `Snapshot` schema in libraries/foundation/protocol — both
+// sides decode against the same definition.
 // ---------------------------------------------------------------------
 
-export type SnapshotEnvelope = ReturnType<typeof worldToSnapshot>;
-
-export function worldToSnapshot(world: World) {
+export function worldToSnapshot(world: World): Snapshot {
   const players = Object.entries(world.players).map(([id, p]) => ({
     id,
     name: p.name,
@@ -113,52 +114,49 @@ export function worldToSnapshot(world: World) {
   }));
 
   return {
-    kind: 'snapshot' as const,
-    snapshot: {
-      tick: world.tick,
-      time: world.time,
-      ownerId: world.ownerId,
-      players,
-      entities: world.entities.map((e) => ({
-        id: e.id,
-        kind: e.kind,
-        monsterId: e.monsterId,
-        x: e.x,
-        z: e.z,
-        rotation: e.rotation,
-        hp: e.hp,
-        maxHp: e.maxHp,
-        ...(e.saying !== undefined ? { saying: e.saying } : {}),
-      })),
-      projectiles: world.projectiles.map((p) => ({
-        id: p.id,
-        x: p.x,
-        z: p.z,
-        vx: p.vx,
-        vz: p.vz,
-      })),
-      healingCircles: world.healingCircles.map((h) => ({
-        id: h.id,
-        ownerId: h.ownerId,
-        x: h.x,
-        z: h.z,
-        ttl: h.ttl,
-      })),
-      lootBags: world.lootBags.map((b) => ({
-        id: b.id,
-        x: b.x,
-        z: b.z,
-        items: b.items.map((i) => ({ owner: i.owner, itemId: i.itemId })),
-        ttl: b.ttl,
-        isDeathBag: b.isDeathBag,
-        bagXp: b.bagXp,
-      })),
-      chatMessages: world.chat.messages.map((m) => ({
-        id: m.id,
-        author: m.author,
-        text: m.text,
-        channel: m.channel,
-      })),
-    },
+    tick: world.tick,
+    time: world.time,
+    ownerId: world.ownerId,
+    players,
+    entities: world.entities.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      monsterId: e.monsterId,
+      x: e.x,
+      z: e.z,
+      rotation: e.rotation,
+      hp: e.hp,
+      maxHp: e.maxHp,
+      ...(e.saying !== undefined ? { saying: e.saying } : {}),
+    })),
+    projectiles: world.projectiles.map((p) => ({
+      id: p.id,
+      x: p.x,
+      z: p.z,
+      vx: p.vx,
+      vz: p.vz,
+    })),
+    healingCircles: world.healingCircles.map((h) => ({
+      id: h.id,
+      ownerId: h.ownerId,
+      x: h.x,
+      z: h.z,
+      ttl: h.ttl,
+    })),
+    lootBags: world.lootBags.map((b) => ({
+      id: b.id,
+      x: b.x,
+      z: b.z,
+      items: b.items.map((i) => ({ owner: i.owner, itemId: i.itemId })),
+      ttl: b.ttl,
+      isDeathBag: b.isDeathBag,
+      bagXp: b.bagXp,
+    })),
+    chatMessages: world.chat.messages.map((m) => ({
+      id: m.id,
+      author: m.author,
+      text: m.text,
+      channel: m.channel,
+    })),
   };
 }

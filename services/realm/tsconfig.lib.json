@@ -13,6 +13,9 @@
     },
     {
       "path": "../../libraries/foundation/protocol/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libraries/foundation/effect-conventions/tsconfig.lib.json"
     }
   ]
 }

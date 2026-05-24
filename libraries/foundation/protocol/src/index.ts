@@ -12,7 +12,4 @@ export {
   Snapshot,
 } from './snapshot';
 
-export { ClientMessage, ServerMessage } from './messages';
-export type { ClientMessage as ClientMessageType, ServerMessage as ServerMessageType } from './messages';
-
 export { NotOwnerError, PartySession, PlayerSession, RealmRpc } from './rpc';

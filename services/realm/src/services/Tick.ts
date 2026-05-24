@@ -9,6 +9,7 @@
 // is the only seam — keeps PR-B a pure refactor of the orchestration
 // layer without touching simulation internals.
 
+import type { Snapshot } from '@kassandra/protocol-foundation-library';
 import {
   tick,
   type FrameInputs,
@@ -19,11 +20,12 @@ import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
 import * as Duration from 'effect/Duration';
 import * as Effect from 'effect/Effect';
+import type * as PubSub from 'effect/PubSub';
+import * as PubSubMod from 'effect/PubSub';
 import * as Ref from 'effect/Ref';
 import * as Schedule from 'effect/Schedule';
 
 import type { InputBufferShape } from './InputBuffer.ts';
-import type { SessionsRefShape } from './SessionsRef.ts';
 import type { WorldRefShape } from './WorldRef.ts';
 
 const TICK_INTERVAL = Duration.millis(50); // 20 Hz
@@ -45,22 +47,26 @@ export class Tick extends Context.Service<Tick, TickShape>()(
 
 /**
  * Build a Tick orchestrator over the given services. Pure factory —
- * the result depends only on the service shapes passed in, not on the
- * Context, so PartyRoom can construct everything in its own per-DO
- * setup without going through Layer.
+ * the result depends only on the values passed in, so PartyRoom can
+ * construct everything in its own per-DO setup without going through
+ * Layer.
+ *
+ * PR-B2: snapshots publish to a PubSub<Snapshot> instead of being
+ * JSON-stringified and broadcast to sockets directly. RpcServer's
+ * `SnapshotStream` handler subscribes via `Stream.fromPubSub` — fan-out
+ * + framing + serialization all become RpcServer's job.
  */
 export const makeTick = (deps: {
   readonly worldRef: WorldRefShape;
-  readonly sessionsRef: SessionsRefShape;
   readonly inputBuffer: InputBufferShape;
+  readonly snapshotPubSub: PubSub.PubSub<Snapshot>;
 }): Effect.Effect<TickShape> =>
   Effect.gen(function* () {
-    const { worldRef, sessionsRef, inputBuffer } = deps;
+    const { worldRef, inputBuffer, snapshotPubSub } = deps;
 
     const step = (dt: number) =>
       Effect.gen(function* () {
-        const sessions = yield* sessionsRef.all;
-        const { allInputs, allEvents } = yield* inputBuffer.drainFrame(sessions);
+        const { allInputs, allEvents } = yield* inputBuffer.drainFrame;
         yield* worldRef.modify((w) => {
           // Same mutate-in-place pattern as the old code path. The Ref
           // is set to the same reference; downstream consumers `yield*
@@ -77,7 +83,7 @@ export const makeTick = (deps: {
           return w;
         });
         const snapshot = yield* worldRef.snapshot;
-        yield* sessionsRef.broadcast(JSON.stringify(snapshot));
+        yield* PubSubMod.publish(snapshotPubSub, snapshot);
       });
 
     // The loop uses `effect/Clock` for wall-clock dt — same source as

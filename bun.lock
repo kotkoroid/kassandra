@@ -79,6 +79,7 @@
       "name": "@kassandra/realm-service",
       "version": "0.0.0",
       "dependencies": {
+        "@kassandra/effect-conventions-foundation-library": "workspace:*",
         "@kassandra/protocol-foundation-library": "workspace:*",
         "@kassandra/simulation-domain-library": "workspace:*",
         "alchemy": "2.0.0-beta.44",

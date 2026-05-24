@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dispatch } from '@kassandra/simulation-domain-library';
+  import { disbandParty as disbandPartyRpc } from '../realm.svelte';
   import { settings } from '../settings.svelte';
   import { world } from '../world.svelte';
 
@@ -25,10 +25,11 @@
   );
 
   function disbandParty() {
-    // Dispatch goes onto world.inputQueue; Scene.svelte drains it on the
-    // next animation frame and forwards via sendFrame. Server verifies
-    // sender === ownerId, broadcasts 'disbanded', and closes every socket.
-    dispatch(world, { kind: 'disband_party' });
+    // Calls the owner-only Disband RPC. The button is owner-gated so
+    // we don't expect NotOwnerError in practice; realm.svelte.ts
+    // swallows it just in case. The server's Disbanded stream fires,
+    // every client (including this one) sees the redirect.
+    disbandPartyRpc();
     onClose();
   }
 </script>

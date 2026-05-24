@@ -1,19 +1,25 @@
-// InputBuffer — per-session inputs + events buffer drained per tick.
+// InputBuffer — per-player inputs + events buffer drained per tick.
 //
-// Replaces the two parallel Maps at old PartyRoom.ts:127-128
-// (`pendingInputs` + `pendingEvents`) AND the manual zero-out loop at
-// old PartyRoom.ts:160-165 (`pendingInputs.set(sid, {0,0}); pendingEvents.set(sid, [])`).
+// PR-B2: rekeyed from sessionId to playerId. RPC handlers receive
+// PlayerSession (playerId) directly; there's no remaining need to
+// translate sessionId → playerId in the hot path. Multi-tab-same-player
+// collides into one buffer (last writer wins for inputs, append for
+// events) — that's a known acceptable behaviour and matches "one player
+// has one set of inputs."
 //
-// Semantics preserved exactly:
-//   - inputs:  LATEST-WINS. Each frame's webSocketMessage overwrites
-//              the per-session move vector. Drained per tick.
+// Semantics preserved exactly from PR-B:
+//   - inputs:  LATEST-WINS. Each frame's RPC overwrites the per-player
+//              move vector. Drained per tick.
 //   - events:  ACCUMULATING. Each frame's events append to the per-
-//              session list. Drained per tick.
+//              player list. Drained per tick.
 //
-// `drainFrame` reads the current sessions list (built by SessionsRef)
-// to know how to key the output by `PlayerId`. It atomically swaps the
-// internal state to empty, so concurrent message handlers running
-// between drain calls land in the next frame.
+// Lifecycle:
+//   - initPlayer(pid)  — called on connect so the player appears in
+//                       drainFrame's output even before they've sent
+//                       anything (preserves the "tick all connected
+//                       players with default {0,0}" behaviour from the
+//                       pre-RPC handler).
+//   - clearPlayer(pid) — called on disconnect.
 
 import type {
   FrameInputs,
@@ -24,14 +30,12 @@ import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Ref from 'effect/Ref';
 
-import type { Session, SessionId } from './SessionsRef.ts';
-
-interface PerSession {
+interface PerPlayer {
   readonly inputs: FrameInputs;
   readonly events: ReadonlyArray<SimEvent>;
 }
 
-const EMPTY: PerSession = { inputs: { moveX: 0, moveZ: 0 }, events: [] };
+const EMPTY: PerPlayer = { inputs: { moveX: 0, moveZ: 0 }, events: [] };
 
 export interface DrainedFrame {
   readonly allInputs: Record<PlayerId, FrameInputs>;
@@ -39,25 +43,24 @@ export interface DrainedFrame {
 }
 
 export interface InputBufferShape {
-  /** Seed a freshly-accepted session's slot. */
-  readonly initSession: (sessionId: SessionId) => Effect.Effect<void>;
-  /** Drop a closed session's slot. */
-  readonly clearSession: (sessionId: SessionId) => Effect.Effect<void>;
-  /** Replace this session's latest movement vector. */
-  readonly setInputs: (sessionId: SessionId, inputs: FrameInputs) => Effect.Effect<void>;
-  /** Append these events to this session's frame buffer. */
+  /** Seed a freshly-connected player's slot (defaults to EMPTY). */
+  readonly initPlayer: (playerId: PlayerId) => Effect.Effect<void>;
+  /** Drop a disconnected player's slot. */
+  readonly clearPlayer: (playerId: PlayerId) => Effect.Effect<void>;
+  /** Replace this player's latest movement vector. */
+  readonly setInputs: (playerId: PlayerId, inputs: FrameInputs) => Effect.Effect<void>;
+  /** Append events to this player's frame buffer. */
   readonly appendEvents: (
-    sessionId: SessionId,
+    playerId: PlayerId,
     events: ReadonlyArray<SimEvent>,
   ) => Effect.Effect<void>;
   /**
    * Atomically take everything accumulated since the last drain and
-   * reset to empty. The current sessions list (from SessionsRef.all)
-   * is passed in so we can key the output by `PlayerId`.
+   * reset each player's slot to EMPTY. Only currently-tracked players
+   * appear in the output — disconnected players are gone (the close
+   * handler is responsible for clearPlayer before the next drain).
    */
-  readonly drainFrame: (
-    sessions: ReadonlyArray<readonly [SessionId, Session]>,
-  ) => Effect.Effect<DrainedFrame>;
+  readonly drainFrame: Effect.Effect<DrainedFrame>;
 }
 
 export class InputBuffer extends Context.Service<InputBuffer, InputBufferShape>()(
@@ -65,50 +68,45 @@ export class InputBuffer extends Context.Service<InputBuffer, InputBufferShape>(
 ) {}
 
 export const makeInputBuffer: Effect.Effect<InputBufferShape> = Effect.gen(function* () {
-  const ref = yield* Ref.make<Map<SessionId, PerSession>>(new Map());
+  const ref = yield* Ref.make<Map<PlayerId, PerPlayer>>(new Map());
   return {
-    initSession: (sessionId) =>
+    initPlayer: (playerId) =>
       Ref.update(ref, (m) => {
         const next = new Map(m);
-        next.set(sessionId, EMPTY);
+        next.set(playerId, EMPTY);
         return next;
       }),
-    clearSession: (sessionId) =>
+    clearPlayer: (playerId) =>
       Ref.update(ref, (m) => {
         const next = new Map(m);
-        next.delete(sessionId);
+        next.delete(playerId);
         return next;
       }),
-    setInputs: (sessionId, inputs) =>
+    setInputs: (playerId, inputs) =>
       Ref.update(ref, (m) => {
         const next = new Map(m);
-        const prev = next.get(sessionId) ?? EMPTY;
-        next.set(sessionId, { inputs, events: prev.events });
+        const prev = next.get(playerId) ?? EMPTY;
+        next.set(playerId, { inputs, events: prev.events });
         return next;
       }),
-    appendEvents: (sessionId, events) =>
+    appendEvents: (playerId, events) =>
       Ref.update(ref, (m) => {
         if (events.length === 0) return m;
         const next = new Map(m);
-        const prev = next.get(sessionId) ?? EMPTY;
-        next.set(sessionId, { inputs: prev.inputs, events: [...prev.events, ...events] });
+        const prev = next.get(playerId) ?? EMPTY;
+        next.set(playerId, { inputs: prev.inputs, events: [...prev.events, ...events] });
         return next;
       }),
-    drainFrame: (sessions) =>
-      Ref.modify(ref, (m) => {
-        const allInputs: Record<PlayerId, FrameInputs> = {};
-        const allEvents: Record<PlayerId, ReadonlyArray<SimEvent>> = {};
-        for (const [sid, { playerId }] of sessions) {
-          const slot = m.get(sid) ?? EMPTY;
-          allInputs[playerId] = slot.inputs;
-          allEvents[playerId] = slot.events;
-        }
-        // Reset to empty slots for every still-active session. Closed
-        // sessions get GC'd when SessionsRef removes them, then
-        // clearSession follows in the close handler.
-        const next = new Map<SessionId, PerSession>();
-        for (const [sid] of sessions) next.set(sid, EMPTY);
-        return [{ allInputs, allEvents }, next];
-      }),
+    drainFrame: Ref.modify(ref, (m) => {
+      const allInputs: Record<PlayerId, FrameInputs> = {};
+      const allEvents: Record<PlayerId, ReadonlyArray<SimEvent>> = {};
+      const next = new Map<PlayerId, PerPlayer>();
+      for (const [pid, slot] of m) {
+        allInputs[pid] = slot.inputs;
+        allEvents[pid] = slot.events;
+        next.set(pid, EMPTY);
+      }
+      return [{ allInputs, allEvents }, next];
+    }),
   };
 });

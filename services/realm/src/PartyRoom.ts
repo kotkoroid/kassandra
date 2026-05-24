@@ -1,78 +1,60 @@
 // PartyRoom — the Durable Object that owns one party's authoritative
 // world. Each connected player gets a hibernating WebSocket; the DO
-// runs a 20 Hz fixed-step tick, broadcasts a full snapshot per tick,
-// and persists the party owner across hibernation.
+// runs a 20 Hz fixed-step tick, broadcasts a full snapshot per tick
+// via effect/unstable/rpc, and persists the party owner across
+// hibernation.
 //
-// PR-B rewrite: every piece of per-DO state lives in a Context.Service
-// (WorldRef, SessionsRef, InputBuffer, Tick) built once in the inner
-// Effect.gen and provided to every handler via a shared Context. The
-// 20 Hz loop runs under `Effect.forkScoped` — the underlying scope is
-// the per-DO lifetime, so the fiber dies cleanly on eviction.
+// PR-B2 rewrite: the JSON wire envelope is gone. Inbound traffic flows
+// through `RpcServer.Protocol` (the direct bridge in
+// libraries/foundation/effect-conventions/src/realm-rpc-do.ts) into
+// typed handlers defined here. Snapshots fan out via a per-DO
+// `PubSub<Snapshot>` consumed by `SnapshotStream`; disband signals fan
+// out via `PubSub<void>` consumed by `Disbanded`. The
+// previously-special-cased `disband_party` SimEvent is replaced by the
+// owner-only `Disband` RPC (which raises `NotOwnerError` instead of
+// silently dropping non-owner requests).
 //
-// What stayed unchanged (intentionally — PR-B is internals-only):
-//   - The JSON wire envelope (`ClientMessage` / `ServerMessage` from
-//     libraries/foundation/protocol). PR-B2 swaps to effect/unstable/rpc.
-//   - The DO hibernation contract (acceptWebSocket, getWebSockets,
-//     serializeAttachment). PR-E will add storage-driven world freeze.
-//   - The accepted Phase-4 limitations (death keyed to localPlayerId,
-//     create_character is a SimEvent). Both go away in PR-D.
+// What stayed unchanged:
+//   - DO hibernation contract (acceptWebSocket, getWebSockets,
+//     serializeAttachment). PR-E adds storage-driven world freeze.
+//   - Accepted Phase-4 limitations (death keyed to localPlayerId,
+//     create_character is a SimEvent inside SendEvent). Both go away
+//     in PR-D when the sim library becomes Effect-native.
 
-import { ClientMessage } from '@kassandra/protocol-foundation-library';
+import {
+  NotOwnerError,
+  PartySession,
+  PlayerSession,
+  RealmRpc,
+  type Snapshot,
+} from '@kassandra/protocol-foundation-library';
 import {
   addPlayer,
   pushSystem,
   type PlayerId,
-  type SimEvent,
 } from '@kassandra/simulation-domain-library';
 import * as Cloudflare from 'alchemy/Cloudflare';
-import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
+import * as Layer from 'effect/Layer';
 import * as Option from 'effect/Option';
-import * as Schema from 'effect/Schema';
+import * as PubSub from 'effect/PubSub';
+import * as Stream from 'effect/Stream';
+import * as Headers from 'effect/unstable/http/Headers';
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
+import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
+import * as RpcServer from 'effect/unstable/rpc/RpcServer';
 
-import { WorldDecodeError } from './errors.ts';
-import {
-  InputBuffer,
-  makeInputBuffer,
-  type InputBufferShape,
-} from './services/InputBuffer.ts';
-import {
-  makeSessionsRef,
-  SessionsRef,
-  type SessionsRefShape,
-} from './services/SessionsRef.ts';
-import { makeTick, Tick, type TickShape } from './services/Tick.ts';
-import {
-  makeWorldRef,
-  WorldRef,
-  type WorldRefShape,
-} from './services/WorldRef.ts';
+import { makeRealmRpcProtocol } from '@kassandra/effect-conventions-foundation-library';
+
+import { makeInputBuffer } from './services/InputBuffer.ts';
+import { makeSessionsRef } from './services/SessionsRef.ts';
+import { makeTick } from './services/Tick.ts';
+import { makeWorldRef } from './services/WorldRef.ts';
 
 interface SessionData {
   sessionId: string;
   playerId: PlayerId;
 }
-
-const decodeClientMessage = Schema.decodeUnknownEffect(Schema.fromJsonString(ClientMessage));
-
-const previewRaw = (raw: string | ArrayBuffer): string => {
-  const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
-  return text.length > 200 ? `${text.slice(0, 200)}…` : text;
-};
-
-const buildContext = (deps: {
-  readonly worldRef: WorldRefShape;
-  readonly sessionsRef: SessionsRefShape;
-  readonly inputBuffer: InputBufferShape;
-  readonly tick: TickShape;
-}): Context.Context<WorldRef | SessionsRef | InputBuffer | Tick> =>
-  Context.empty().pipe(
-    Context.add(WorldRef, deps.worldRef),
-    Context.add(SessionsRef, deps.sessionsRef),
-    Context.add(InputBuffer, deps.inputBuffer),
-    Context.add(Tick, deps.tick),
-  );
 
 export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRoom>()(
   'PartyRoom',
@@ -80,50 +62,171 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
-      // -- per-instance service construction -----------------------------
+      // -- per-instance state --------------------------------------------
       const storedOwner = yield* state.storage.get<PlayerId>('ownerId');
       const worldRef = yield* makeWorldRef(storedOwner ?? null);
       const sessionsRef = yield* makeSessionsRef;
       const inputBuffer = yield* makeInputBuffer;
-      const tick = yield* makeTick({ worldRef, sessionsRef, inputBuffer });
-      const ctx = buildContext({ worldRef, sessionsRef, inputBuffer, tick });
+
+      // Fan-out PubSubs.
+      //   snapshotPubSub — published per tick; subscribers come and go
+      //     as clients open/close SnapshotStream. PubSub semantics drop
+      //     messages without subscribers, so no backlog accumulates.
+      //   disbandPubSub  — published exactly once when an owner disbands;
+      //     every Disbanded subscriber pulls one item then completes.
+      const snapshotPubSub = yield* PubSub.unbounded<Snapshot>();
+      const disbandPubSub = yield* PubSub.unbounded<void>();
+
+      // Tick orchestrator now publishes to snapshotPubSub.
+      const tick = yield* makeTick({ worldRef, inputBuffer, snapshotPubSub });
+
+      // RPC bridge: direct Protocol over DurableWebSocket. The bridge
+      // owns the per-client parsers and the disconnects queue; we feed
+      // it lifecycle events from the DO callbacks.
+      const bridge = yield* makeRealmRpcProtocol.pipe(
+        Effect.provide(RpcSerialization.layerJson),
+      );
+
+      // wsToClientId maps the DO's webSocketMessage callback's `socket`
+      // arg back to the bridge's per-connection clientId. Survives
+      // hibernation alongside the SessionsRef rehydrate below.
+      const wsToClientId = new Map<Cloudflare.DurableWebSocket, number>();
 
       // -- hibernation rehydrate ------------------------------------------
-      // Sockets that survived eviction come back from getWebSockets()
-      // with their attachments intact. Rebuild SessionsRef + InputBuffer
-      // so the next tick sees them.
       for (const socket of yield* state.getWebSockets()) {
         const data = socket.deserializeAttachment<SessionData>();
         if (data) {
           yield* sessionsRef.add(data.sessionId, socket, data.playerId);
-          yield* inputBuffer.initSession(data.sessionId);
+          yield* inputBuffer.initPlayer(data.playerId);
+          const clientId = yield* bridge.acceptSocket(socket, [
+            ['playerid', data.playerId],
+          ]);
+          wsToClientId.set(socket, clientId);
         }
       }
 
       // -- tick fiber bookkeeping -----------------------------------------
-      // The tick loop runs as a forked Effect fiber. We track its handle
-      // so we can start it on first connect and interrupt it on
-      // last-disconnect (and on disband). `Effect.runFork` returns a
-      // Fiber whose `interruptUnsafe()` is synchronous, which fits the
-      // imperative DO handler shape.
       let tickFiber: ReturnType<typeof Effect.runFork> | null = null;
-
       const ensureTickRunning = Effect.sync(() => {
         if (tickFiber !== null) return;
-        tickFiber = Effect.runFork(Effect.provide(tick.loop, ctx));
+        tickFiber = Effect.runFork(tick.loop);
       });
-
       const stopTick = Effect.sync(() => {
         if (tickFiber === null) return;
         tickFiber.interruptUnsafe();
         tickFiber = null;
       });
-
       if ((yield* sessionsRef.count) > 0) {
         yield* ensureTickRunning;
       }
 
+      // -- middleware impl -------------------------------------------------
+      // PartySession reads `playerid` from per-request headers (set by
+      // the bridge at acceptSocket time) and provides PlayerSession to
+      // every handler downstream.
+      const partySessionLayer = Layer.succeed(PartySession)(
+        PartySession.of((effect, options) => {
+          const playerId = Option.getOrElse(
+            Headers.get(options.headers, 'playerid'),
+            () => '',
+          );
+          return Effect.provideService(effect, PlayerSession, {
+            playerId,
+          });
+        }),
+      );
+
       // -- handlers --------------------------------------------------------
+      const handlersLayer = RealmRpc.toLayer(
+        Effect.gen(function* () {
+          return RealmRpc.of({
+            // Hot path: replace the player's movement vector. Returns
+            // void; the tick fiber drains the buffer on its own schedule.
+            SendInputs: ({ moveX, moveZ }) =>
+              Effect.gen(function* () {
+                const session = yield* PlayerSession;
+                yield* inputBuffer.setInputs(session.playerId, { moveX, moveZ });
+              }),
+
+            // Cold path: discrete sim event. create_character mutates
+            // player identity inline (same logic as PR-B's webSocketMessage
+            // had); everything else appends to the per-player event queue
+            // for the next tick to consume.
+            SendEvent: ({ event }) =>
+              Effect.gen(function* () {
+                const session = yield* PlayerSession;
+                if (event.kind === 'create_character') {
+                  yield* worldRef.modify((world) => {
+                    const p = world.players[session.playerId];
+                    if (p) {
+                      const wasUnnamed = !p.name;
+                      p.name = event.name;
+                      p.sex = event.sex;
+                      p.hairColor = event.hairColor;
+                      p.armor = event.armor;
+                      p.playerClass = event.playerClass;
+                      if (wasUnnamed && p.name) {
+                        pushSystem(world, `${p.name} joined the realm.`);
+                      }
+                    }
+                    return world;
+                  });
+                  return;
+                }
+                yield* inputBuffer.appendEvents(session.playerId, [event]);
+              }),
+
+            // Server-streamed snapshots. Subscribing creates a new
+            // subscription to the PubSub; closing the stream
+            // (client unsubscribes) tears it down.
+            SnapshotStream: () => Stream.fromPubSub(snapshotPubSub),
+
+            // Server-streamed disband signal. Emits exactly once then
+            // completes — clients use this as a "redirect to setup" cue.
+            Disbanded: () =>
+              Stream.fromPubSub(disbandPubSub).pipe(Stream.take(1)),
+
+            // Owner-only. Verify, broadcast, close everything, wipe storage.
+            Disband: () =>
+              Effect.gen(function* () {
+                const session = yield* PlayerSession;
+                const world = yield* worldRef.get;
+                if (world.ownerId !== session.playerId) {
+                  return yield* new NotOwnerError({ ownerId: world.ownerId });
+                }
+                yield* PubSub.publish(disbandPubSub, undefined);
+                yield* stopTick;
+                const all = yield* sessionsRef.all;
+                yield* Effect.forEach(
+                  all,
+                  ([, s]) => s.socket.close(1000, 'party disbanded'),
+                  { discard: true },
+                );
+                yield* sessionsRef.clear;
+                yield* state.storage.deleteAll();
+              }),
+          });
+        }),
+      );
+
+      // -- mount RpcServer as a long-lived fiber ---------------------------
+      // The `Effect.never` keeps the layer scope alive for as long as
+      // the fiber runs. Interrupt the fiber → scope closes → server
+      // teardown. The DO has no natural eviction signal we can hook,
+      // so the fiber lives until the DO process is unloaded.
+      const rpcServerLayer = RpcServer.layer(RealmRpc, {
+        disableFatalDefects: true,
+      }).pipe(
+        Layer.provide([
+          handlersLayer,
+          partySessionLayer,
+          Layer.succeed(RpcServer.Protocol)(bridge.protocol),
+          RpcSerialization.layerJson,
+        ]),
+      );
+      Effect.runFork(Effect.never.pipe(Effect.provide(rpcServerLayer)));
+
+      // -- DO lifecycle handlers ------------------------------------------
 
       const onFetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -135,29 +238,29 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         const [response, socket] = yield* Cloudflare.upgrade();
 
         const sessionId = crypto.randomUUID();
-        const data: SessionData = { sessionId, playerId };
-        socket.serializeAttachment(data);
+        socket.serializeAttachment({ sessionId, playerId } satisfies SessionData);
 
         yield* sessionsRef.add(sessionId, socket, playerId);
-        yield* inputBuffer.initSession(sessionId);
+        yield* inputBuffer.initPlayer(playerId);
+
+        // Register the socket with the RPC bridge. The synthesized
+        // `playerid` header threads through every inbound Request so
+        // the PartySession middleware can provide PlayerSession to
+        // every handler invocation.
+        const clientId = yield* bridge.acceptSocket(socket, [
+          ['playerid', playerId],
+        ]);
+        wsToClientId.set(socket, clientId);
 
         yield* worldRef.modify((world) => {
           addPlayer(world, playerId);
-          // First REAL player to connect anchors localPlayerId for
-          // world systems (death tracking, monster proximity, NPC
-          // chat). createWorld() pre-populates a placeholder player as
-          // a single-player legacy — drop it on the first real connect
-          // so counts and localPlayerId reflect real sessions. This
-          // logic goes away in PR-D (sim becomes per-player).
-          if (Object.keys(world.players).length > 1 || world.localPlayerId !== playerId) {
-            // We just had only the placeholder before this call's
-            // addPlayer. Detect via "are there players that aren't us
-            // and aren't the localPlayerId of the placeholder world?"
-            // Simpler: if this is the first session, swap.
-          }
           return world;
         });
 
+        // First REAL player to connect anchors localPlayerId for world
+        // systems (death tracking, monster proximity, NPC chat).
+        // createWorld() pre-populates a placeholder player; drop it on
+        // the first real connect. Goes away in PR-D.
         const sessionCount = yield* sessionsRef.count;
         if (sessionCount === 1) {
           yield* worldRef.modify((world) => {
@@ -185,96 +288,17 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         return response;
       });
 
-      const onMessage = (socket: Cloudflare.DurableWebSocket, message: string | ArrayBuffer) =>
+      const onMessage = (
+        socket: Cloudflare.DurableWebSocket,
+        message: string | ArrayBuffer,
+      ) =>
         Effect.gen(function* () {
-          const data = socket.deserializeAttachment<SessionData>();
-          if (!data) return;
-
-          const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
-          const parsed = yield* decodeClientMessage(text).pipe(
-            Effect.mapError(
-              (issue) =>
-                new WorldDecodeError({
-                  reason: String(issue),
-                  rawPreview: previewRaw(message),
-                }),
-            ),
-          );
-
-          if (parsed.kind !== 'inputs') return;
-
-          yield* inputBuffer.setInputs(data.sessionId, {
-            moveX: parsed.moveX,
-            moveZ: parsed.moveZ,
-          });
-
-          // Handle create_character and disband_party directly — both
-          // mutate identity / lifecycle state and must not be deferred
-          // into the per-player events drain (which goes through tick).
-          const regularEvents: SimEvent[] = [];
-          let disbandRequested = false;
-          for (const ev of parsed.events) {
-            if (ev.kind === 'create_character') {
-              yield* worldRef.modify((world) => {
-                const p = world.players[data.playerId];
-                if (p) {
-                  // "Joined" announce fires on the FIRST create_character
-                  // for this connection (when the name transitions from
-                  // empty to non-empty). Re-rolls during the same session
-                  // skip the announce so we don't spam chat.
-                  const wasUnnamed = !p.name;
-                  p.name = ev.name;
-                  p.sex = ev.sex;
-                  p.hairColor = ev.hairColor;
-                  p.armor = ev.armor;
-                  p.playerClass = ev.playerClass;
-                  if (wasUnnamed && p.name) {
-                    pushSystem(world, `${p.name} joined the realm.`);
-                  }
-                }
-                return world;
-              });
-            } else if (ev.kind === 'disband_party') {
-              // Owner-only. Silently ignore from any other sender —
-              // unauthorized attempts don't surface to chat.
-              const world = yield* worldRef.get;
-              if (data.playerId === world.ownerId) {
-                disbandRequested = true;
-              }
-            } else {
-              regularEvents.push(ev);
-            }
-          }
-
-          yield* inputBuffer.appendEvents(data.sessionId, regularEvents);
-
-          if (disbandRequested) {
-            // Broadcast the terminal 'disbanded' message, stop the
-            // tick loop, close every socket, wipe DO storage. After
-            // this the room is dormant; the next connect to the same
-            // party id starts fresh.
-            yield* sessionsRef.broadcast(JSON.stringify({ kind: 'disbanded' }));
-            yield* stopTick;
-            const all = yield* sessionsRef.all;
-            yield* Effect.forEach(
-              all,
-              ([, s]) => s.socket.close(1000, 'party disbanded'),
-              { discard: true },
-            );
-            yield* sessionsRef.clear;
-            yield* state.storage.deleteAll();
-          }
-        }).pipe(
-          // Boundary error handler. Decode failures get logged + dropped;
-          // the connection stays open (malformed payloads are treated
-          // as adversarial, not as a transient state).
-          Effect.catchTag('kassandra/realm/WorldDecodeError', (err) =>
-            Effect.logWarning('client message decode failed', {
-              reason: err.reason,
-              preview: err.rawPreview,
-            }),
-          ),
-        );
+          const clientId = wsToClientId.get(socket);
+          if (clientId === undefined) return;
+          const data =
+            typeof message === 'string' ? message : new Uint8Array(message);
+          yield* bridge.onMessage(clientId, data);
+        });
 
       const onClose = (
         ws: Cloudflare.DurableWebSocket,
@@ -283,21 +307,24 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       ) =>
         Effect.gen(function* () {
           const data = ws.deserializeAttachment<SessionData>();
+
+          // Notify the RPC bridge first so any in-flight streams unwind.
+          const clientId = wsToClientId.get(ws);
+          if (clientId !== undefined) {
+            yield* bridge.onClose(clientId);
+            wsToClientId.delete(ws);
+          }
+
           if (data) {
             const prior = yield* sessionsRef.remove(data.sessionId);
-            yield* inputBuffer.clearSession(data.sessionId);
+            yield* inputBuffer.clearPlayer(data.playerId);
             if (Option.isSome(prior)) {
-              // Lifecycle announce — capture the name *before* the
-              // player record is dropped. If the player disconnected
-              // before naming themselves (rare: closed the tab during
-              // character creation), skip the message.
               yield* worldRef.modify((world) => {
                 const leaving = world.players[data.playerId];
                 if (leaving?.name) {
                   pushSystem(world, `${leaving.name} left the realm.`);
                 }
                 delete world.players[data.playerId];
-                // Re-anchor localPlayerId to any remaining player.
                 const remaining = Object.keys(world.players)[0];
                 if (remaining) world.localPlayerId = remaining;
                 return world;
@@ -312,18 +339,22 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         });
 
       return {
-        fetch: Effect.provide(onFetch, ctx),
-        webSocketMessage: Effect.fnUntraced(
-          function* (socket: Cloudflare.DurableWebSocket, message: string | ArrayBuffer) {
-            yield* Effect.provide(onMessage(socket, message), ctx);
-          },
-        ),
-        webSocketClose: Effect.fnUntraced(
-          function* (ws: Cloudflare.DurableWebSocket, code: number, reason: string) {
-            yield* Effect.provide(onClose(ws, code, reason), ctx);
-          },
-        ),
+        fetch: onFetch,
+        webSocketMessage: Effect.fnUntraced(function* (
+          socket: Cloudflare.DurableWebSocket,
+          message: string | ArrayBuffer,
+        ) {
+          yield* onMessage(socket, message);
+        }),
+        webSocketClose: Effect.fnUntraced(function* (
+          ws: Cloudflare.DurableWebSocket,
+          code: number,
+          reason: string,
+        ) {
+          yield* onClose(ws, code, reason);
+        }),
       };
     });
   }),
 ) {}
+

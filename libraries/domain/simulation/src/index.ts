@@ -212,5 +212,3 @@ export { currentHour, isNightHour, isNight, nightStatMultiplier } from './system
 // --- Chat lifecycle helper (used by realm worker for join/leave lines) ---
 export { pushSystem } from './systems/chat.ts';
 
-// --- Protocol (re-exported so services only depend on this domain library) ---
-export type { ClientMessageType, ServerMessageType } from '@kassandra/protocol-foundation-library';
