@@ -24,6 +24,19 @@ export function localPlayer(world: World): Player {
   return p;
 }
 
+/**
+ * Look up a player by id. Throws if the id isn't a known player —
+ * caller responsibility to validate the player is connected before
+ * calling. Use in per-player loops where the calling code already
+ * knows which player it's processing (instead of mutating
+ * `world.localPlayerId` to fake the "current player" context).
+ */
+export function playerById(world: World, playerId: PlayerId): Player {
+  const p = world.players[playerId];
+  if (p === undefined) throw new Error(`World invariant violated: unknown player ${playerId}`);
+  return p;
+}
+
 export function defaultPlayer(): Player {
   return {
     name: '',

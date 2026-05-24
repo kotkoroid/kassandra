@@ -3,11 +3,11 @@
 // spells (Rush dash, Hail of Blades spin) every frame.
 
 import { applyDamageToEntityRef } from './combat.ts';
-import { genId, localPlayer } from './world.ts';
+import { genId, playerById } from './world.ts';
 import { emit } from './events.ts';
 import { grid } from './spatialGrid.ts';
 import { getEffectiveStat } from './stats.ts';
-import type { Player, World } from './types.ts';
+import type { Player, PlayerId, World } from './types.ts';
 import { findEntity, isHostile } from './util.ts';
 
 // Spell levels span 1..MAX. Level 0 = locked (uncastable, hasn't been
@@ -49,8 +49,12 @@ function sayToChat(world: World, text: string): void {
 // both unlocking (0 → 1) and leveling (n → n+1) uniformly. Validates:
 // spell exists for the player's class, current level < MAX, and the
 // player has at least one classSpellPoint.
-export function levelUpSpell(world: World, spellId: string): void {
-  const p = localPlayer(world);
+export function levelUpSpell(
+  world: World,
+  playerId: PlayerId,
+  spellId: string,
+): void {
+  const p = playerById(world, playerId);
   if (!world.death.alive) return;
   const def = SPELLS[spellId];
   if (!def) {
@@ -94,8 +98,13 @@ const WHIP_SLOW_DURATION = 2.0;
 
 const MAYHEM_DURATION = 8;
 
-export function castSpell(world: World, spellId: string, targetId: string | null): void {
-  const p = localPlayer(world);
+export function castSpell(
+  world: World,
+  playerId: PlayerId,
+  spellId: string,
+  targetId: string | null,
+): void {
+  const p = playerById(world, playerId);
 
   // Only warrior can use these spells.
   if (p.playerClass !== 'warrior') return;
@@ -235,8 +244,12 @@ export function castSpell(world: World, spellId: string, targetId: string | null
   }
 }
 
-export function tickSpells(world: World, dt: number): void {
-  const p = localPlayer(world);
+export function tickSpells(
+  world: World,
+  playerId: PlayerId,
+  dt: number,
+): void {
+  const p = playerById(world, playerId);
   const spell = p.activeSpell;
   if (!spell) return;
 

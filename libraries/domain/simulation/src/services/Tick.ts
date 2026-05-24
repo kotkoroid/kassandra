@@ -31,7 +31,7 @@ import { rebuildGrid } from '../spatialGrid.ts';
 import { applyChat } from '../systems/chat.ts';
 import type { FrameInputs, PlayerId, SimEvent, World } from '../types.ts';
 import { primeWaterCache, refreshLootBagFlags } from '../util.ts';
-import { genId, localPlayer } from '../world.ts';
+import { genId, localPlayer, playerById } from '../world.ts';
 
 import { Death } from './Death.ts';
 import { HealingCircles } from './HealingCircles.ts';
@@ -96,18 +96,21 @@ export const makeTick = Effect.gen(function* () {
       yield* time.tick(world, dt);
       tickModifiers(world);
 
-      // 2. Process per-player events. Temporarily swap localPlayerId
-      //    so handleEvent targets the right player record for each
-      //    sender. D3b removes this swap by passing pid through.
-      const savedId = world.localPlayerId;
+      // 2. Process per-player events. handleEvent now takes pid
+      //    explicitly — no localPlayerId mutation needed.
       for (const [pid, events] of Object.entries(allEvents)) {
         if (!world.players[pid]) continue;
-        world.localPlayerId = pid;
-        for (const ev of events) handleEvent(world, ev);
+        for (const ev of events) handleEvent(world, pid, ev);
       }
-      world.localPlayerId = savedId;
 
       // 3. Player input + movement for every connected player.
+      //    Movement (Movement.tickPlayer / systems/player.ts) still
+      //    reads localPlayer(world) internally because tickPlayer and
+      //    its downstream slash() call have wide reach into combat /
+      //    pending state that hasn't been pid-threaded yet. Preserve
+      //    the swap for this loop only; full removal lands when
+      //    tickPlayer + slash take pid explicitly (future PR).
+      const savedId = world.localPlayerId;
       for (const [pid, inputs] of Object.entries(allInputs)) {
         if (!world.players[pid]) continue;
         world.localPlayerId = pid;
@@ -115,14 +118,11 @@ export const makeTick = Effect.gen(function* () {
       }
       world.localPlayerId = savedId;
 
-      // 3b. Advance channelled spells per-player. tickSpells reads
-      //     localPlayer(world) internally so the swap is required;
-      //     without it only the anchor player's spell would tick.
+      // 3b. Advance channelled spells per-player. Spells.tick now
+      //     takes pid explicitly.
       for (const pid of Object.keys(world.players)) {
-        world.localPlayerId = pid;
-        yield* spells.tick(world, dt);
+        yield* spells.tick(world, pid, dt);
       }
-      world.localPlayerId = savedId;
 
       // 4. Monster AI (target pick, move, attack) and Janna heal-circle
       //    spawning. Runs per-entity dispatch on kind.
@@ -164,8 +164,8 @@ export const TickLayer = Layer.effect(Tick)(makeTick);
 // switch stays as a single dispatcher.
 // ---------------------------------------------------------------------
 
-function handleEvent(world: World, ev: SimEvent): void {
-  const p = localPlayer(world);
+function handleEvent(world: World, playerId: PlayerId, ev: SimEvent): void {
+  const p = playerById(world, playerId);
   switch (ev.kind) {
     case 'click_ground':
       p.navTargetX = ev.x;
@@ -226,10 +226,10 @@ function handleEvent(world: World, ev: SimEvent): void {
       break;
     }
     case 'cast_spell':
-      castSpell(world, ev.spellId, ev.targetId ?? null);
+      castSpell(world, playerId, ev.spellId, ev.targetId ?? null);
       break;
     case 'level_up_spell':
-      levelUpSpell(world, ev.spellId);
+      levelUpSpell(world, playerId, ev.spellId);
       break;
     case 'drop_item': {
       let have: number;

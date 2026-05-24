@@ -155,7 +155,14 @@ export type {
 } from './types.ts';
 
 // --- World factory + helpers ---
-export { addPlayer, createWorld, defaultPlayer, genId, localPlayer } from './world.ts';
+export {
+  addPlayer,
+  createWorld,
+  defaultPlayer,
+  genId,
+  localPlayer,
+  playerById,
+} from './world.ts';
 
 // --- Stats ---
 export { getEffectiveStat, tickModifiers } from './stats.ts';
@@ -167,7 +174,6 @@ export { subscribe, emit, type GameEvent } from './events.ts';
 export { dispatch } from './input.ts';
 
 // --- Simulation entry point ---
-export { tick } from './tick.ts';
 
 // --- Spawn helpers ---
 export { spawnEntity, spawnTroller, spawnByMonsterId, type SpiderKind } from './spawn.ts';
