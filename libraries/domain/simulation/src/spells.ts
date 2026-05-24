@@ -3,12 +3,72 @@
 // spells (Rush dash, Hail of Blades spin) every frame.
 
 import { applyDamageToEntityRef } from './combat.ts';
-import { localPlayer } from './world.ts';
+import { genId, localPlayer } from './world.ts';
 import { emit } from './events.ts';
 import { grid } from './spatialGrid.ts';
 import { getEffectiveStat } from './stats.ts';
-import type { World } from './types.ts';
+import type { Player, World } from './types.ts';
 import { findEntity, isHostile } from './util.ts';
+
+// Spell levels span 1..MAX. Level 0 = locked (uncastable, hasn't been
+// learned yet — `level_up_spell` raises it from 0 to 1 for the first
+// purchase, then 1→2, ..., capped at MAX_SPELL_LEVEL).
+export const MAX_SPELL_LEVEL = 10;
+
+// Mana cost scales linearly with spell level. Each level grants a 5%
+// discount on the base cost (L1 = full cost, L10 = 55% of base = ~45%
+// discount). Clamped at 1 so a hypothetical zero-cost cast still feels
+// like it consumed something.
+export function getSpellManaCost(spellId: string, level: number): number {
+  const def = SPELLS[spellId];
+  if (!def) return 0;
+  if (level <= 0) return def.manaCost;
+  const multiplier = Math.max(0, 1 - (level - 1) * 0.05);
+  return Math.max(1, Math.round(def.manaCost * multiplier));
+}
+
+export function getSpellLevel(p: Player, spellId: string): number {
+  return p.spellLevels[spellId] ?? 0;
+}
+
+// Push a one-shot system line to chat. Used for soft-fail feedback
+// (no target, locked spell, etc.) so the player isn't left guessing
+// why the cast didn't fire. Chat is part of the broadcast snapshot,
+// so in multiplayer every player sees it — fine for now (rare event,
+// system-tagged); revisit when per-player UI feedback exists.
+function sayToChat(world: World, text: string): void {
+  world.chat.messages.push({
+    id: genId(world, 'm'),
+    author: 'System',
+    text,
+    channel: 'Normal',
+  });
+}
+
+// Spend one classSpellPoint to raise this spell's level by 1. Handles
+// both unlocking (0 → 1) and leveling (n → n+1) uniformly. Validates:
+// spell exists for the player's class, current level < MAX, and the
+// player has at least one classSpellPoint.
+export function levelUpSpell(world: World, spellId: string): void {
+  const p = localPlayer(world);
+  if (!world.death.alive) return;
+  const def = SPELLS[spellId];
+  if (!def) {
+    sayToChat(world, 'Unknown spell.');
+    return;
+  }
+  const current = getSpellLevel(p, spellId);
+  if (current >= MAX_SPELL_LEVEL) {
+    sayToChat(world, 'Spell is already at max level.');
+    return;
+  }
+  if (p.classSpellPoints <= 0) {
+    sayToChat(world, 'Not enough class spell points.');
+    return;
+  }
+  p.classSpellPoints -= 1;
+  p.spellLevels = { ...p.spellLevels, [spellId]: current + 1 };
+}
 
 // --- Spell constants ---
 
@@ -49,12 +109,24 @@ export function castSpell(world: World, spellId: string, targetId: string | null
   const def = SPELLS[spellId];
   if (!def) return;
 
+  // Learn-gate. Level 0 means the player hasn't spent a classSpellPoint
+  // on this spell yet — the slot is still in their quickbar but the
+  // cast is rejected with a chat hint. (No cooldown is started, no mana
+  // is spent.)
+  const level = getSpellLevel(p, spellId);
+  if (level < 1) {
+    sayToChat(world, `Spell not learned. Spend a class spell point in Character → Abilities.`);
+    return;
+  }
+
   // Cooldown gate.
   const readyAt = p.spellCooldowns[spellId] ?? 0;
   if (world.time < readyAt) return;
 
-  // Mana gate.
-  if (p.mana < def.manaCost) return;
+  // Mana gate — uses the level-scaled cost (linear -5%/level, clamped
+  // at 1). castSpell will spend the same scaled value below.
+  const manaCost = getSpellManaCost(spellId, level);
+  if (p.mana < manaCost) return;
 
   // Prefer the explicitly passed target (from selection ring), fall back
   // to the current engage target if none was passed.
@@ -64,7 +136,10 @@ export function castSpell(world: World, spellId: string, targetId: string | null
   let canFire = false;
   switch (spellId) {
     case 'rush': {
-      if (!resolvedTargetId) break;
+      if (!resolvedTargetId) {
+        sayToChat(world, 'Select target first.');
+        return;
+      }
       const target = findEntity(world, resolvedTargetId);
       if (target && isHostile(target.kind) && target.hp > 0) canFire = true;
       break;
@@ -74,7 +149,10 @@ export function castSpell(world: World, spellId: string, targetId: string | null
       canFire = true;
       break;
     case 'blade-whip': {
-      if (!resolvedTargetId) break;
+      if (!resolvedTargetId) {
+        sayToChat(world, 'Select target first.');
+        return;
+      }
       const target = findEntity(world, resolvedTargetId);
       if (!target || !isHostile(target.kind) || target.hp <= 0) break;
       if (Math.hypot(target.x - p.x, target.z - p.z) <= WHIP_RANGE) canFire = true;
@@ -83,7 +161,7 @@ export function castSpell(world: World, spellId: string, targetId: string | null
   }
   if (!canFire) return;
 
-  p.mana = Math.max(0, p.mana - def.manaCost);
+  p.mana = Math.max(0, p.mana - manaCost);
   p.spellCooldowns[spellId] = world.time + def.cooldown;
   p.spellAnimTrigger += 1;
   emit(world, { kind: 'spell-cast', spellId, x: p.x, z: p.z });

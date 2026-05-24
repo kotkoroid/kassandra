@@ -3,7 +3,18 @@
   import { characterOpen } from '../character.svelte';
   import { CLASS_SPELLS, MAX_CLASS_SPELLS } from '../classSpells';
   import { PLAYER_CLASSES } from '../cosmetics';
-  import { getItem, EXP_PER_LEVEL, SPEED_NORMAL, STAMINA_MAX, getEffectiveStat, localPlayer } from '@kassandra/simulation-domain-library';
+  import {
+    getItem,
+    EXP_PER_LEVEL,
+    SPEED_NORMAL,
+    STAMINA_MAX,
+    MAX_SPELL_LEVEL,
+    dispatch,
+    getEffectiveStat,
+    getSpellLevel,
+    getSpellManaCost,
+    localPlayer,
+  } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
   import { world } from '../world.svelte';
 
@@ -284,21 +295,55 @@
             style:grid-template-columns="repeat({MAX_CLASS_SPELLS}, minmax(0, 1fr))"
           >
             {#each classSpellCells as spell, i (i)}
+              {@const lvl = spell ? getSpellLevel(player, spell.id) : 0}
+              {@const isMax = lvl >= MAX_SPELL_LEVEL}
+              {@const canLevel = !!spell && !isMax && player.classSpellPoints > 0}
+              {@const nextMana =
+                spell && !isMax ? getSpellManaCost(spell.id, lvl + 1) : null}
               <div
-                class="relative flex aspect-square items-center justify-center border bg-stone-950/70 {spell
-                  ? 'border-amber-600/70'
+                class="relative flex aspect-square flex-col items-center justify-center border bg-stone-950/70 {spell
+                  ? lvl > 0
+                    ? 'border-amber-600/70'
+                    : 'border-amber-900/60'
                   : 'border-amber-900/40'}"
-                title={spell?.name ?? ''}
+                title={spell
+                  ? `${spell.name} — ${spell.description}` +
+                    (lvl > 0
+                      ? `\nLevel ${lvl}/${MAX_SPELL_LEVEL}, mana ${getSpellManaCost(spell.id, lvl)}`
+                      : '\nLocked (spend 1 class spell point to learn)')
+                  : ''}
               >
                 {#if spell}
-                  <span class="font-mono text-base font-bold text-amber-200">
+                  <span
+                    class="font-mono text-base font-bold {lvl > 0
+                      ? 'text-amber-200'
+                      : 'text-amber-200/30'}"
+                  >
                     {spell.name.charAt(0).toUpperCase()}
                   </span>
-                  {#if spell.level > 0}
-                    <span class="absolute right-0.5 bottom-0 font-mono text-[10px] leading-none text-amber-300">
-                      {spell.level}
-                    </span>
-                  {/if}
+                  <!-- Level / Locked badge: bottom-right corner. -->
+                  <span
+                    class="absolute right-0.5 bottom-0 font-mono text-[9px] leading-none {lvl > 0
+                      ? 'text-amber-300'
+                      : 'text-amber-300/50'}"
+                  >
+                    {lvl > 0 ? `${lvl}/${MAX_SPELL_LEVEL}` : '—'}
+                  </span>
+                  <!-- Level-up button: top-right. Disabled at max level
+                       or when the player can't afford it. -->
+                  <button
+                    type="button"
+                    class="absolute top-0.5 right-0.5 flex h-3.5 w-3.5 items-center justify-center border border-amber-600/60 bg-black/70 font-mono text-[10px] leading-none text-amber-300 transition hover:border-amber-300 hover:text-amber-100 disabled:cursor-default disabled:border-amber-900/40 disabled:text-amber-300/30 disabled:hover:border-amber-900/40"
+                    disabled={!canLevel}
+                    onclick={() => dispatch(world, { kind: 'level_up_spell', spellId: spell.id })}
+                    aria-label="Level up {spell.name}"
+                    title={isMax
+                      ? 'Max level'
+                      : player.classSpellPoints <= 0
+                        ? 'No class spell points'
+                        : `Spend 1 class spell point → level ${lvl + 1}` +
+                          (nextMana !== null ? ` (mana ${nextMana})` : '')}
+                  >+</button>
                 {/if}
               </div>
             {/each}

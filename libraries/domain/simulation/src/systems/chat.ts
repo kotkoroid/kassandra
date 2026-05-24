@@ -43,7 +43,12 @@ export function applyChat(world: World, text: string, channel: ChatChannel) {
   player.sayExpiresAt = world.time + SAY_TTL;
 }
 
-function pushSystem(world: World, text: string, channel: ChatChannel) {
+// Exported so other systems (death/respawn, lifecycle events from the
+// realm worker, future hooks) can push system-tagged chat lines
+// without duplicating the chat-push pattern. Defaults to the Normal
+// channel, which is the only one rendered today; pass an explicit
+// channel for future Global/Group lifecycle messages.
+export function pushSystem(world: World, text: string, channel: ChatChannel = 'Normal') {
   world.chat.messages.push({
     id: genId(world, 'm'),
     author: 'System',

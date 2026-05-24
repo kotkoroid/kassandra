@@ -4,6 +4,7 @@ import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
 import {
   addPlayer,
   createWorld,
+  pushSystem,
   tick,
   type ClientMessageType,
   type FrameInputs,
@@ -51,6 +52,7 @@ function worldToSnapshot(world: World) {
     levelUpTrigger: p.levelUpTrigger,
     spellAnimTrigger: p.spellAnimTrigger,
     spellCooldowns: { ...p.spellCooldowns },
+    spellLevels: { ...p.spellLevels },
     activeSpell: p.activeSpell,
     // Death state is keyed to world.localPlayerId on the server.
     // Only that player gets live death tracking; others show as alive.
@@ -196,9 +198,16 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
           // Add the player slot; create_character will fill in identity.
           addPlayer(world, playerId);
-          // First player to connect anchors localPlayerId for world systems
-          // (death tracking, monster proximity, NPC chat).
-          if (Object.keys(world.players).length === 1) {
+          // First REAL player to connect anchors localPlayerId for world
+          // systems (death tracking, monster proximity, NPC chat,
+          // channelled-spell advancement via tickSpells). createWorld()
+          // pre-populates a placeholder player as a single-player legacy
+          // — drop it on the first real connect so the count and
+          // localPlayerId reflect actual sessions, not the placeholder.
+          if (sessions.size === 1) {
+            for (const pid of Object.keys(world.players)) {
+              if (pid !== playerId) delete world.players[pid];
+            }
             world.localPlayerId = playerId;
           }
 
@@ -230,11 +239,20 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             if (ev.kind === 'create_character') {
               const p = world.players[data.playerId];
               if (p) {
+                // "Joined" announce fires on the *first* create_character
+                // for this connection (when the name transitions from
+                // the default-empty value to a real one). Subsequent
+                // create_character events from a reconnect / re-roll
+                // skip this so we don't spam the chat with re-joins.
+                const wasUnnamed = !p.name;
                 p.name = ev.name;
                 p.sex = ev.sex;
                 p.hairColor = ev.hairColor;
                 p.armor = ev.armor;
                 p.playerClass = ev.playerClass;
+                if (wasUnnamed && p.name) {
+                  pushSystem(world, `${p.name} joined the realm.`);
+                }
               }
             } else {
               regularEvents.push(ev);
@@ -255,6 +273,14 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             sessions.delete(data.sessionId);
             pendingInputs.delete(data.sessionId);
             pendingEvents.delete(data.sessionId);
+            // Lifecycle announce — capture the name *before* the
+            // player record is dropped. If the player disconnected
+            // before naming themselves (rare: closed the tab during
+            // character creation), skip the message.
+            const leaving = world.players[data.playerId];
+            if (leaving?.name) {
+              pushSystem(world, `${leaving.name} left the realm.`);
+            }
             delete world.players[data.playerId];
             // Re-anchor localPlayerId to any remaining player.
             const remaining = Object.keys(world.players)[0];

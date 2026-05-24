@@ -194,13 +194,23 @@ export {
 } from './util.ts';
 
 // --- Spells ---
-export { castSpell, tickSpells } from './spells.ts';
+export {
+  MAX_SPELL_LEVEL,
+  castSpell,
+  getSpellLevel,
+  getSpellManaCost,
+  levelUpSpell,
+  tickSpells,
+} from './spells.ts';
 
 // --- Spatial grid ---
 export { SpatialGrid, grid, rebuildGrid } from './spatialGrid.ts';
 
 // --- Systems (time helpers used by scene) ---
 export { currentHour, isNightHour, isNight, nightStatMultiplier } from './systems/time.ts';
+
+// --- Chat lifecycle helper (used by realm worker for join/leave lines) ---
+export { pushSystem } from './systems/chat.ts';
 
 // --- Protocol (re-exported so services only depend on this domain library) ---
 export type { ClientMessageType, ServerMessageType } from '@kassandra/protocol-foundation-library';

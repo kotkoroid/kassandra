@@ -127,6 +127,7 @@ function buildSnapshotShape() {
         levelUpTrigger: number;
         spellAnimTrigger: number;
         spellCooldowns: Record<string, number>;
+        spellLevels: Record<string, number>;
         activeSpell: unknown;
         alive: boolean;
         deathX: number;
@@ -208,6 +209,7 @@ function applySnapshot(msg: SnapshotMsg) {
       levelUpTrigger: p.levelUpTrigger,
       spellAnimTrigger: p.spellAnimTrigger,
       spellCooldowns: p.spellCooldowns,
+      spellLevels: p.spellLevels,
       activeSpell: p.activeSpell as never,
     };
   }

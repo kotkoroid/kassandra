@@ -20,6 +20,7 @@
     Vector3,
   } from 'three';
   import { CLASS_SPELLS } from '../classSpells';
+  import { QUICKBAR_DIGITS, getSlots } from '../quickbar.svelte';
   import { chat, closeChat, openChat } from '../chat.svelte';
   import { fireClickIndicator } from '../clickIndicator.svelte';
   import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, localPlayer } from '@kassandra/simulation-domain-library';
@@ -247,16 +248,31 @@
       }
       if (!e.repeat && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
-        const spells = CLASS_SPELLS[player.playerClass] ?? [];
-        const spell = spells[parseInt(e.key, 10) - 1];
-        if (spell) {
+        // Look up the spell assigned to this slot in the player's
+        // (possibly drag-reordered) quickbar layout, not the static
+        // CLASS_SPELLS order — otherwise the keys would cast the
+        // spell at the spell's *original* position, not the one the
+        // player parked into this slot.
+        const slotIdx = parseInt(e.key, 10) - 1;
+        const slots = getSlots(player.playerClass);
+        const spellId = slots[slotIdx];
+        if (spellId) {
           const targetId = selection.value && selection.value !== 'player' ? selection.value : null;
-          dispatch(world, { kind: 'cast_spell', spellId: spell.id, targetId });
+          dispatch(world, { kind: 'cast_spell', spellId, targetId });
         }
         return;
       }
       if (!e.repeat && /^F[1-5]$/.test(e.key)) {
         e.preventDefault();
+        // F1-F5 → quickbar slots QUICKBAR_DIGITS..QUICKBAR_DIGITS+4.
+        // Same lookup pattern as the digit row, just offset.
+        const slotIdx = QUICKBAR_DIGITS + parseInt(e.key.slice(1), 10) - 1;
+        const slots = getSlots(player.playerClass);
+        const spellId = slots[slotIdx];
+        if (spellId) {
+          const targetId = selection.value && selection.value !== 'player' ? selection.value : null;
+          dispatch(world, { kind: 'cast_spell', spellId, targetId });
+        }
         return;
       }
       if (e.code === 'Space') {

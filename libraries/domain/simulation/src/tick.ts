@@ -17,7 +17,7 @@ import { tickPlayer } from './systems/player.ts';
 import { tickProjectiles } from './systems/projectiles.ts';
 import { tickSpawners } from './systems/spawners.ts';
 import { tickTime } from './systems/time.ts';
-import { castSpell, tickSpells } from './spells.ts';
+import { castSpell, levelUpSpell, tickSpells } from './spells.ts';
 import type { FrameInputs, PlayerId, SimEvent, World } from './types.ts';
 import { rebuildGrid } from './spatialGrid.ts';
 import { primeWaterCache } from './util.ts';
@@ -79,7 +79,14 @@ export function tick(
 
   // 3b. Advance channelled spells (Rush dash lerp, Hail ticks).
   //     Runs after player movement so the channel overrides position.
-  tickSpells(world, dt);
+  //     Iterated per-player with the same localPlayerId swap pattern as
+  //     event handling — tickSpells reads localPlayer(world) internally,
+  //     so without the swap only the anchor player's spell would tick.
+  for (const pid of Object.keys(world.players)) {
+    world.localPlayerId = pid;
+    tickSpells(world, dt);
+  }
+  world.localPlayerId = savedId;
 
   // 4. Monster AI (target pick, move, attack) and Janna heal-circle
   // spawning. Runs per-entity dispatch on kind.
@@ -177,6 +184,9 @@ function handleEvent(world: World, ev: SimEvent) {
     }
     case 'cast_spell':
       castSpell(world, ev.spellId, ev.targetId ?? null);
+      break;
+    case 'level_up_spell':
+      levelUpSpell(world, ev.spellId);
       break;
     case 'drop_item': {
       // Splits N copies of `itemId` out of the player's holdings

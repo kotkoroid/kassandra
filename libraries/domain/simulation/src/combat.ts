@@ -9,6 +9,7 @@ import { EXP_PER_LEVEL, LOOT_BAG_TTL, SWORD_DOT_THRESHOLD, SWORD_REACH } from '.
 import { emit } from './events.ts';
 import { spawnEntity, type SpiderKind } from './spawn.ts';
 import { getEffectiveStat } from './stats.ts';
+import { pushSystem } from './systems/chat.ts';
 import type { Entity, World } from './types.ts';
 import { isHostile, refreshLootBagFlags, removeEntity } from './util.ts';
 import { grid } from './spatialGrid.ts';
@@ -183,6 +184,11 @@ export function dropPlayerDeathBag(world: World, x: number, z: number) {
 export function grantExperience(world: World, amount: number) {
   if (amount <= 0) return;
   const p = localPlayer(world);
+  // Remember the pre-grant level so we can announce once at the end,
+  // not once per level — a single fat XP grant that crosses several
+  // levels reads as one chat line ("X reached level 8.") instead of
+  // spamming N consecutive lines.
+  const startLevel = p.level;
   p.experience += amount;
   while (p.experience >= EXP_PER_LEVEL) {
     p.experience -= EXP_PER_LEVEL;
@@ -190,8 +196,14 @@ export function grantExperience(world: World, amount: number) {
     p.health = getEffectiveStat(p, 'maxHealth');
     p.mana = getEffectiveStat(p, 'maxMana');
     p.stamina = getEffectiveStat(p, 'maxStamina');
+    // Each character level-up grants one classSpellPoint, spent in
+    // the Abilities panel via the `level_up_spell` SimEvent.
+    p.classSpellPoints += 1;
     p.levelUpTrigger += 1;
     emit(world, { kind: 'player-level-up', level: p.level });
+  }
+  if (p.level > startLevel) {
+    pushSystem(world, `${p.name || 'A hero'} reached level ${p.level}.`);
   }
 }
 

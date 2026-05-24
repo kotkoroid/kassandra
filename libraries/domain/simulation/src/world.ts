@@ -63,6 +63,7 @@ export function defaultPlayer(): Player {
     sayExpiresAt: 0,
     levelUpTrigger: 0,
     spellCooldowns: {},
+    spellLevels: {},
     activeSpell: null,
     spellAnimTrigger: 0,
   };

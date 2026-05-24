@@ -50,6 +50,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     sayExpiresAt: 0,
     levelUpTrigger: 0,
     spellCooldowns: {},
+    spellLevels: {},
     activeSpell: null,
     spellAnimTrigger: 0,
     ...overrides,

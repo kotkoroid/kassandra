@@ -50,6 +50,13 @@ export const SimEvent = Schema.Union([
     spellId: Schema.String,
     targetId: Schema.optional(Schema.NullOr(Schema.String)),
   }),
+  // Spend one classSpellPoint to raise this spell's level by 1.
+  // Server validates: spell exists for the player's class, pool > 0,
+  // current level < MAX_SPELL_LEVEL.
+  Schema.Struct({
+    kind: Schema.Literal('level_up_spell'),
+    spellId: Schema.String,
+  }),
 ]);
 
 export type ChatChannel = typeof ChatChannel.Type;

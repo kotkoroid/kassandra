@@ -194,8 +194,15 @@ export interface Player {
   skillPoints: number;
   // Separate pool spent only on the six per-class signature spells.
   // Kept distinct from skillPoints so the class kit can level on its
-  // own cadence (e.g. one classSpellPoint per class-quest reward).
+  // own cadence — granted +1 per character level-up, spent via the
+  // `level_up_spell` SimEvent.
   classSpellPoints: number;
+
+  // Per-spell level, keyed by spellId (matches CLASS_SPELLS[].id).
+  // Absent / 0 ↔ locked (uncastable). 1..MAX_SPELL_LEVEL after the
+  // player spends classSpellPoints to learn/level it up. Mana cost
+  // scales with this value (see getSpellManaCost in spells.ts).
+  spellLevels: Record<string, number>;
 
   // Active quest envelopes — every quest the player has accepted
   // and not yet completed/abandoned. Rendered in the Quests tab.

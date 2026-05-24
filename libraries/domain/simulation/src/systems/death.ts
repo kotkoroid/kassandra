@@ -33,6 +33,7 @@ import {
   TROLLER_SPEED,
 } from '../constants.ts';
 import { getEffectiveStat } from '../stats.ts';
+import { pushSystem } from './chat.ts';
 import { spawnTroller } from '../spawn.ts';
 import { removeEntity } from '../util.ts';
 import type { Entity, World } from '../types.ts';
@@ -65,6 +66,10 @@ export function tickDeath(world: World, dt: number) {
 
 function triggerDeath(world: World) {
   const p = localPlayer(world);
+  // Lifecycle announce — fired once at the alive→dead transition.
+  // Uses the player's name (set during create_character); falls back
+  // to "A hero" so a kill before naming still reads.
+  pushSystem(world, `${p.name || 'A hero'} died in a battle.`);
   world.death.alive = false;
   world.death.deathX = p.x;
   world.death.deathZ = p.z;
@@ -112,6 +117,8 @@ function triggerDeath(world: World) {
 
 function respawn(world: World) {
   const p = localPlayer(world);
+  // Lifecycle announce — fired once at the dead→alive transition.
+  pushSystem(world, `${p.name || 'A hero'} respawned in the city.`);
   world.death.alive = true;
   // Clear the previous life's recap; the next life starts a fresh
   // attribution log.
