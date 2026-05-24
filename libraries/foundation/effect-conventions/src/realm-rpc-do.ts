@@ -1,30 +1,30 @@
-// DurableObject ↔ Socket ↔ RpcServer bridge.
+// DurableObject ↔ effect/unstable/rpc bridge.
 // ----------------------------------------------------------------------
 //
-// Effect 4.0 ships several RpcServer protocols, but none fit a Cloudflare
-// Durable Object's hibernating WebSocket model out of the box:
+// Effect 4.0 ships RpcServer protocols for HTTP, WebSocket-via-HttpRouter,
+// and SocketServer-backed TCP. None of them fit a Cloudflare Durable
+// Object's hibernating WebSocket lifecycle, where:
 //
-//   - `layerProtocolSocketServer` requires an `effect/unstable/socket`
-//     `SocketServer` — a TCP / Unix accept loop. DOs don't accept; the
-//     runtime delivers messages to us by calling `webSocketMessage(ws, …)`.
-//   - `makeProtocolWithHttpEffectWebsocket` calls `request.upgrade()` and
-//     drives the socket inline, which does not survive hibernation. DOs
-//     require `state.acceptWebSocket(ws)` inside `fetch` so the runtime
-//     can rehydrate the socket attachment after eviction.
+//   - The DO owns N WebSockets per instance.
+//   - Sockets are accepted via `state.acceptWebSocket(ws)` (the alchemy
+//     wrapper does this inside `Cloudflare.upgrade()`).
+//   - Inbound frames arrive via `webSocketMessage(ws, data)` callbacks
+//     from the runtime — there is no `ws.onmessage` we can subscribe to.
+//   - Hibernation may evict the DO and rebuild it later; sockets survive
+//     and their attachments come back via `state.getWebSockets()`.
 //
-// What this module provides:
-//   `socketFromDurableWebSocket(ws)` — adapts ONE Cloudflare
-//   `DurableWebSocket` into one `effect/unstable/socket/Socket`, with
-//   `push` (call from `webSocketMessage`) and `end` (call from
-//   `webSocketClose`) side-channels. The Socket can then be handed to
-//   `onSocket` from RpcServer's `makeSocketProtocol` (see
-//   `effect/unstable/rpc/RpcServer` source) to wire up the protocol.
+// This module provides two adapters:
 //
-// PR-B consumes this from `services/realm/src/PartyRoom.ts` to mount an
-// `effect/unstable/rpc` server over the realm's WebSockets. The
-// per-socket bookkeeping (mapping `DurableWebSocket` identity to its
-// `AcceptedSocket`, surviving DO hibernation via socket attachments)
-// lives in PartyRoom itself — this module stays pure adapter.
+//   1. `socketFromDurableWebSocket(ws)` — adapts ONE DurableWebSocket
+//      into one `effect/unstable/socket/Socket`. Useful for any Socket
+//      consumer (Stream-based channel ops, custom protocols).
+//
+//   2. `makeRealmRpcProtocol(serialization)` — implements RpcServer's
+//      `Protocol` interface directly against DurableWebSocket. Used by
+//      PartyRoom (PR-B2) to mount an RpcServer over its many connected
+//      sockets without going through Socket. Less indirection, fewer
+//      moving parts; the same approach the upstream
+//      `makeProtocolWithHttpEffect` takes for its HTTP transport.
 
 import type * as Cloudflare from 'alchemy/Cloudflare';
 import * as Cause from 'effect/Cause';
@@ -32,65 +32,40 @@ import * as Effect from 'effect/Effect';
 import * as Queue from 'effect/Queue';
 import * as Scope from 'effect/Scope';
 import * as Socket from 'effect/unstable/socket/Socket';
+import * as RpcMessage from 'effect/unstable/rpc/RpcMessage';
+import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
+import * as RpcServer from 'effect/unstable/rpc/RpcServer';
+
+/**
+ * Header entries — matches the wire shape RpcServer expects on
+ * `RequestEncoded.headers`. Use `Object.entries(record)` to build, or
+ * literal tuples like `[['playerid', playerId]]`.
+ */
+export type HeaderEntries = ReadonlyArray<[string, string]>;
+
+// =====================================================================
+// 1. Socket adapter — one DurableWebSocket → one effect Socket.
+// =====================================================================
 
 export interface AcceptedSocket {
-  /**
-   * Hand to `onSocket(socket, headers)` from
-   * `effect/unstable/rpc/RpcServer`'s internal `makeSocketProtocol`,
-   * or to any other consumer of `Socket`.
-   */
   readonly socket: Socket.Socket;
-  /**
-   * Producer side of the inbound queue. Call from the DO's
-   * `webSocketMessage` handler with the raw frame as delivered.
-   */
   readonly push: (data: string | Uint8Array) => Effect.Effect<void>;
-  /**
-   * Signal that no more frames will arrive — the runRaw consumer fails
-   * with `SocketError { reason: SocketCloseError }`, which RpcServer's
-   * protocol loop catches and treats as a clean close. Call from the
-   * DO's `webSocketClose` handler.
-   */
   readonly end: Effect.Effect<void>;
 }
 
-/**
- * Adapt one `DurableWebSocket` into an `effect/unstable/socket` Socket.
- *
- * The adapter is `Scope.Scope`-requiring: the inbound queue is closed
- * automatically when the surrounding scope ends, so unhappy paths
- * (DO eviction mid-handler, fiber interruption) don't leak the queue.
- *
- * RFC 6455 reserved codes (1005/1006/1015) on outbound close events are
- * clamped to 1000 (Normal Closure). The Workers runtime rejects them
- * with `InvalidAccessError` otherwise — see the matching clamp in
- * `services/realm/src/PartyRoom.ts` webSocketClose handler (commit
- * a877205).
- */
 export const socketFromDurableWebSocket = (
   ws: Cloudflare.DurableWebSocket,
 ): Effect.Effect<AcceptedSocket, never, Scope.Scope> =>
   Effect.gen(function* () {
-    // Inbound queue. Producer = DO's webSocketMessage (via `push`),
-    // consumer = the Socket's `runRaw` loop. Bounded would back-pressure
-    // workerd, which already throttles per-isolate; unbounded is correct.
     const queue = yield* Queue.unbounded<string | Uint8Array, Cause.Done>();
 
     const scope = yield* Effect.scope;
-    yield* Scope.addFinalizer(
-      scope,
-      // Safe to double-close — Queue.end is idempotent.
-      Queue.end(queue).pipe(Effect.asVoid),
-    );
+    yield* Scope.addFinalizer(scope, Queue.end(queue).pipe(Effect.asVoid));
 
     const socket = Socket.make({
       runRaw: (handler) =>
         Effect.gen(function* () {
           while (true) {
-            // Queue.take fails with `Cause.Done` when ended. Translate to
-            // a SocketCloseError so makeSocketProtocol's
-            // `Effect.catchReason("SocketError", "SocketCloseError", …)`
-            // swallows it as a clean shutdown.
             const data = yield* Queue.take(queue).pipe(
               Effect.catchTag('Done', () =>
                 Effect.fail(
@@ -104,12 +79,6 @@ export const socketFromDurableWebSocket = (
             if (out !== undefined) yield* out;
           }
         }),
-
-      // The writer is `Effect.succeed(fn)` because we have nothing to
-      // initialize per-write — `fn` just dispatches to the underlying
-      // DurableWebSocket's send/close. Both `ws.send` and `ws.close`
-      // return `Effect<void>` (alchemy wraps them in `Effect.sync`), so
-      // no error mapping is needed.
       writer: Effect.succeed((chunk) => {
         if (Socket.isCloseEvent(chunk)) {
           const RESERVED =
@@ -126,3 +95,160 @@ export const socketFromDurableWebSocket = (
       end: Queue.end(queue).pipe(Effect.asVoid),
     };
   });
+
+// =====================================================================
+// 2. Direct RpcServer Protocol — for PartyRoom in PR-B2.
+// =====================================================================
+
+/**
+ * Operations the bridge exposes to the DO lifecycle handlers. Each
+ * accepted DurableWebSocket produces a clientId; PartyRoom keeps a
+ * `Map<DurableWebSocket, clientId>` so the runtime's three callbacks
+ * (fetch's upgrade, webSocketMessage, webSocketClose) can drive the
+ * protocol.
+ */
+export interface RealmRpcBridge {
+  /** Mount as `RpcServer.Protocol` via `Layer.succeed(RpcServer.Protocol, …)`. */
+  readonly protocol: typeof RpcServer.Protocol.Service;
+  /**
+   * Register a fresh DurableWebSocket. Call from inside `fetch` after
+   * `Cloudflare.upgrade()`. Returns the assigned clientId so callers
+   * can store the mapping for routing inbound messages.
+   *
+   * `headers` is concatenated onto every inbound RPC Request from this
+   * connection — that's where per-connection identity (e.g., the
+   * `playerid` header read by `PartySession` middleware) lives.
+   */
+  readonly acceptSocket: (
+    ws: Cloudflare.DurableWebSocket,
+    headers: HeaderEntries,
+  ) => Effect.Effect<number>;
+  /**
+   * Feed an inbound frame from `webSocketMessage(ws, data)` into the
+   * protocol. Caller is responsible for looking up the clientId from
+   * its own `Map<DurableWebSocket, clientId>`.
+   */
+  readonly onMessage: (
+    clientId: number,
+    data: string | Uint8Array,
+  ) => Effect.Effect<void>;
+  /**
+   * Notify the protocol that the underlying socket has closed. Call
+   * from `webSocketClose`. The RpcServer will see the disconnect via
+   * the `disconnects` queue and clean up any pending streams.
+   */
+  readonly onClose: (clientId: number) => Effect.Effect<void>;
+}
+
+interface ClientEntry {
+  readonly ws: Cloudflare.DurableWebSocket;
+  readonly headers: HeaderEntries;
+  readonly parser: RpcSerialization.Parser;
+}
+
+/**
+ * Build a direct RpcServer.Protocol over Cloudflare DurableWebSockets.
+ *
+ * Mirrors the upstream `makeProtocolWithHttpEffect` pattern (see
+ * effect/unstable/rpc/RpcServer.js:597) but with three differences:
+ *
+ *   - No HttpServerRequest — DOs don't have a per-request scope.
+ *   - acceptSocket is callable from outside the protocol's Effect
+ *     scope; the underlying state is held in module-scoped Maps so
+ *     PartyRoom can drive the protocol from its imperative handlers.
+ *   - Per-connection headers are passed at accept-time (synthesized
+ *     from the WebSocket upgrade URL), not per-request.
+ */
+export const makeRealmRpcProtocol = Effect.gen(function* () {
+  const serialization = yield* RpcSerialization.RpcSerialization;
+  const disconnects = yield* Queue.unbounded<number>();
+  const clients = new Map<number, ClientEntry>();
+  let nextClientId = 0;
+  let writeRequest:
+    | ((clientId: number, message: RpcMessage.FromClientEncoded) => Effect.Effect<void>)
+    | null = null;
+
+  const protocol = yield* RpcServer.Protocol.make((writeRequest_) => {
+    writeRequest = writeRequest_;
+    return Effect.succeed({
+      disconnects,
+      send: (clientId, response) => {
+        const client = clients.get(clientId);
+        if (!client) return Effect.void;
+        try {
+          const encoded = client.parser.encode(response);
+          if (encoded === undefined) return Effect.void;
+          return client.ws.send(encoded);
+        } catch (cause) {
+          // Encoding failures should be impossible for well-typed RPCs,
+          // but if they happen we want to surface them as a defect on
+          // the wire so the client can react rather than hang.
+          const fallback = client.parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+          if (fallback === undefined) return Effect.void;
+          return client.ws.send(fallback);
+        }
+      },
+      end: (clientId) =>
+        Effect.sync(() => {
+          const client = clients.get(clientId);
+          if (!client) return;
+          clients.delete(clientId);
+        }),
+      clientIds: Effect.sync(() => new Set(clients.keys())),
+      initialMessage: Effect.succeedNone,
+      supportsAck: true,
+      supportsTransferables: false,
+      supportsSpanPropagation: true,
+    });
+  });
+
+  const acceptSocket: RealmRpcBridge['acceptSocket'] = (ws, headers) =>
+    Effect.sync(() => {
+      const clientId = nextClientId++;
+      const parser = serialization.makeUnsafe();
+      clients.set(clientId, { ws, headers, parser });
+      return clientId;
+    });
+
+  const onMessage: RealmRpcBridge['onMessage'] = (clientId, data) =>
+    Effect.gen(function* () {
+      const client = clients.get(clientId);
+      if (!client || writeRequest === null) return;
+      let decoded: ReadonlyArray<unknown>;
+      try {
+        decoded = client.parser.decode(data);
+      } catch (cause) {
+        // Malformed frame on the wire. Reflect a defect back so the
+        // client's per-request promise rejects rather than hanging.
+        const encoded = client.parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+        if (encoded !== undefined) yield* client.ws.send(encoded);
+        return;
+      }
+      for (const raw of decoded) {
+        const message = raw as RpcMessage.FromClientEncoded;
+        if (message._tag === 'Request') {
+          // Synthesize per-connection headers onto every Request so the
+          // middleware sees `playerid` (etc.) without the client having
+          // to repeat it in every RPC. Headers on the wire are arrays
+          // of [key, value] tuples (RequestEncoded.headers); concat
+          // mirrors the upstream `makeProtocolWithHttpEffect` pattern.
+          (message as unknown as { headers: HeaderEntries }).headers = [
+            ...client.headers,
+            ...message.headers,
+          ];
+        }
+        yield* writeRequest(clientId, message);
+      }
+    });
+
+  const onClose: RealmRpcBridge['onClose'] = (clientId) =>
+    Effect.gen(function* () {
+      const client = clients.get(clientId);
+      if (!client) return;
+      clients.delete(clientId);
+      yield* Queue.offer(disconnects, clientId);
+    });
+
+  const bridge: RealmRpcBridge = { protocol, acceptSocket, onMessage, onClose };
+  return bridge;
+});
