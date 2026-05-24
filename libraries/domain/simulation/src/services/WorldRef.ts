@@ -168,5 +168,9 @@ export function worldToSnapshot(world: World): Snapshot {
       text: m.text,
       channel: m.channel,
     })),
+    // PR-D3d.3: copy the per-tick event buffer. The realm tick clears
+    // `world.recentEvents` after the snapshot is built so each tick's
+    // events ship exactly once.
+    recentEvents: world.recentEvents.map((e) => ({ ...e })),
   };
 }

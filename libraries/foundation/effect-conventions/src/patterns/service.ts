@@ -9,7 +9,9 @@
 // What it replaces in Kassandra (as of this PR):
 //   - services/realm/src/PartyRoom.ts:125 `const world = createWorld()`
 //   - services/realm/src/PartyRoom.ts:126-128 three `new Map()` lines
-//   - libraries/domain/simulation/src/events.ts:39 `Set<Handler>`
+//   - libraries/domain/simulation/src/events.ts `Set<Handler>` —
+//     replaced in PR-D3d.3 by per-world `world.recentEvents` shipped
+//     via snapshot
 //   - applications/game/src/realm.svelte.ts:6-9 module-level `let ws`
 //
 // Convention:

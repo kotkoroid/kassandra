@@ -8,6 +8,7 @@ import type { ChatChannel, SimEvent } from '@kassandra/protocol-foundation-libra
 import type { ItemId } from './items.ts';
 import type { MonsterId } from './monsters.ts';
 import type { Rng } from './rng.ts';
+import type { MonsterId } from './monsters.ts';
 
 export type { ChatChannel, SimEvent };
 
@@ -445,6 +446,36 @@ export interface FrameInputs {
   moveZ: number;
 }
 
+// --- Transient sim events ---------------------------------------
+// PR-D3d.3: cross-cutting events that fire during a tick (damage
+// popups, kill feed, level-up announce, spell cast). Buffered on
+// `world.recentEvents`, drained into the snapshot each tick, and
+// dispatched on the client to UI subscribers. The old module-level
+// `Set<Handler>` in events.ts was a solo-arch holdover — the sim
+// runs in the DO, so any client-side `subscribe()` never fired in
+// multiplayer. Per-world buffer + snapshot transport fixes that.
+
+export type GameEvent =
+  | {
+      kind: 'entity-killed';
+      entityKind: EntityKind;
+      monsterId: MonsterId;
+      x: number;
+      z: number;
+      byPlayer: boolean;
+    }
+  | { kind: 'player-level-up'; level: number }
+  | {
+      kind: 'damage-dealt';
+      x: number;
+      z: number;
+      amount: number;
+      // True = a player dealt the damage; false = a player received it.
+      // (Naming kept stable for UI consumers that gate the popup colour.)
+      byPlayer: boolean;
+    }
+  | { kind: 'spell-cast'; spellId: string; x: number; z: number };
+
 // --- The world --------------------------------------------------
 
 export interface World {
@@ -498,6 +529,14 @@ export interface World {
   // Inputs queued from outside (UI dispatches, future network
   // packets). Drained at the top of every tick.
   inputQueue: SimEvent[];
+
+  // PR-D3d.3: transient events emitted during a tick (damage hits,
+  // kills, level-ups, spell casts). Populated by `emit()` calls from
+  // sim systems; serialized into the snapshot at end-of-tick; cleared
+  // at the start of the next tick. UI consumers subscribe by reading
+  // these out of each snapshot rather than via a shared handler set
+  // — see applications/game/src/damageNumbers.svelte.ts.
+  recentEvents: GameEvent[];
 
   // PR-D3d.1: per-tick scratch flags moved to Player.pendingManualAttack
   // and Player.pendingRespawn. Each player drains their own flags

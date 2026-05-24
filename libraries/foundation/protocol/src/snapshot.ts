@@ -217,6 +217,39 @@ export const ChatMessageSnapshot = Schema.Struct({
   channel: Schema.Literals(['Normal', 'Global', 'Group']),
 });
 
+// --- Transient sim events ---------------------------------------
+// PR-D3d.3: events emitted by sim systems during a tick (damage
+// popups, kills, level-ups, spell casts) — shipped on every snapshot
+// then cleared sim-side. Replaces the dead-on-MP `subscribe()` API.
+
+export const GameEventSnapshot = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('entity-killed'),
+    entityKind: EntityKind,
+    monsterId: Schema.String,
+    x: Schema.Number,
+    z: Schema.Number,
+    byPlayer: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('player-level-up'),
+    level: Schema.Number,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('damage-dealt'),
+    x: Schema.Number,
+    z: Schema.Number,
+    amount: Schema.Number,
+    byPlayer: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('spell-cast'),
+    spellId: Schema.String,
+    x: Schema.Number,
+    z: Schema.Number,
+  }),
+]);
+
 // --- Top-level snapshot ------------------------------------------
 
 export const Snapshot = Schema.Struct({
@@ -232,6 +265,10 @@ export const Snapshot = Schema.Struct({
   healingCircles: Schema.Array(HealingCircleSnapshot),
   lootBags: Schema.Array(LootBagSnapshot),
   chatMessages: Schema.Array(ChatMessageSnapshot),
+  // PR-D3d.3: transient events that fired during the just-finished
+  // sim tick. Drained sim-side after this snapshot is built; clients
+  // dispatch them on receipt (damage popups, kill feed, etc.).
+  recentEvents: Schema.Array(GameEventSnapshot),
 });
 
 export type EntityKind = typeof EntityKind.Type;
@@ -241,4 +278,5 @@ export type ProjectileSnapshot = typeof ProjectileSnapshot.Type;
 export type HealingCircleSnapshot = typeof HealingCircleSnapshot.Type;
 export type LootBagSnapshot = typeof LootBagSnapshot.Type;
 export type ChatMessageSnapshot = typeof ChatMessageSnapshot.Type;
+export type GameEventSnapshot = typeof GameEventSnapshot.Type;
 export type Snapshot = typeof Snapshot.Type;

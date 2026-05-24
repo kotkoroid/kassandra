@@ -115,6 +115,9 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     spawnPointRespawnAt: new Map(),
     nextId: 1,
     inputQueue: [],
+    // PR-D3d.3: per-tick transient event buffer. Drained at end of
+    // each tick after the snapshot is built + shipped.
+    recentEvents: [],
   };
   return world;
 }

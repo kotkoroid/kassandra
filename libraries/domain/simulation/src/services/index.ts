@@ -1,10 +1,12 @@
 // Effect-native sim service barrel.
 //
 // PR-D2: 13 systems all have Effect-native surfaces. Internals are
-// still the original sync impls; PR-D3 swaps the RNG (effect/Random
-// for Mulberry32), the EventBus (PubSub for Set<Handler>), and adds
-// the orchestrator `Tick` service that yields every other service to
-// drive the simulation in one Effect.
+// still the original sync impls.
+// PR-D3d.3: EventBus is now a per-world buffer (events.ts pushes to
+// `world.recentEvents`; the realm tick drains after the snapshot
+// ships). The remaining sync-impl piece is the Mulberry32 RNG
+// (world.rng) — PR-D3e is the natural place to swap it for
+// effect/Random when the pure-core extraction lands.
 
 export { Combat, CombatLayer, makeCombat, type CombatShape } from './Combat.ts';
 export { Death, DeathLayer, makeDeath, type DeathShape } from './Death.ts';

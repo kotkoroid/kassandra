@@ -14,6 +14,7 @@ import type {
   ActiveSpell,
   ArmorColor,
   EntityKind,
+  GameEvent,
   HairColor,
   HealingCircle,
   Player,
@@ -23,6 +24,7 @@ import type {
   WorldLootBag,
 } from '@kassandra/simulation-domain-library';
 
+import { dispatchSimEvent } from '../damageNumbers.svelte';
 import { world } from '../world.svelte';
 
 export function applySnapshot(s: Snapshot): void {
@@ -116,4 +118,15 @@ export function applySnapshot(s: Snapshot): void {
     items: b.items.map((i) => ({ ...i })),
   })) as WorldLootBag[];
   world.chat.messages = s.chatMessages.map((m) => ({ ...m }));
+
+  // PR-D3d.3: transient sim events fan out to UI consumers here.
+  // The mirror itself doesn't keep them — once a tick's events
+  // have been dispatched, they're gone (next snapshot brings a
+  // fresh batch). We still write to `world.recentEvents` for any
+  // future consumer that wants a snapshot-time read.
+  const events = s.recentEvents.map((e) => ({ ...e })) as GameEvent[];
+  world.recentEvents = events;
+  for (const ev of events) {
+    dispatchSimEvent(ev, s.time);
+  }
 }

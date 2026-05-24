@@ -1,49 +1,39 @@
-// In-sim event bus. Core systems emit events; cross-cutting features
-// (achievements, quests, kill-feed, sound) subscribe without touching
-// the emitting code.
+// In-sim event bus. Core systems emit cross-cutting events (damage
+// popups, kill feed, level-up announce, spell cast); the events flow
+// out of the simulation via the snapshot, not via in-process handlers.
 //
-// Usage:
-//   const unsub = subscribe((world, ev) => { ... });
-//   // later:
-//   unsub();
+// PR-D3d.3 rewrite: the old `Set<Handler>` lived module-side, which
+// meant the *client's* copy of the Set was the one any UI subscriber
+// landed on — but the sim runs in the DO, so client-side subscribers
+// never fired. Now `emit()` pushes onto `world.recentEvents`; the
+// realm tick ships those in the snapshot; the client's
+// `applySnapshot` dispatches them to UI consumers.
+//
+// `GameEvent` lives in types.ts to avoid an events.ts ↔ types.ts
+// import cycle (World needs the event shape for `recentEvents`).
 
-import type { EntityKind, World } from './types.ts';
-import type { MonsterId } from './monsters.ts';
+import type { GameEvent, World } from './types.ts';
 
-export type GameEvent =
-  | {
-      kind: 'entity-killed';
-      entityKind: EntityKind;
-      monsterId: MonsterId;
-      x: number;
-      z: number;
-      byPlayer: boolean;
-    }
-  | { kind: 'player-level-up'; level: number }
-  | {
-      // A discrete hit landed. The renderer turns these into floating
-      // damage popups; new subscribers (sounds, screen shake, combat
-      // log) can hook the same event without touching combat code.
-      kind: 'damage-dealt';
-      x: number;
-      z: number;
-      amount: number;
-      // True = the player dealt the damage (popup colored "given").
-      // False = the player received the damage (popup colored "taken").
-      byPlayer: boolean;
-    }
-  | { kind: 'spell-cast'; spellId: string; x: number; z: number };
+// Re-export for callers that import the event union from this module.
+export type { GameEvent };
 
-export type Handler = (world: World, event: GameEvent) => void;
-
-const handlers = new Set<Handler>();
-
-// Returns an unsubscribe function.
-export function subscribe(handler: Handler): () => void {
-  handlers.add(handler);
-  return () => handlers.delete(handler);
-}
+// Hard cap so a runaway emission loop can't unbounded the buffer in a
+// single tick. Old events fall out first. 256 covers a heavy fight
+// frame (a swarm of damage popups + several kills) with headroom.
+const MAX_EVENTS_PER_TICK = 256;
 
 export function emit(world: World, event: GameEvent): void {
-  for (const h of handlers) h(world, event);
+  const buf = world.recentEvents;
+  buf.push(event);
+  if (buf.length > MAX_EVENTS_PER_TICK) {
+    buf.splice(0, buf.length - MAX_EVENTS_PER_TICK);
+  }
+}
+
+// Tick-boundary helper: clear the per-tick buffer after the snapshot
+// has been built. Called once per tick from the realm's Tick.step
+// (between snapshot publish and the next sim step).
+export function clearEvents(world: World): void {
+  // Mutate in place; the snapshot has already copied the array.
+  world.recentEvents.length = 0;
 }

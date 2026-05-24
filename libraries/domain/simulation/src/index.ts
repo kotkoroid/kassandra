@@ -168,7 +168,11 @@ export {
 export { getEffectiveStat, tickModifiers } from './stats.ts';
 
 // --- Events ---
-export { subscribe, emit, type GameEvent } from './events.ts';
+// PR-D3d.3: `subscribe` is gone (the module-level Set was dead code
+// on the client — sim runs in the DO). Events now flow out of the
+// simulation as `Snapshot.recentEvents`; UI consumers dispatch from
+// `applySnapshot` instead of subscribing in-process.
+export { clearEvents, emit, type GameEvent } from './events.ts';
 
 // --- Input dispatch ---
 export { dispatch } from './input.ts';

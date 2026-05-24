@@ -11,6 +11,7 @@
 
 import type { Snapshot } from '@kassandra/protocol-foundation-library';
 import {
+  clearEvents,
   Tick as SimTick,
   type WorldRefShape,
 } from '@kassandra/simulation-domain-library';
@@ -70,6 +71,14 @@ export const makeTick = (deps: {
         yield* simTick.step(dt, allInputs, allEvents);
         const snapshot = yield* worldRef.snapshot;
         yield* PubSubMod.publish(snapshotPubSub, snapshot);
+        // PR-D3d.3: drain `world.recentEvents` *after* the snapshot
+        // is built and shipped. Each tick's events flow out exactly
+        // once; the next tick starts with an empty buffer.
+        // `clearEvents` mutates in place; `modify` wants a World back.
+        yield* worldRef.modify((w) => {
+          clearEvents(w);
+          return w;
+        });
       });
 
     // The loop uses `effect/Clock` for wall-clock dt — same source as
