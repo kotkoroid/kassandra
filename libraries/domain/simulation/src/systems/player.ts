@@ -22,13 +22,18 @@ import {
   WATER_SPEED_FACTOR,
 } from '../constants.ts';
 import { getEffectiveStat } from '../stats.ts';
-import type { FrameInputs, World } from '../types.ts';
+import type { FrameInputs, PlayerId, World } from '../types.ts';
 import { findEntity, isHostile, isInWaterAt } from '../util.ts';
 import { isNight } from './time.ts';
-import { localPlayer } from '../world.ts';
+import { playerById } from '../world.ts';
 
-export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
-  const p = localPlayer(world);
+export function tickPlayer(
+  world: World,
+  playerId: PlayerId,
+  dt: number,
+  inputs: FrameInputs,
+) {
+  const p = playerById(world, playerId);
 
   // Passive health regen runs whether moving or idle, but only while
   // alive. Tied to stat, capped at PLAYER_MAX_HP.
@@ -90,7 +95,7 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
         p.rotation = Math.atan2(tdx, tdz);
         const minGap = 1 / Math.max(getEffectiveStat(p, 'attackSpeed'), 0.0001);
         if (world.time - p.lastSlashTime >= minGap) {
-          slash(world);
+          slash(world, playerId);
           // One-attack mode: stop after this swing; selection stays
           // so the panel still shows.
           if (!p.autoAttack) p.engageActive = false;
@@ -191,7 +196,7 @@ export function tickPlayer(world: World, dt: number, inputs: FrameInputs) {
     p.navTargetZ = null;
     const minGap = 1 / Math.max(getEffectiveStat(p, 'attackSpeed'), 0.0001);
     if (world.time - p.lastSlashTime >= minGap) {
-      slash(world);
+      slash(world, playerId);
     }
   }
 }

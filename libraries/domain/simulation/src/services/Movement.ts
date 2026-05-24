@@ -11,12 +11,13 @@ import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 
 import { tickPlayer as tickPlayerImpl } from '../systems/player.ts';
-import type { FrameInputs, World } from '../types.ts';
+import type { FrameInputs, PlayerId, World } from '../types.ts';
 
 export interface MovementShape {
-  /** Advance the local player for one frame using the given inputs. */
+  /** Advance `playerId` for one frame using the given inputs. */
   readonly tickPlayer: (
     world: World,
+    playerId: PlayerId,
     dt: number,
     inputs: FrameInputs,
   ) => Effect.Effect<void>;
@@ -27,8 +28,8 @@ export class Movement extends Context.Service<Movement, MovementShape>()(
 ) {}
 
 export const makeMovement: Effect.Effect<MovementShape> = Effect.succeed({
-  tickPlayer: Effect.fn('Movement.tickPlayer')(function* (world, dt, inputs) {
-    tickPlayerImpl(world, dt, inputs);
+  tickPlayer: Effect.fn('Movement.tickPlayer')(function* (world, playerId, dt, inputs) {
+    tickPlayerImpl(world, playerId, dt, inputs);
   }),
 });
 

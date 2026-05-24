@@ -23,22 +23,27 @@ import {
   grantExperience as grantExperienceImpl,
   slash as slashImpl,
 } from '../combat.ts';
-import type { Entity, World } from '../types.ts';
+import type { Entity, PlayerId, World } from '../types.ts';
 
 export interface CombatShape {
-  /** Apply damage to an entity by its index in world.entities. */
+  /**
+   * Apply damage to an entity by its index in world.entities.
+   * `attribution` = the slayer's player id when damage came from a
+   * player (XP + loot ownership flow to that player on kill); `null`
+   * for environmental damage (NPC vs NPC, projectile from a monster).
+   */
   readonly applyDamageToEntity: (
     world: World,
     index: number,
     amount: number,
-    byPlayer: boolean,
+    attribution: PlayerId | null,
   ) => Effect.Effect<void>;
   /** Apply damage to an entity reference directly (skips index lookup). */
   readonly applyDamageToEntityRef: (
     world: World,
     entity: Entity,
     amount: number,
-    byPlayer: boolean,
+    attribution: PlayerId | null,
   ) => Effect.Effect<void>;
   /** Apply damage to the local player, attributed to the named attacker. */
   readonly applyDamageToPlayer: (
@@ -52,13 +57,14 @@ export interface CombatShape {
     x: number,
     z: number,
   ) => Effect.Effect<void>;
-  /** Award XP to the local player; handles level-up cascading. */
+  /** Award XP to `playerId`; handles level-up cascading. */
   readonly grantExperience: (
     world: World,
+    playerId: PlayerId,
     amount: number,
   ) => Effect.Effect<void>;
-  /** Trigger a slash from the local player against the current target. */
-  readonly slash: (world: World) => Effect.Effect<void>;
+  /** Trigger a slash from `playerId` against their current target. */
+  readonly slash: (world: World, playerId: PlayerId) => Effect.Effect<void>;
 }
 
 export class Combat extends Context.Service<Combat, CombatShape>()(
@@ -67,13 +73,13 @@ export class Combat extends Context.Service<Combat, CombatShape>()(
 
 export const makeCombat: Effect.Effect<CombatShape> = Effect.succeed({
   applyDamageToEntity: Effect.fn('Combat.applyDamageToEntity')(
-    function* (world, index, amount, byPlayer) {
-      applyDamageToEntityImpl(world, index, amount, byPlayer);
+    function* (world, index, amount, attribution) {
+      applyDamageToEntityImpl(world, index, amount, attribution);
     },
   ),
   applyDamageToEntityRef: Effect.fn('Combat.applyDamageToEntityRef')(
-    function* (world, entity, amount, byPlayer) {
-      applyDamageToEntityRefImpl(world, entity, amount, byPlayer);
+    function* (world, entity, amount, attribution) {
+      applyDamageToEntityRefImpl(world, entity, amount, attribution);
     },
   ),
   applyDamageToPlayer: Effect.fn('Combat.applyDamageToPlayer')(
@@ -87,12 +93,12 @@ export const makeCombat: Effect.Effect<CombatShape> = Effect.succeed({
     },
   ),
   grantExperience: Effect.fn('Combat.grantExperience')(
-    function* (world, amount) {
-      grantExperienceImpl(world, amount);
+    function* (world, playerId, amount) {
+      grantExperienceImpl(world, playerId, amount);
     },
   ),
-  slash: Effect.fn('Combat.slash')(function* (world) {
-    slashImpl(world);
+  slash: Effect.fn('Combat.slash')(function* (world, playerId) {
+    slashImpl(world, playerId);
   }),
 });
 

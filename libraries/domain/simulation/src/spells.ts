@@ -237,7 +237,7 @@ export function castSpell(
     case 'blade-whip': {
       const target = findEntity(world, resolvedTargetId!)!;
       const damage = getEffectiveStat(p, 'damage') * WHIP_DAMAGE_MUL;
-      applyDamageToEntityRef(world, target, damage, true);
+      applyDamageToEntityRef(world, target, damage, playerId);
       target.slowedUntil = world.time + WHIP_SLOW_DURATION;
       break;
     }
@@ -269,7 +269,7 @@ export function tickSpells(
       const target = findEntity(world, spell.targetId);
       if (target && isHostile(target.kind) && target.hp > 0) {
         const damage = getEffectiveStat(p, 'damage') * RUSH_DAMAGE_MUL;
-        applyDamageToEntityRef(world, target, damage, true);
+        applyDamageToEntityRef(world, target, damage, playerId);
         target.stunnedUntil = world.time + RUSH_STUN_DURATION;
       }
       p.activeSpell = null;
@@ -289,7 +289,7 @@ export function tickSpells(
       for (const e of grid.queryRadius(p.x, p.z, HAIL_RADIUS)) {
         if (!isHostile(e.kind)) continue;
         if (e.hp <= 0) continue;
-        applyDamageToEntityRef(world, e, damage, true);
+        applyDamageToEntityRef(world, e, damage, playerId);
       }
     }
   }

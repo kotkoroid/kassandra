@@ -26,7 +26,7 @@ export function tickProjectiles(world: World, dt: number) {
     let consumed = false;
     for (const t of grid.queryRadius(p.x, p.z, PROJECTILE_HIT_RADIUS)) {
       if (t.kind !== 'janna') continue;
-      applyDamageToEntityRef(world, t, p.damage, false);
+      applyDamageToEntityRef(world, t, p.damage, null);
       world.projectiles.splice(i, 1);
       consumed = true;
       break;

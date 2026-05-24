@@ -10,38 +10,61 @@ import { emit } from './events.ts';
 import { spawnEntity, type SpiderKind } from './spawn.ts';
 import { getEffectiveStat } from './stats.ts';
 import { pushSystem } from './systems/chat.ts';
-import type { Entity, World } from './types.ts';
+import type { Entity, PlayerId, World } from './types.ts';
 import { isHostile, refreshLootBagFlags, removeEntity } from './util.ts';
 import { grid } from './spatialGrid.ts';
-import { genId, localPlayer } from './world.ts';
+import { genId, localPlayer, playerById } from './world.ts';
 
 const SPIDER_CHILD_COUNT = 3;
 const SPIDER_CHILD_DIST = 0.4;
 
+/**
+ * PR-D3c: `byPlayer: boolean` was widened to `attribution: PlayerId | null`.
+ * - `PlayerId` — damage attributed to a specific player (XP + loot
+ *   ownership credited to them on kill).
+ * - `null` — environmental damage (NPC vs NPC, projectile from a
+ *   monster, etc.). No XP, no loot ownership.
+ *
+ * Callers that used `true` now pass the slayer's pid; callers that
+ * used `false` pass `null`. The emitted `damage-dealt` event keeps the
+ * boolean `byPlayer` flag (UI consumers still want a yes/no for the
+ * damage popup colour).
+ */
 export function applyDamageToEntity(
   world: World,
   index: number,
   amount: number,
-  byPlayer: boolean,
+  attribution: PlayerId | null,
 ) {
   const e = world.entities[index];
   if (!e) return;
   e.hp -= amount;
-  emit(world, { kind: 'damage-dealt', x: e.x, z: e.z, amount, byPlayer });
-  if (e.hp <= 0) onEntityDeath(world, index, byPlayer);
+  emit(world, {
+    kind: 'damage-dealt',
+    x: e.x,
+    z: e.z,
+    amount,
+    byPlayer: attribution !== null,
+  });
+  if (e.hp <= 0) onEntityDeath(world, index, attribution);
 }
 
 // Entity-reference variant. Avoids holding an array index across
 // intermediate code that may splice. `indexOf` is O(N) but called only
 // on death (rare), and the subsequent splice is also O(N) — no extra cost.
-export function applyDamageToEntityRef(world: World, e: Entity, amount: number, byPlayer: boolean) {
+export function applyDamageToEntityRef(
+  world: World,
+  e: Entity,
+  amount: number,
+  attribution: PlayerId | null,
+) {
   // Look up canonical index before mutating so we always operate on
   // world.entities[index] — the authoritative proxy. Comparing by id
   // avoids Svelte 5 proxy-identity mismatches between entityById and
   // entities array access paths.
   const index = world.entities.findIndex((ent) => ent.id === e.id);
   if (index < 0) return;
-  applyDamageToEntity(world, index, amount, byPlayer);
+  applyDamageToEntity(world, index, amount, attribution);
 }
 
 // Single chokepoint for damage taken by the player. Emits the popup
@@ -78,15 +101,15 @@ export function applyDamageToPlayer(
   entry.hits += 1;
 }
 
-function onEntityDeath(world: World, index: number, byPlayer: boolean) {
+function onEntityDeath(world: World, index: number, attribution: PlayerId | null) {
   const e = world.entities[index];
   if (!e) return;
 
-  if (byPlayer) {
+  if (attribution !== null) {
     // Loot bag at the kill site, stamped with the slayer as owner.
     const drops = rollLoot(e.monsterId);
     if (drops.length > 0) {
-      const owner = localPlayer(world).name;
+      const owner = playerById(world, attribution).name;
       const bag = {
         id: genId(world, 'lb'),
         x: e.x,
@@ -102,7 +125,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
       world.lootBags.push(bag);
       refreshLootBagFlags(world, bag);
     }
-    grantExperience(world, e.experience);
+    grantExperience(world, attribution, e.experience);
   }
 
   // Spider split — happens regardless of who delivered the killing
@@ -119,7 +142,12 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     dropPlayerDeathBag(world, e.x, e.z);
   }
 
-  const combatPlayer = localPlayer(world);
+  // Drop the slayer's engage on this entity (so they stop chasing a
+  // corpse). Reads the attribution player when known, otherwise falls
+  // back to localPlayer to preserve the pre-pid-threading behaviour
+  // for environmental kills.
+  const combatPlayer =
+    attribution !== null ? playerById(world, attribution) : localPlayer(world);
   if (combatPlayer.engageTargetId === e.id) {
     combatPlayer.engageTargetId = null;
   }
@@ -140,7 +168,7 @@ function onEntityDeath(world: World, index: number, byPlayer: boolean) {
     monsterId: e.monsterId,
     x: e.x,
     z: e.z,
-    byPlayer,
+    byPlayer: attribution !== null,
   });
   removeEntity(world, index);
 }
@@ -181,9 +209,13 @@ export function dropPlayerDeathBag(world: World, x: number, z: number) {
   world.death.bagXp = 0;
 }
 
-export function grantExperience(world: World, amount: number) {
+export function grantExperience(
+  world: World,
+  playerId: PlayerId,
+  amount: number,
+) {
   if (amount <= 0) return;
-  const p = localPlayer(world);
+  const p = playerById(world, playerId);
   // Remember the pre-grant level so we can announce once at the end,
   // not once per level — a single fat XP grant that crosses several
   // levels reads as one chat line ("X reached level 8.") instead of
@@ -217,8 +249,8 @@ const SLASH_STAMINA_COST = 5;
 // within sword reach. The spatial grid narrows candidates to the cell
 // neighbourhood around the player — typically 0-3 entities — instead of
 // scanning all entities in the world.
-export function slash(world: World) {
-  const p = localPlayer(world);
+export function slash(world: World, playerId: PlayerId) {
+  const p = playerById(world, playerId);
   p.slashTrigger++;
   p.lastSlashTime = world.time;
   p.stamina = Math.max(0, p.stamina - SLASH_STAMINA_COST);
@@ -236,6 +268,6 @@ export function slash(world: World) {
     if (dist < 0.001) continue;
     const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
     if (dot < SWORD_DOT_THRESHOLD) continue;
-    applyDamageToEntityRef(world, e, damage, true);
+    applyDamageToEntityRef(world, e, damage, playerId);
   }
 }

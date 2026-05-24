@@ -156,7 +156,7 @@ function tickMelee(
         name: getMonster(e.monsterId).name,
       });
     } else if (bestEntity) {
-      applyDamageToEntityRef(world, bestEntity, e.damage, false);
+      applyDamageToEntityRef(world, bestEntity, e.damage, null);
     }
   }
 }

@@ -30,7 +30,9 @@ export function tickLootBags(world: World, dt: number) {
     if (!world.death.alive) continue;
     if (!b.isDeathBag) continue;
     if (Math.hypot(b.x - p.x, b.z - p.z) < BAG_PICKUP_RADIUS) {
-      grantExperience(world, Math.round(b.bagXp * BAG_XP_RECOVERY));
+      // Death-bag recovery is anchor-only today (world.death is keyed
+      // to localPlayerId). Pass localPlayerId as the attribution.
+      grantExperience(world, world.localPlayerId, Math.round(b.bagXp * BAG_XP_RECOVERY));
       world.lootBags.splice(i, 1);
       world.death.bug = null;
     }

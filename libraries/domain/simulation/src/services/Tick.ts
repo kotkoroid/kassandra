@@ -32,6 +32,9 @@ import { applyChat } from '../systems/chat.ts';
 import type { FrameInputs, PlayerId, SimEvent, World } from '../types.ts';
 import { primeWaterCache, refreshLootBagFlags } from '../util.ts';
 import { genId, localPlayer, playerById } from '../world.ts';
+// `localPlayer` is still used for the per-tick spatial cache (one
+// player anchors the visibility window for primeWaterCache and the
+// camera-relative spawn culling). The per-iteration swap is gone.
 
 import { Death } from './Death.ts';
 import { HealingCircles } from './HealingCircles.ts';
@@ -104,22 +107,16 @@ export const makeTick = Effect.gen(function* () {
       }
 
       // 3. Player input + movement for every connected player.
-      //    Movement (Movement.tickPlayer / systems/player.ts) still
-      //    reads localPlayer(world) internally because tickPlayer and
-      //    its downstream slash() call have wide reach into combat /
-      //    pending state that hasn't been pid-threaded yet. Preserve
-      //    the swap for this loop only; full removal lands when
-      //    tickPlayer + slash take pid explicitly (future PR).
-      const savedId = world.localPlayerId;
+      //    PR-D3c removed the last localPlayerId swap: tickPlayer +
+      //    slash + onEntityDeath all take pid explicitly now, so the
+      //    loop just passes pid through.
       for (const [pid, inputs] of Object.entries(allInputs)) {
         if (!world.players[pid]) continue;
-        world.localPlayerId = pid;
-        yield* movement.tickPlayer(world, dt, inputs);
+        yield* movement.tickPlayer(world, pid, dt, inputs);
       }
-      world.localPlayerId = savedId;
 
-      // 3b. Advance channelled spells per-player. Spells.tick now
-      //     takes pid explicitly.
+      // 3b. Advance channelled spells per-player. Spells.tick takes
+      //     pid explicitly (PR-D3b).
       for (const pid of Object.keys(world.players)) {
         yield* spells.tick(world, pid, dt);
       }
