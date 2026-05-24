@@ -248,17 +248,35 @@ export interface Player {
   activeSpell: ActiveSpell | null;
   spellAnimTrigger: number;
 
-  // Per-player death state (PR-D3d.1). Pre-D3d these lived on
+  // Per-player death state (PR-D3d.1+D3d.2). Pre-D3d these lived on
   // world.death (one-per-world, anchor-tracked); now every player
-  // dies independently. The DEEPER pipeline state (the troller
-  // indicator bug, the per-fight attackers summary, the bagXp the
-  // troller carries) still lives on world.death — that's D3d.2.
+  // dies independently AND every player has their own pipeline state
+  // (troller, indicator bug, attackers summary).
   alive: boolean;
   // Location where the player most recently died. Used by the bag
   // pickup logic + the in-world tombstone marker. Stays at the last
   // death even after respawn.
   deathX: number;
   deathZ: number;
+
+  // PR-D3d.2 pipeline state, per-player:
+  //   - attackers: running per-fight damage attribution; folded into
+  //     `summary` on death; cleared on respawn.
+  //   - fightStartedAt: world.time of the first hit in the current
+  //     life (null until someone lands a hit).
+  //   - summary: frozen recap snapshot at death; cleared on respawn.
+  //     The Hud's death overlay reads it.
+  //   - bug: breadcrumb indicator pointing to this player's pending
+  //     death-bag after they respawn; cleared when the bag is
+  //     picked up or expires.
+  attackers: { monsterId: string; name: string; total: number; hits: number }[];
+  fightStartedAt: number | null;
+  summary: {
+    attackers: { monsterId: string; name: string; total: number; hits: number }[];
+    totalDamage: number;
+    fightSeconds: number;
+  } | null;
+  bug: IndicatorBug | null;
 
   // Per-player pending input signals (PR-D3d.1). Pre-D3d these were
   // world.pending fields, which mis-routed in multiplayer (anyone
@@ -322,6 +340,12 @@ export interface Entity {
   carriesPlayerBag?: boolean;
   trollerTargetX?: number;
   trollerTargetZ?: number;
+  // PR-D3d.2: per-player death pipeline. A troller now belongs to a
+  // specific dying player; multiple trollers can coexist when many
+  // players die at once. `forPlayerId` tags ownership; `bagXp` is the
+  // XP this troller will deposit into the death-bag on drop.
+  forPlayerId?: PlayerId;
+  bagXp?: number;
 
   // Spell status effects applied by player abilities.
   stunnedUntil?: number; // world.time; AI skips its tick while set
@@ -376,6 +400,11 @@ export interface WorldLootBag {
   isDeathBag: boolean;
   // XP held by the death bag (0 for regular bags).
   bagXp: number;
+  // PR-D3d.2: which player this bag belongs to. Only set for death
+  // bags — kill-loot bags use `items[].owner` (a display name) for
+  // ownership UI. Auto-pickup gates on `forPlayerId === pid` so each
+  // player can only reclaim their own corpse XP.
+  forPlayerId?: PlayerId;
 
   // --- Cached summaries of `items` ---
   // These are refreshed by `refreshLootBagFlags()` whenever the
@@ -442,27 +471,11 @@ export interface World {
   healingCircles: HealingCircle[];
   lootBags: WorldLootBag[];
 
-  // Death pipeline state (PR-D3d.1: anchor-only — bug/attackers/
-  // summary/bagXp track ONE death event at a time, keyed to the
-  // anchor player). Per-player alive/deathX/deathZ moved to Player.
-  // Full per-player pipeline lands in D3d.2.
-  death: {
-    bagXp: number;
-    bug: IndicatorBug | null;
-    // Running per-attacker damage taken since the last respawn —
-    // grouped by monsterId, used to build the death summary.
-    attackers: { monsterId: string; name: string; total: number; hits: number }[];
-    // World time of the first hit in the current life (null until
-    // someone lands the first hit). Drives the summary's fight length.
-    fightStartedAt: number | null;
-    // Snapshot frozen at death; cleared on respawn. The Hud shows
-    // the death recap whenever this is non-null.
-    summary: {
-      attackers: { monsterId: string; name: string; total: number; hits: number }[];
-      totalDamage: number;
-      fightSeconds: number;
-    } | null;
-  };
+  // PR-D3d.2: world.death is gone. Every field that used to live there
+  // (alive, deathX/Z, bagXp, bug, attackers, fightStartedAt, summary)
+  // is now per-player. bagXp travels via the troller Entity itself
+  // (entity.bagXp) for the duration of the carry; on drop it lands on
+  // the WorldLootBag.
 
   chat: {
     messages: ChatMessage[];

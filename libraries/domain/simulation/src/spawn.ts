@@ -21,7 +21,7 @@ import {
   type MonsterId,
 } from './monsters.ts';
 import { nightStatMultiplier } from './systems/time.ts';
-import type { Entity, EntityKind, World } from './types.ts';
+import type { Entity, EntityKind, PlayerId, World } from './types.ts';
 import { genId, localPlayer } from './world.ts';
 
 // Apply the night multiplier once at spawn and freeze the result on
@@ -137,10 +137,13 @@ export function spawnTroller(
   x: number,
   z: number,
   carriesPlayerBag: boolean,
+  forPlayerId: PlayerId,
+  bagXp: number,
 ): Entity {
   const monster = getMonster(MONSTER_TROLLER);
   // Troller doesn't scale with night — it's a delivery NPC, not a
   // combat threat.
+  const owner = world.players[forPlayerId];
   const e: Entity = {
     id: genId(world, 't'),
     kind: 'troller',
@@ -158,10 +161,12 @@ export function spawnTroller(
     phase: 'approach',
     phaseTimer: 0,
     carriesPlayerBag,
-    // D3d.1: anchor-only troller pipeline; targets the anchor's
-    // death position. D3d.2 keys by the dead player's id.
-    trollerTargetX: localPlayer(world).deathX,
-    trollerTargetZ: localPlayer(world).deathZ,
+    // PR-D3d.2: troller is tagged with the dying player's id and
+    // carries their stashed bagXp until drop.
+    forPlayerId,
+    bagXp,
+    trollerTargetX: owner?.deathX ?? x,
+    trollerTargetZ: owner?.deathZ ?? z,
   };
   world.entities.push(e);
   world.entityById.set(e.id, e);

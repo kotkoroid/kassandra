@@ -89,13 +89,13 @@ export function applyDamageToPlayer(
     amount: dealt,
     byPlayer: false,
   });
-  if (world.death.fightStartedAt === null) {
-    world.death.fightStartedAt = world.time;
+  if (player.fightStartedAt === null) {
+    player.fightStartedAt = world.time;
   }
-  let entry = world.death.attackers.find((a) => a.monsterId === attacker.monsterId);
+  let entry = player.attackers.find((a) => a.monsterId === attacker.monsterId);
   if (!entry) {
     entry = { monsterId: attacker.monsterId, name: attacker.name, total: 0, hits: 0 };
-    world.death.attackers.push(entry);
+    player.attackers.push(entry);
   }
   entry.total += dealt;
   entry.hits += 1;
@@ -137,9 +137,11 @@ function onEntityDeath(world: World, index: number, attribution: PlayerId | null
   }
 
   // Troller drop: when killed mid-delivery, the player's bag lands
-  // wherever the troller fell so it stays reclaimable.
-  if (e.kind === 'troller' && e.carriesPlayerBag) {
-    dropPlayerDeathBag(world, e.x, e.z);
+  // wherever the troller fell so it stays reclaimable. The troller
+  // carries its own bagXp + forPlayerId (PR-D3d.2) so we hand both
+  // off so only that player can auto-pickup.
+  if (e.kind === 'troller' && e.carriesPlayerBag && e.forPlayerId !== undefined) {
+    dropPlayerDeathBag(world, e.x, e.z, e.bagXp ?? 0, e.forPlayerId);
   }
 
   // Drop the slayer's engage on this entity (so they stop chasing a
@@ -186,10 +188,19 @@ function splitSpider(world: World, kind: SpiderKind, x: number, z: number) {
   }
 }
 
-// Drop the player's death-bag at (x, z), transferring whatever XP
-// the troller (or the world.death state) was carrying onto the bag.
-// Bag pickup logic recovers BAG_XP_RECOVERY of that XP.
-export function dropPlayerDeathBag(world: World, x: number, z: number) {
+// Drop a death-bag at (x, z) carrying `bagXp` XP for `forPlayerId`.
+// Pickup logic recovers BAG_XP_RECOVERY of that XP — and only the
+// stamped player can reclaim it. PR-D3d.2: bagXp + forPlayerId are
+// passed in rather than read from world.death; each troller carries
+// its own player's stash on `entity.bagXp/forPlayerId` and hands
+// both off here on drop.
+export function dropPlayerDeathBag(
+  world: World,
+  x: number,
+  z: number,
+  bagXp: number,
+  forPlayerId: PlayerId,
+) {
   const bag = {
     id: genId(world, 'lb'),
     x,
@@ -197,16 +208,13 @@ export function dropPlayerDeathBag(world: World, x: number, z: number) {
     items: [],
     ttl: LOOT_BAG_TTL,
     isDeathBag: true,
-    bagXp: world.death.bagXp,
+    bagXp,
+    forPlayerId,
     isCurrencyOnly: false,
     larsCount: 0,
     hasOwnerItems: false,
   };
   world.lootBags.push(bag);
-  // Empty death bag — flags default to false; no items to scan.
-  // The bag carries the XP from here on — clear the staging slot
-  // so a future death doesn't double-count it.
-  world.death.bagXp = 0;
 }
 
 export function grantExperience(

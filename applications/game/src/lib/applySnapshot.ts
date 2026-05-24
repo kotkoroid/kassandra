@@ -73,15 +73,27 @@ export function applySnapshot(s: Snapshot): void {
       spellCooldowns: { ...p.spellCooldowns },
       spellLevels: { ...p.spellLevels },
       activeSpell: p.activeSpell as ActiveSpell | null,
-      // PR-D3d.1: per-player death + pending state. The snapshot ships
-      // alive/deathX/deathZ per player; pending flags are server-only
-      // (the client never sends them via snapshot) so they default to
-      // false on the client mirror.
+      // PR-D3d.1 + PR-D3d.2: per-player death state. The snapshot
+      // ships alive/deathX/deathZ, the death summary, and the indicator
+      // bug per player. Pending flags are server-only (the client never
+      // sends them via snapshot) so they default to false on the mirror.
+      // attackers/fightStartedAt are sim-internal running totals — the
+      // client only reads the frozen summary.
       alive: p.alive,
       deathX: p.deathX,
       deathZ: p.deathZ,
       pendingManualAttack: false,
       pendingRespawn: false,
+      attackers: [],
+      fightStartedAt: null,
+      summary: p.summary
+        ? {
+            attackers: p.summary.attackers.map((a) => ({ ...a })),
+            totalDamage: p.summary.totalDamage,
+            fightSeconds: p.summary.fightSeconds,
+          }
+        : null,
+      bug: p.bug ? { ...p.bug } : null,
     };
   }
   world.players = nextPlayers;

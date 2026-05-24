@@ -98,11 +98,28 @@ export function worldToSnapshot(world: World): Snapshot {
     spellCooldowns: { ...p.spellCooldowns },
     spellLevels: { ...p.spellLevels },
     activeSpell: p.activeSpell,
-    // Per-player death state (PR-D3d.1). Each player has their own
-    // alive flag now — the "anchor-only" snapshot special-case is gone.
+    // Per-player death state (PR-D3d.1 + PR-D3d.2). Each player has
+    // their own alive flag, death summary, and indicator bug.
     alive: p.alive,
     deathX: p.deathX,
     deathZ: p.deathZ,
+    summary: p.summary
+      ? {
+          attackers: p.summary.attackers.map((a) => ({ ...a })),
+          totalDamage: p.summary.totalDamage,
+          fightSeconds: p.summary.fightSeconds,
+        }
+      : null,
+    bug: p.bug
+      ? {
+          x: p.bug.x,
+          z: p.bug.z,
+          rotation: p.bug.rotation,
+          wanderTargetX: p.bug.wanderTargetX,
+          wanderTargetZ: p.bug.wanderTargetZ,
+          retargetTimer: p.bug.retargetTimer,
+        }
+      : null,
   }));
 
   return {
@@ -143,6 +160,7 @@ export function worldToSnapshot(world: World): Snapshot {
       ttl: b.ttl,
       isDeathBag: b.isDeathBag,
       bagXp: b.bagXp,
+      ...(b.forPlayerId !== undefined ? { forPlayerId: b.forPlayerId } : {}),
     })),
     chatMessages: world.chat.messages.map((m) => ({
       id: m.id,

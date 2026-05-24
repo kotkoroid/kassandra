@@ -56,6 +56,30 @@ const ActiveSpell = Schema.Union([
   }),
 ]);
 
+// --- Per-player death pipeline -----------------------------------
+
+const AttackerSnapshot = Schema.Struct({
+  monsterId: Schema.String,
+  name: Schema.String,
+  total: Schema.Number,
+  hits: Schema.Number,
+});
+
+const SummarySnapshot = Schema.Struct({
+  attackers: Schema.Array(AttackerSnapshot),
+  totalDamage: Schema.Number,
+  fightSeconds: Schema.Number,
+});
+
+const BugSnapshot = Schema.Struct({
+  x: Schema.Number,
+  z: Schema.Number,
+  rotation: Schema.Number,
+  wanderTargetX: Schema.Number,
+  wanderTargetZ: Schema.Number,
+  retargetTimer: Schema.Number,
+});
+
 // --- Player ------------------------------------------------------
 
 export const PlayerSnapshot = Schema.Struct({
@@ -123,6 +147,11 @@ export const PlayerSnapshot = Schema.Struct({
   alive: Schema.Boolean,
   deathX: Schema.Number,
   deathZ: Schema.Number,
+  // PR-D3d.2: death summary + indicator bug live on Player now.
+  // Both nullable: summary is null until the player dies once; bug
+  // is null when there's no death bag pointer active.
+  summary: Schema.NullOr(SummarySnapshot),
+  bug: Schema.NullOr(BugSnapshot),
 });
 
 // --- Entity ------------------------------------------------------
@@ -174,6 +203,9 @@ export const LootBagSnapshot = Schema.Struct({
   ttl: Schema.Number,
   isDeathBag: Schema.Boolean,
   bagXp: Schema.Number,
+  // PR-D3d.2: present only on death bags; the player who can reclaim
+  // this bag's stored XP via auto-pickup.
+  forPlayerId: Schema.optional(Schema.String),
 });
 
 // --- Chat --------------------------------------------------------

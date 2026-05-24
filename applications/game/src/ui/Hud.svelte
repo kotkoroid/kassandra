@@ -3,9 +3,9 @@
   import { STAMINA_MAX, dispatch, getEffectiveStat, localPlayer } from '@kassandra/simulation-domain-library';
   import { world } from '../world.svelte';
 
-  // Local alias so the existing markup stays readable.
+  // Local alias so the existing markup stays readable. PR-D3d.2:
+  // death summary moved from world.death to player.summary.
   const player = $derived(localPlayer(world));
-  const death = world.death;
 
   function requestRespawn() {
     dispatch(world, { kind: 'request_respawn' });
@@ -150,8 +150,8 @@
         You Died.
       </div>
 
-      {#if death.summary}
-        {@const s = death.summary}
+      {#if player.summary}
+        {@const s = player.summary}
         <div
           class="mt-6 w-[480px] border-2 border-red-800/70 bg-black/80 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.9)]"
         >

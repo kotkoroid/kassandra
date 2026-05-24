@@ -84,6 +84,10 @@ export function defaultPlayer(): Player {
     deathZ: 0,
     pendingManualAttack: false,
     pendingRespawn: false,
+    attackers: [],
+    fightStartedAt: null,
+    summary: null,
+    bug: null,
   };
 }
 
@@ -101,13 +105,6 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     projectiles: [],
     healingCircles: [],
     lootBags: [],
-    death: {
-      bagXp: 0,
-      bug: null,
-      attackers: [],
-      fightStartedAt: null,
-      summary: null,
-    },
     chat: {
       messages: [],
     },

@@ -48,8 +48,8 @@
   {/if}
 {/each}
 
-{#if world.death.bug && localPlayer?.alive}
-  {@const bu = world.death.bug}
+{#if localPlayer?.alive && localPlayer.bug}
+  {@const bu = localPlayer.bug}
   <T.Group position={[bu.x, 0.06, bu.z]} rotation.y={bu.rotation}>
     <T.Mesh castShadow>
       <T.SphereGeometry args={[0.07, 6, 6]} />

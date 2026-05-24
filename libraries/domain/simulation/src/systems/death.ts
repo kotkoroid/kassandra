@@ -36,44 +36,48 @@ import { getEffectiveStat } from '../stats.ts';
 import { pushSystem } from './chat.ts';
 import { spawnTroller } from '../spawn.ts';
 import { removeEntity } from '../util.ts';
-import type { Entity, World } from '../types.ts';
-import { localPlayer } from '../world.ts';
+import type { Entity, PlayerId, World } from '../types.ts';
+import { playerById } from '../world.ts';
 
 export function tickDeath(world: World, dt: number) {
-  // 1. Detect a fresh death and kick off the pipeline.
-  //    Pipeline state (troller, bag, summary, attackers) is still
-  //    anchor-only in D3d.1 — per-player pipeline lands in D3d.2.
-  //    `alive` itself is per-player; we read the anchor's flag here.
-  const player = localPlayer(world);
-  if (player.alive && player.health <= 0) {
-    triggerDeath(world);
+  // PR-D3d.2: every player runs their own death pipeline. Multiple
+  // trollers can coexist (one per dying player), tagged by
+  // entity.forPlayerId; each player's indicator bug + summary +
+  // attackers list lives on their Player record.
+
+  // 1. Detect fresh deaths and kick off per-player pipelines.
+  for (const [pid, p] of Object.entries(world.players)) {
+    if (p.alive && p.health <= 0) {
+      triggerDeath(world, pid);
+    }
   }
 
-  // 2. Honor any queued respawn intent for the anchor. Per-player
-  //    pendingRespawn — only the anchor's respawn drives the pipeline
-  //    today (D3d.2 fans out).
-  if (player.pendingRespawn) {
-    player.pendingRespawn = false;
-    if (!player.alive) respawn(world);
+  // 2. Honor each player's queued respawn intent.
+  for (const [pid, p] of Object.entries(world.players)) {
+    if (p.pendingRespawn) {
+      p.pendingRespawn = false;
+      if (!p.alive) respawn(world, pid);
+    }
   }
 
-  // 3. Step troller(s) — there is normally only one, but the
-  // pipeline tolerates duplicates rather than asserting.
+  // 3. Step troller(s) — one per dying player. The troller carries
+  //    its own bagXp + forPlayerId so dropping the bag doesn't need
+  //    any cross-reference to a global pipeline.
   for (let i = world.entities.length - 1; i >= 0; i--) {
     const e = world.entities[i];
     if (!e || e.kind !== 'troller') continue;
     tickTroller(world, e, i, dt);
   }
 
-  // 4. Indicator bug after respawn.
-  tickIndicatorBug(world, dt);
+  // 4. Indicator bugs — one per player with an active bug pointer.
+  for (const [pid, p] of Object.entries(world.players)) {
+    tickIndicatorBug(world, pid, p, dt);
+  }
 }
 
-function triggerDeath(world: World) {
-  const p = localPlayer(world);
+function triggerDeath(world: World, playerId: PlayerId) {
+  const p = playerById(world, playerId);
   // Lifecycle announce — fired once at the alive→dead transition.
-  // Uses the player's name (set during create_character); falls back
-  // to "A hero" so a kill before naming still reads.
   pushSystem(world, `${p.name || 'A hero'} died in a battle.`);
   p.alive = false;
   p.deathX = p.x;
@@ -81,20 +85,22 @@ function triggerDeath(world: World) {
 
   // Freeze the death summary before clearing the running totals so
   // the Hud's death recap has stable, snapshot-frozen numbers.
-  const total = world.death.attackers.reduce((n, a) => n + a.total, 0);
+  const total = p.attackers.reduce((n, a) => n + a.total, 0);
   const fightSeconds =
-    world.death.fightStartedAt !== null ? Math.max(0, world.time - world.death.fightStartedAt) : 0;
-  world.death.summary = {
-    attackers: world.death.attackers.map((a) => ({ ...a })).sort((a, b) => b.total - a.total),
+    p.fightStartedAt !== null ? Math.max(0, world.time - p.fightStartedAt) : 0;
+  p.summary = {
+    attackers: p.attackers.map((a) => ({ ...a })).sort((a, b) => b.total - a.total),
     totalDamage: total,
     fightSeconds,
   };
-  world.death.attackers = [];
-  world.death.fightStartedAt = null;
+  p.attackers = [];
+  p.fightStartedAt = null;
 
-  // Stash lifetime XP into the bag-in-transit. Use the level + bar
-  // remainder so cleared levels don't silently evaporate.
-  world.death.bagXp = (p.level - 1) * EXP_PER_LEVEL + p.experience;
+  // Lifetime XP this player carries into the bag-in-transit.
+  // Travels with the troller (entity.bagXp) until drop, then lands
+  // on the WorldLootBag's bagXp. Use the level + bar remainder so
+  // cleared levels don't silently evaporate.
+  const bagXp = (p.level - 1) * EXP_PER_LEVEL + p.experience;
 
   // Reset progression back to base; the bag is the only way to claw
   // some of it back.
@@ -110,26 +116,32 @@ function triggerDeath(world: World) {
   p.engageTargetId = null;
   p.navTargetX = null;
   p.navTargetZ = null;
-  world.death.bug = null;
+  p.bug = null;
 
   // Spawn the troller a short distance away, walking toward the
-  // corpse. carriesPlayerBag stays false until the collect phase
-  // completes so a kill during approach doesn't drop a bag yet —
-  // but a kill during leave does.
+  // corpse. Tagged with forPlayerId so future ticks know whose
+  // death position it's heading for.
   const angle = world.rng.next() * Math.PI * 2;
-  spawnTroller(world, p.x + Math.cos(angle) * 4, p.z + Math.sin(angle) * 4, false);
+  spawnTroller(
+    world,
+    p.x + Math.cos(angle) * 4,
+    p.z + Math.sin(angle) * 4,
+    false,
+    playerId,
+    bagXp,
+  );
 }
 
-function respawn(world: World) {
-  const p = localPlayer(world);
+function respawn(world: World, playerId: PlayerId) {
+  const p = playerById(world, playerId);
   // Lifecycle announce — fired once at the dead→alive transition.
   pushSystem(world, `${p.name || 'A hero'} respawned in the city.`);
   p.alive = true;
   // Clear the previous life's recap; the next life starts a fresh
   // attribution log.
-  world.death.summary = null;
-  world.death.attackers = [];
-  world.death.fightStartedAt = null;
+  p.summary = null;
+  p.attackers = [];
+  p.fightStartedAt = null;
   p.health = getEffectiveStat(p, 'maxHealth');
   p.mana = getEffectiveStat(p, 'maxMana');
   p.stamina = getEffectiveStat(p, 'maxStamina');
@@ -142,7 +154,7 @@ function respawn(world: World) {
   // Indicator bug appears near the respawned player so the
   // breadcrumb back to any pending bag is visible immediately.
   const angle = world.rng.next() * Math.PI * 2;
-  world.death.bug = {
+  p.bug = {
     x: p.x + Math.cos(angle) * 1.5,
     z: p.z + Math.sin(angle) * 1.5,
     rotation: 0,
@@ -153,13 +165,16 @@ function respawn(world: World) {
 }
 
 function tickTroller(world: World, e: Entity, index: number, dt: number) {
-  // D3d.1: troller pipeline is still anchor-only. Read the anchor's
-  // deathX/deathZ for the corpse target — D3d.2 will key by which
-  // player's death the troller is processing.
-  const anchor = localPlayer(world);
+  // PR-D3d.2: troller carries its forPlayerId + bagXp on the entity
+  // itself. The death position comes from that player's deathX/Z —
+  // multiple trollers chase multiple corpses independently.
+  const ownerId = e.forPlayerId;
+  const owner = ownerId ? world.players[ownerId] : undefined;
+  const cornerX = owner?.deathX ?? e.x;
+  const cornerZ = owner?.deathZ ?? e.z;
   const phase = e.phase ?? 'approach';
-  const targetX = e.trollerTargetX ?? anchor.deathX;
-  const targetZ = e.trollerTargetZ ?? anchor.deathZ;
+  const targetX = e.trollerTargetX ?? cornerX;
+  const targetZ = e.trollerTargetZ ?? cornerZ;
   const dx = targetX - e.x;
   const dz = targetZ - e.z;
   const dist = Math.hypot(dx, dz);
@@ -170,8 +185,8 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
       // Pick a random direction and walk that far away from the
       // corpse. Bag travels with the troller from now on.
       const angle = world.rng.next() * Math.PI * 2;
-      e.trollerTargetX = anchor.deathX + Math.cos(angle) * TROLLER_LEAVE_DISTANCE;
-      e.trollerTargetZ = anchor.deathZ + Math.sin(angle) * TROLLER_LEAVE_DISTANCE;
+      e.trollerTargetX = cornerX + Math.cos(angle) * TROLLER_LEAVE_DISTANCE;
+      e.trollerTargetZ = cornerZ + Math.sin(angle) * TROLLER_LEAVE_DISTANCE;
       e.phase = 'leave';
       e.carriesPlayerBag = true;
     }
@@ -183,8 +198,9 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
       e.phase = 'collect';
       e.phaseTimer = TROLLER_COLLECT_TIME;
     } else if (phase === 'leave') {
-      // Drop the bag and despawn the troller.
-      dropPlayerDeathBag(world, e.x, e.z);
+      // Drop the bag (carrying this troller's stashed bagXp) and
+      // despawn the troller.
+      dropPlayerDeathBag(world, e.x, e.z, e.bagXp ?? 0);
       removeEntity(world, index);
     }
     return;
@@ -196,22 +212,28 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
   e.rotation = Math.atan2(dx, dz);
 }
 
-function tickIndicatorBug(world: World, dt: number) {
-  const bug = world.death.bug;
-  // Anchor-only: indicator bug currently shown only when the anchor
-  // is alive and has a pending bag (D3d.2 makes this per-player).
-  if (!bug || !localPlayer(world).alive) return;
+function tickIndicatorBug(
+  world: World,
+  playerId: PlayerId,
+  player: World['players'][string],
+  dt: number,
+) {
+  const bug = player.bug;
+  // Per-player indicator bug — shown only when the player is alive
+  // (after respawn) and has a non-null bug pointer.
+  if (!bug || !player.alive) return;
 
   bug.retargetTimer -= dt;
   if (bug.retargetTimer <= 0) {
     const angle = world.rng.next() * Math.PI * 2;
     const dist = world.rng.next() * BUG_WANDER_RADIUS;
-    const bugPlayer = localPlayer(world);
-    let tx = bugPlayer.x + Math.cos(angle) * dist;
-    let tz = bugPlayer.z + Math.sin(angle) * dist;
-    // Bias the wander target toward the most recent loot bag so
-    // the bug visibly leads the player back to it.
-    const bag = world.lootBags.find((b) => b.isDeathBag) ?? null;
+    let tx = player.x + Math.cos(angle) * dist;
+    let tz = player.z + Math.sin(angle) * dist;
+    // Bias the wander target toward this player's own death bag so
+    // the bug visibly leads them back to it. PR-D3d.2: bags carry
+    // forPlayerId now — only match the bag stamped for this player.
+    const bag =
+      world.lootBags.find((b) => b.isDeathBag && b.forPlayerId === playerId) ?? null;
     if (bag) {
       tx = tx * (1 - BUG_BAG_BIAS) + bag.x * BUG_BAG_BIAS;
       tz = tz * (1 - BUG_BAG_BIAS) + bag.z * BUG_BAG_BIAS;
