@@ -51,8 +51,14 @@ import * as RpcServer from 'effect/unstable/rpc/RpcServer';
 import { makeRealmRpcProtocol } from '@kassandra/effect-conventions-foundation-library';
 
 import { makeInputBuffer } from './services/InputBuffer.ts';
+import { makePartyStorage } from './services/PartyStorage.ts';
 import { makeSessionsRef } from './services/SessionsRef.ts';
 import { makeTick } from './services/Tick.ts';
+
+// PR-E: save cadence while the party is occupied. 30 s is short enough
+// that a crash / DO-eviction loses at most ~600 ticks (30 s × 20 Hz)
+// of progression and long enough that storage I/O isn't a hot path.
+const SAVE_ALARM_INTERVAL_MS = 30_000;
 
 interface SessionData {
   sessionId: string;
@@ -66,9 +72,17 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       const state = yield* Cloudflare.DurableObjectState;
 
       // -- per-instance state --------------------------------------------
-      const storedOwner = yield* state.storage.get<PlayerId>('ownerId');
-      const initialWorld = createWorld();
-      if (storedOwner) initialWorld.ownerId = storedOwner;
+      // PR-E: persistence. PartyStorage wraps state.storage.put/get for
+      // the world payload. On boot we try restore (returns None on
+      // first-ever construction or a schema-bumped payload); fall back
+      // to a fresh world. The legacy single-key `state.storage.get('ownerId')`
+      // is gone — ownerId now travels inside the persisted world.
+      const partyStorage = yield* makePartyStorage(state);
+      const restored = yield* partyStorage.restore;
+      const initialWorld = Option.match(restored, {
+        onNone: () => createWorld(),
+        onSome: (w) => w,
+      });
       const worldRef = yield* makeWorldRef(initialWorld);
       const sessionsRef = yield* makeSessionsRef;
       const inputBuffer = yield* makeInputBuffer;
@@ -215,6 +229,12 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
                   { discard: true },
                 );
                 yield* sessionsRef.clear;
+                // PR-E: clear persisted world + cancel the alarm so a
+                // dormant disbanded DO doesn't wake up to re-save.
+                // `deleteAll` covers any forgotten side keys and any
+                // future ScheduledEvents bookkeeping.
+                yield* state.storage.deleteAlarm();
+                yield* partyStorage.clear;
                 yield* state.storage.deleteAll();
               }),
           });
@@ -284,19 +304,23 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           });
         }
 
-        // Anchor the party owner on first-ever connect. Persisted in
-        // DO storage so it survives hibernation — see makeWorldRef
-        // for the matching restore path.
+        // Anchor the party owner on first-ever connect. PR-E: the
+        // owner travels inside the persisted world (ownerId is a
+        // field on the World struct), so we no longer need a separate
+        // 'ownerId' key in storage — `partyStorage.save` writes the
+        // whole world on disconnect + alarm.
         const currentWorld = yield* worldRef.get;
         if (!currentWorld.ownerId) {
           yield* worldRef.modify((world) => {
             world.ownerId = playerId;
             return world;
           });
-          yield* state.storage.put('ownerId', playerId);
         }
 
         yield* ensureTickRunning;
+        // PR-E: schedule the next periodic save. setAlarm is idempotent
+        // on the same scheduledTime; repeated connects just refresh it.
+        yield* state.storage.setAlarm(Date.now() + SAVE_ALARM_INTERVAL_MS);
         return response;
       });
 
@@ -343,12 +367,33 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
               });
             }
           }
-          if ((yield* sessionsRef.count) === 0) yield* stopTick;
+          if ((yield* sessionsRef.count) === 0) {
+            yield* stopTick;
+            // PR-E: last-disconnect save. The world has just finished
+            // its last tick (stopTick interrupted the loop *before*
+            // this point), so the snapshot here is consistent. Also
+            // drop the periodic alarm — nothing to save while empty.
+            const world = yield* worldRef.get;
+            yield* partyStorage.save(world);
+            yield* state.storage.deleteAlarm();
+          }
 
           // RFC 6455 reserved-code clamp — see commit a877205.
           const RESERVED = code === 1005 || code === 1006 || code === 1015;
           yield* ws.close(RESERVED ? 1000 : code, reason);
         });
+
+      // PR-E: periodic save handler. The DO runtime invokes `alarm`
+      // when state.storage.setAlarm fires; we save the world and
+      // reschedule the next save iff the party is still occupied
+      // (the alarm chain self-terminates when the last socket closes).
+      const onAlarm = Effect.gen(function* () {
+        const count = yield* sessionsRef.count;
+        if (count === 0) return;
+        const world = yield* worldRef.get;
+        yield* partyStorage.save(world);
+        yield* state.storage.setAlarm(Date.now() + SAVE_ALARM_INTERVAL_MS);
+      });
 
       return {
         fetch: onFetch,
@@ -364,6 +409,9 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           reason: string,
         ) {
           yield* onClose(ws, code, reason);
+        }),
+        alarm: Effect.fnUntraced(function* (_alarmInfo?: unknown) {
+          yield* onAlarm;
         }),
       };
     });

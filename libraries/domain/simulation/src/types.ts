@@ -8,7 +8,6 @@ import type { ChatChannel, SimEvent } from '@kassandra/protocol-foundation-libra
 import type { ItemId } from './items.ts';
 import type { MonsterId } from './monsters.ts';
 import type { Rng } from './rng.ts';
-import type { MonsterId } from './monsters.ts';
 
 export type { ChatChannel, SimEvent };
 
