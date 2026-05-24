@@ -212,3 +212,20 @@ export { currentHour, isNightHour, isNight, nightStatMultiplier } from './system
 // --- Chat lifecycle helper (used by realm worker for join/leave lines) ---
 export { pushSystem } from './systems/chat.ts';
 
+// --- Effect-native services (PR-D1 onward) ---
+export {
+  Combat,
+  CombatLayer,
+  makeCombat,
+  makeTime,
+  makeWorldRef,
+  SimLayer,
+  Time,
+  TimeLayer,
+  WorldRef,
+  worldToSnapshot,
+  type CombatShape,
+  type TimeShape,
+  type WorldRefShape,
+} from './services/index.ts';
+

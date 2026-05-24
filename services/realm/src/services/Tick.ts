@@ -25,8 +25,9 @@ import * as PubSubMod from 'effect/PubSub';
 import * as Ref from 'effect/Ref';
 import * as Schedule from 'effect/Schedule';
 
+import type { WorldRefShape } from '@kassandra/simulation-domain-library';
+
 import type { InputBufferShape } from './InputBuffer.ts';
-import type { WorldRefShape } from './WorldRef.ts';
 
 const TICK_INTERVAL = Duration.millis(50); // 20 Hz
 const MAX_DT_SECONDS = 1 / 5; // cap on a single step's dt (200 ms)

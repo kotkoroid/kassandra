@@ -30,6 +30,8 @@ import {
 } from '@kassandra/protocol-foundation-library';
 import {
   addPlayer,
+  createWorld,
+  makeWorldRef,
   pushSystem,
   type PlayerId,
 } from '@kassandra/simulation-domain-library';
@@ -49,7 +51,6 @@ import { makeRealmRpcProtocol } from '@kassandra/effect-conventions-foundation-l
 import { makeInputBuffer } from './services/InputBuffer.ts';
 import { makeSessionsRef } from './services/SessionsRef.ts';
 import { makeTick } from './services/Tick.ts';
-import { makeWorldRef } from './services/WorldRef.ts';
 
 interface SessionData {
   sessionId: string;
@@ -64,7 +65,9 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
       // -- per-instance state --------------------------------------------
       const storedOwner = yield* state.storage.get<PlayerId>('ownerId');
-      const worldRef = yield* makeWorldRef(storedOwner ?? null);
+      const initialWorld = createWorld();
+      if (storedOwner) initialWorld.ownerId = storedOwner;
+      const worldRef = yield* makeWorldRef(initialWorld);
       const sessionsRef = yield* makeSessionsRef;
       const inputBuffer = yield* makeInputBuffer;
 

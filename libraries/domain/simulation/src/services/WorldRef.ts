@@ -1,55 +1,48 @@
-// WorldRef — wraps Ref<World> with the operations PartyRoom needs.
+// WorldRef — shared service tag for the authoritative World state.
 //
-// Replaces the `let world = createWorld()` module-level state at the
-// old PartyRoom.ts:125. The Ref serializes concurrent updates from the
-// tick fiber, message handlers, and the close handler.
+// PR-D1 lifts this from services/realm/src/services/WorldRef.ts so the
+// abstraction lives next to the World type itself. The realm provides
+// its impl via `Layer.succeed(WorldRef)(...)` or by yielding `makeWorldRef`
+// in its per-DO setup; future Effect-native client code (PR-D2+) will
+// provide a SubscriptionRef-backed variant.
 //
-// In PR-D the SubscriptionRef variant will replace Ref so the client's
-// SimLayer can subscribe to changes; for now PR-B keeps it simple — the
-// server only has one consumer (the tick fiber) so plain Ref suffices.
+// The Service shape is the same Effect-style API the realm has been
+// using since PR-B: `get`, `modify` for mutation, `snapshot` for the
+// wire-form. Co-locating snapshot derivation here keeps PartyRoom free
+// of conversion boilerplate.
 
 import type { Snapshot } from '@kassandra/protocol-foundation-library';
-import {
-  createWorld,
-  type PlayerId,
-  type World,
-} from '@kassandra/simulation-domain-library';
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Ref from 'effect/Ref';
+
+import type { World } from '../types.ts';
 
 export interface WorldRefShape {
   /** Read the current world. */
   readonly get: Effect.Effect<World>;
   /**
-   * Apply an update to the world. The function may mutate in place and
-   * return the same reference (current sim code does this) OR return a
-   * new World; Ref.update doesn't distinguish.
+   * Apply an update. The function may mutate in place and return the
+   * same reference (current sim code does this; PR-D2+ moves to pure
+   * cores returning new world objects).
    */
   readonly modify: (f: (w: World) => World) => Effect.Effect<void>;
   /** Build the wire-shape snapshot from the current world. */
   readonly snapshot: Effect.Effect<Snapshot>;
 }
 
-/**
- * Context tag for the per-DO WorldRef instance. Built once per DO
- * lifetime by `makeWorldRef` in PartyRoom's constructor; provided to
- * every handler via `Effect.provideService(WorldRef, impl)`.
- */
 export class WorldRef extends Context.Service<WorldRef, WorldRefShape>()(
-  'kassandra/realm/WorldRef',
+  'kassandra/sim/WorldRef',
 ) {}
 
 /**
- * Build a WorldRef seeded with the given owner (restored from DO
- * storage; `null` on a brand-new room). Pure Effect — no DO state
- * dependencies — so it composes anywhere.
+ * Build a WorldRef from an initial world. The caller owns initial-state
+ * construction (createWorld + any seeding like ownerId restore); sim
+ * just provides the Effect machinery.
  */
-export const makeWorldRef = (storedOwner: PlayerId | null): Effect.Effect<WorldRefShape> =>
+export const makeWorldRef = (initial: World): Effect.Effect<WorldRefShape> =>
   Effect.gen(function* () {
-    const world = createWorld();
-    if (storedOwner) world.ownerId = storedOwner;
-    const ref = yield* Ref.make<World>(world);
+    const ref = yield* Ref.make<World>(initial);
     return {
       get: Ref.get(ref),
       modify: (f) => Ref.update(ref, f),
@@ -58,13 +51,12 @@ export const makeWorldRef = (storedOwner: PlayerId | null): Effect.Effect<WorldR
   });
 
 // ---------------------------------------------------------------------
-// Snapshot derivation (extracted verbatim from old PartyRoom.ts:16-112).
+// Snapshot derivation — World → wire-form Snapshot.
 //
-// Returns the inner Snapshot shape (NO {kind: 'snapshot', snapshot: …}
-// envelope — that envelope was a JSON wire artifact of the pre-RPC
-// protocol; effect/unstable/rpc handles framing now). The shape here
-// matches the `Snapshot` schema in libraries/foundation/protocol — both
-// sides decode against the same definition.
+// Extracted from services/realm/src/services/WorldRef.ts. Lives in sim
+// because it's purely a function of World; the protocol library owns
+// the wire schema, but mapping World → Snapshot belongs next to the
+// World type.
 // ---------------------------------------------------------------------
 
 export function worldToSnapshot(world: World): Snapshot {
