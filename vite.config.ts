@@ -19,6 +19,21 @@ export default defineConfig({
           },
         },
       },
+      {
+        // PR-G2-prep: the JWT helper uses Web Crypto SubtleCrypto so
+        // its tests need a real crypto.subtle — same Chromium shape
+        // the simulation project uses.
+        test: {
+          name: "effect-conventions",
+          include: ["libraries/foundation/effect-conventions/src/**/*.test.ts"],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+            headless: true,
+          },
+        },
+      },
     ],
   },
   staged: {

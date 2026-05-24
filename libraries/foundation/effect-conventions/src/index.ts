@@ -12,3 +12,6 @@
 // `effect/unstable/rpc` server inside a hibernating WebSocket DO.
 
 export * from './realm-rpc-do';
+// PR-G2: HS256 JWT sign/verify via Web Crypto. Used by the gateway
+// (issuance) and the realm (verification on WS upgrade).
+export * from './jwt';

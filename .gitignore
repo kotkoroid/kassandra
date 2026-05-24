@@ -19,3 +19,7 @@ tsconfig.tsbuildinfo
 
 # Agents
 .claude/
+
+# Vitest browser-mode failure artifacts
+.vitest-attachments/
+**/__screenshots__/
