@@ -330,7 +330,16 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             if (remaining) world.localPlayerId = remaining;
           }
           if (sessions.size === 0) stopTickLoop();
-          yield* ws.close(code, reason);
+          // RFC 6455 reserves 1005/1006/1015 as receive-only — they
+          // describe an absence of a Close frame and MUST NOT be sent.
+          // The Workers runtime enforces this and throws
+          // InvalidAccessError, which crashes the DO. Browsers routinely
+          // surface 1006 to webSocketClose on abnormal disconnect, so
+          // fall back to a Normal Closure (1000) in that case. The
+          // code we emit here goes to our own socket-half teardown,
+          // not back to the already-gone browser.
+          const RESERVED = code === 1005 || code === 1006 || code === 1015;
+          yield* ws.close(RESERVED ? 1000 : code, reason);
         }),
       };
     });
