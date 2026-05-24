@@ -8,11 +8,13 @@ import PlayerProfile from './PlayerProfile.ts';
 // Realm Worker — entry point for all game-server traffic.
 //
 // Routing:
-//   GET /parties/:id/ws?upgrade=websocket  → PartyRoom DO (game session)
-//   *                                      → 404
+//   GET /parties/:partyId/ws?upgrade=websocket    → PartyRoom DO
+//   GET /profiles/:accountId/rpc?upgrade=websocket → PlayerProfile DO (PR-G1)
+//   *                                              → 404
 //
-// The gateway Worker (Phase 5) sits in front and issues JWTs before
-// forwarding WebSocket upgrades here.
+// The gateway Worker (Phase 5) sits in front for non-game endpoints
+// (party create) and will issue JWTs in PR-G2 before forwarding
+// upgrades here.
 
 export default class Realm extends Cloudflare.Worker<Realm>()(
   'Realm',
@@ -24,12 +26,13 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
   },
   Effect.gen(function* () {
     const rooms = yield* PartyRoom;
-    yield* PlayerProfile; // bind the namespace so CF registers the DO class
+    const profiles = yield* PlayerProfile;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const pathname = new URL(request.url, 'http://localhost').pathname;
+        const url = new URL(request.url, 'http://localhost');
+        const pathname = url.pathname;
 
         // WebSocket upgrade for a party session.
         // Path: /parties/:partyId/ws
@@ -42,6 +45,22 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
           const partyId = wsMatch[1]!;
           const room = rooms.getByName(partyId);
           return yield* room.fetch(request);
+        }
+
+        // PR-G1: PlayerProfile RPC upgrade.
+        // Path: /profiles/:accountId/rpc
+        // The DO sees the same URL we received, so it parses the
+        // accountId from its own path component — no rewrite needed.
+        // PR-G2 will replace this URL-trust model with JWT verification.
+        const profileMatch = pathname.match(/^\/profiles\/([^/]+)\/rpc$/);
+        if (profileMatch) {
+          const upgradeHeader = request.headers['upgrade'];
+          if (upgradeHeader?.toLowerCase() !== 'websocket') {
+            return HttpServerResponse.text('Expected WebSocket upgrade', { status: 426 });
+          }
+          const accountId = profileMatch[1]!;
+          const profile = profiles.getByName(accountId);
+          return yield* profile.fetch(request);
         }
 
         return HttpServerResponse.text('Not Found', { status: 404 });
