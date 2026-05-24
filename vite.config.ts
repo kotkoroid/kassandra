@@ -1,5 +1,5 @@
-import { playwright } from '@vitest/browser-playwright';
-import { defineConfig } from 'vite-plus';
+import { defineConfig } from "vite-plus";
+import { playwright } from "vite-plus/test/browser-playwright";
 
 export default defineConfig({
   fmt: {
@@ -9,13 +9,12 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'simulation',
-          include: ['libraries/domain/simulation/src/**/*.test.ts'],
+          name: "simulation",
+          include: ["libraries/domain/simulation/src/**/*.test.ts"],
           browser: {
             enabled: true,
-            // TODO: Remove `never`: https://github.com/voidzero-dev/vite-plus/issues/1634
-            provider: playwright() as never,
-            instances: [{ browser: 'chromium' }],
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
             headless: true,
           },
         },
@@ -23,6 +22,6 @@ export default defineConfig({
     ],
   },
   staged: {
-    '*': 'vp check --fix',
+    "*": "vp check --fix",
   },
 });

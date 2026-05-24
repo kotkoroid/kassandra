@@ -1,4 +1,5 @@
 [install]
 exact = true
+globalStore = true
 linker = "isolated"
 minimumReleaseAge = 259200

@@ -2,9 +2,20 @@
   "extends": "./tsconfig.base.json",
   "files": [],
   "references": [
-    { "path": "./applications/game" },
-    { "path": "./libraries/domain/simulation" },
-    { "path": "./libraries/foundation/protocol" },
-    { "path": "./services/realm" }
+    {
+      "path": "./applications/game"
+    },
+    {
+      "path": "./libraries/domain/simulation"
+    },
+    {
+      "path": "./libraries/foundation/protocol"
+    },
+    {
+      "path": "./services/realm"
+    },
+    {
+      "path": "./orchestrators/gateway"
+    }
   ]
 }
