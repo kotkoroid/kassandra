@@ -17,8 +17,13 @@ tsconfig.tsbuildinfo
 # Alchemy
 .alchemy/
 
-# Agents
-.claude/
+# Agents — ignore everything in .claude EXCEPT shared Claude Skills,
+# which are repo-level architectural assets. Note: gitignore can't
+# re-include a file under an ignored *directory*, so we ignore the
+# contents (`.claude/*`) rather than the directory itself, then carve
+# out `skills/` with a negation.
+.claude/*
+!.claude/skills/
 
 # Vitest browser-mode failure artifacts
 .vitest-attachments/
