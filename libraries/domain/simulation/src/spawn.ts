@@ -158,8 +158,10 @@ export function spawnTroller(
     phase: 'approach',
     phaseTimer: 0,
     carriesPlayerBag,
-    trollerTargetX: world.death.deathX,
-    trollerTargetZ: world.death.deathZ,
+    // D3d.1: anchor-only troller pipeline; targets the anchor's
+    // death position. D3d.2 keys by the dead player's id.
+    trollerTargetX: localPlayer(world).deathX,
+    trollerTargetZ: localPlayer(world).deathZ,
   };
   world.entities.push(e);
   world.entityById.set(e.id, e);

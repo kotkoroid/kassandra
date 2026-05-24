@@ -8,16 +8,18 @@
   // The pipeline (death trigger, troller phases, respawn) all
   // run inside the simulation — see sim/systems/death.ts.
 
-  // Show the blood pool while the player is dead OR while a
+  // Show the blood pool while the local player is dead OR while a
   // death-bag is still in the world (it sits over the pool).
+  // PR-D3d.1: alive/deathX/Z moved from world.death to per-player.
+  const localPlayer = $derived(world.players[world.localPlayerId]);
   const hasDeathBag = $derived(
     world.lootBags.some((b) => b.isDeathBag),
   );
 </script>
 
-{#if !world.death.alive || hasDeathBag}
+{#if localPlayer && (!localPlayer.alive || hasDeathBag)}
   <T.Mesh
-    position={[world.death.deathX, 0.045, world.death.deathZ]}
+    position={[localPlayer.deathX, 0.045, localPlayer.deathZ]}
     rotation={[-Math.PI / 2, 0, 0]}
   >
     <T.CircleGeometry args={[1.1, 28]} />
@@ -46,7 +48,7 @@
   {/if}
 {/each}
 
-{#if world.death.bug && world.death.alive}
+{#if world.death.bug && localPlayer?.alive}
   {@const bu = world.death.bug}
   <T.Group position={[bu.x, 0.06, bu.z]} rotation.y={bu.rotation}>
     <T.Mesh castShadow>

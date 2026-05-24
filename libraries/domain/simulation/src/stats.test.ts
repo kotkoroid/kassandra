@@ -53,6 +53,11 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     spellLevels: {},
     activeSpell: null,
     spellAnimTrigger: 0,
+    alive: true,
+    deathX: 0,
+    deathZ: 0,
+    pendingManualAttack: false,
+    pendingRespawn: false,
     ...overrides,
   };
 }

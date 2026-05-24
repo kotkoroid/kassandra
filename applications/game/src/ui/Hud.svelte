@@ -139,7 +139,7 @@
 <BuffBar />
 <SelectionPanel />
 
-{#if !death.alive}
+{#if !player.alive}
   <div
     class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/70 [text-shadow:0_2px_6px_rgb(0_0_0_/_0.95)]"
   >

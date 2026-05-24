@@ -98,11 +98,11 @@ export function worldToSnapshot(world: World): Snapshot {
     spellCooldowns: { ...p.spellCooldowns },
     spellLevels: { ...p.spellLevels },
     activeSpell: p.activeSpell,
-    // Death state is keyed to world.localPlayerId on the server.
-    // Only that player gets live death tracking; others show as alive.
-    alive: id === world.localPlayerId ? world.death.alive : true,
-    deathX: id === world.localPlayerId ? world.death.deathX : 0,
-    deathZ: id === world.localPlayerId ? world.death.deathZ : 0,
+    // Per-player death state (PR-D3d.1). Each player has their own
+    // alive flag now — the "anchor-only" snapshot special-case is gone.
+    alive: p.alive,
+    deathX: p.deathX,
+    deathZ: p.deathZ,
   }));
 
   return {

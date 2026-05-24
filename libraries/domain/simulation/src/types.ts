@@ -247,6 +247,25 @@ export interface Player {
   spellCooldowns: Record<string, number>;
   activeSpell: ActiveSpell | null;
   spellAnimTrigger: number;
+
+  // Per-player death state (PR-D3d.1). Pre-D3d these lived on
+  // world.death (one-per-world, anchor-tracked); now every player
+  // dies independently. The DEEPER pipeline state (the troller
+  // indicator bug, the per-fight attackers summary, the bagXp the
+  // troller carries) still lives on world.death — that's D3d.2.
+  alive: boolean;
+  // Location where the player most recently died. Used by the bag
+  // pickup logic + the in-world tombstone marker. Stays at the last
+  // death even after respawn.
+  deathX: number;
+  deathZ: number;
+
+  // Per-player pending input signals (PR-D3d.1). Pre-D3d these were
+  // world.pending fields, which mis-routed in multiplayer (anyone
+  // pressing space made the anchor swing). Now each player has their
+  // own flags; the RPC handler / tick consumer drains the right one.
+  pendingManualAttack: boolean;
+  pendingRespawn: boolean;
 }
 
 // --- Entities (monsters + janna + troller) ----------------------
@@ -423,14 +442,11 @@ export interface World {
   healingCircles: HealingCircle[];
   lootBags: WorldLootBag[];
 
-  // Death pipeline. `alive` is the truth for the player; when false
-  // the troller pipeline runs until the bag is dropped/pickup.
-  // `bagXp` is the total XP the troller is carrying (transferred
-  // onto whichever WorldLootBag eventually lands on the ground).
+  // Death pipeline state (PR-D3d.1: anchor-only — bug/attackers/
+  // summary/bagXp track ONE death event at a time, keyed to the
+  // anchor player). Per-player alive/deathX/deathZ moved to Player.
+  // Full per-player pipeline lands in D3d.2.
   death: {
-    alive: boolean;
-    deathX: number;
-    deathZ: number;
     bagXp: number;
     bug: IndicatorBug | null;
     // Running per-attacker damage taken since the last respawn —
@@ -470,12 +486,7 @@ export interface World {
   // packets). Drained at the top of every tick.
   inputQueue: SimEvent[];
 
-  // Per-tick scratch flags. Events set them; downstream systems read
-  // and clear them during the same tick. Kept on the world so two
-  // parallel sims (e.g. client prediction + authoritative) don't
-  // clobber each other through module-level singletons.
-  pending: {
-    manualAttack: boolean;
-    respawn: boolean;
-  };
+  // PR-D3d.1: per-tick scratch flags moved to Player.pendingManualAttack
+  // and Player.pendingRespawn. Each player drains their own flags
+  // during their own tick step instead of a shared anchor-only bag.
 }

@@ -27,7 +27,7 @@ export function tickLootBags(world: World, dt: number) {
     // Auto-pickup applies only to the player's death bag — walking
     // back to your corpse reclaims XP. Kill-loot stays in place
     // until inventory lands; click-to-inspect is handled in the UI.
-    if (!world.death.alive) continue;
+    if (!p.alive) continue;
     if (!b.isDeathBag) continue;
     if (Math.hypot(b.x - p.x, b.z - p.z) < BAG_PICKUP_RADIUS) {
       // Death-bag recovery is anchor-only today (world.death is keyed

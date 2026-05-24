@@ -235,7 +235,7 @@ function cmdKill(world: World, name: string | undefined): string[] {
   // name match keeps the shape ready for multiplayer.
   const player = localPlayer(world);
   if (player.name !== name) return [`No player named ${name}`];
-  if (!world.death.alive) return [`${name} is already dead`];
+  if (!player.alive) return [`${name} is already dead`];
   player.health = 0;
   return [`Killed ${name}`];
 }
@@ -311,9 +311,9 @@ function cmdRespawn(world: World, name: string | undefined): string[] {
   if (!name) return ['Usage: /respawn [NAME]'];
   const player = localPlayer(world);
   if (player.name !== name) return [`No player named ${name}`];
-  if (world.death.alive) return [`${name} is already alive`];
+  if (player.alive) return [`${name} is already alive`];
   // Defer the actual revive to the death system so respawn-side
   // effects (city teleport, bug spawn) all run in one place.
-  world.pending.respawn = true;
+  player.pendingRespawn = true;
   return [`Respawning ${name}…`];
 }

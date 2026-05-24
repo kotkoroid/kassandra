@@ -177,7 +177,7 @@
     selection.value = 'player';
   }}
 >
-  {#if world.death.alive && (settings.showNames || player.saying)}
+  {#if player.alive && (settings.showNames || player.saying)}
     <!-- Nameplate + speech bubble above the head. Both are hidden
          while dead so the corpse doesn't keep floating labels over
          it. Nameplate is toggleable via the Settings dialog; the
@@ -206,7 +206,7 @@
     </HTML>
   {/if}
 
-  {#if levelUpTime >= 0 && world.death.alive}
+  {#if levelUpTime >= 0 && player.alive}
     <!-- Pillar of golden light wrapping the character. Open-ended
          cylinder + DoubleSide so it renders from both inside and out;
          depthWrite off so it doesn't clip the model behind it. -->
@@ -248,7 +248,7 @@
   {/if}
 
   <!-- Rush: cyan trail ring at feet while dashing. -->
-  {#if player.activeSpell?.kind === 'rush' && world.death.alive}
+  {#if player.activeSpell?.kind === 'rush' && player.alive}
     {@const sp = player.activeSpell}
     {@const t = Math.min((world.time - sp.startedAt) / Math.max(sp.endsAt - sp.startedAt, 0.001), 1)}
     <T.Mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -274,7 +274,7 @@
   {/if}
 
   <!-- Mayhem: pulsing amber/orange aura while buff is active. -->
-  {#if player.effects.find(e => e.id === 'mayhem') && world.death.alive}
+  {#if player.effects.find(e => e.id === 'mayhem') && player.alive}
     {@const pulse = 0.35 + 0.25 * Math.sin(world.time * 6)}
     <T.Mesh position={[0, 1.0, 0]}>
       <T.CylinderGeometry args={[0.55, 0.55, 2.2, 14, 1, true]} />
@@ -299,7 +299,7 @@
   {/if}
 
   <!-- Hail of Blades: two counter-rotating gold rings while channelling. -->
-  {#if player.activeSpell?.kind === 'hail-of-blades' && world.death.alive}
+  {#if player.activeSpell?.kind === 'hail-of-blades' && player.alive}
     <T.Mesh position={[0, 0.06, 0]} rotation={[-Math.PI / 2, 0, hailRingSpin]}>
       <T.RingGeometry args={[1.8, 2.6, 32]} />
       <T.MeshBasicMaterial
@@ -323,7 +323,7 @@
   {/if}
 
   <!-- Blade Whip: brief orange cylinder from player toward target. -->
-  {#if whipTime >= 0 && world.death.alive}
+  {#if whipTime >= 0 && player.alive}
     {@const progress = whipTime / WHIP_DURATION}
     {@const localDx = whipTargetX - position[0]}
     {@const localDz = whipTargetZ - position[2]}
@@ -346,7 +346,7 @@
   <!-- Body parts wrap in an inner group so death drops the whole
        avatar flat on its back without affecting the nameplate or
        level-up effect that live above. -->
-  <T.Group rotation.x={world.death.alive ? 0 : -Math.PI / 2}>
+  <T.Group rotation.x={player.alive ? 0 : -Math.PI / 2}>
     <!-- Torso (skin under the armor). -->
     <T.Mesh position={[0, 1.2, 0]} castShadow material={PLAYER_SKIN_MAT}>
     <T.BoxGeometry args={[0.4, 0.5, 0.25]} />

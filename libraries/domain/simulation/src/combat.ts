@@ -76,8 +76,8 @@ export function applyDamageToPlayer(
   amount: number,
   attacker: { monsterId: string; name: string },
 ) {
-  if (!world.death.alive) return;
   const player = localPlayer(world);
+  if (!player.alive) return;
   const before = player.health;
   player.health = Math.max(0, before - amount);
   const dealt = before - player.health;

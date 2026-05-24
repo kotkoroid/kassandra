@@ -41,15 +41,20 @@ import { localPlayer } from '../world.ts';
 
 export function tickDeath(world: World, dt: number) {
   // 1. Detect a fresh death and kick off the pipeline.
+  //    Pipeline state (troller, bag, summary, attackers) is still
+  //    anchor-only in D3d.1 — per-player pipeline lands in D3d.2.
+  //    `alive` itself is per-player; we read the anchor's flag here.
   const player = localPlayer(world);
-  if (world.death.alive && player.health <= 0) {
+  if (player.alive && player.health <= 0) {
     triggerDeath(world);
   }
 
-  // 2. Honor any queued respawn intent.
-  if (world.pending.respawn) {
-    world.pending.respawn = false;
-    if (!world.death.alive) respawn(world);
+  // 2. Honor any queued respawn intent for the anchor. Per-player
+  //    pendingRespawn — only the anchor's respawn drives the pipeline
+  //    today (D3d.2 fans out).
+  if (player.pendingRespawn) {
+    player.pendingRespawn = false;
+    if (!player.alive) respawn(world);
   }
 
   // 3. Step troller(s) — there is normally only one, but the
@@ -70,9 +75,9 @@ function triggerDeath(world: World) {
   // Uses the player's name (set during create_character); falls back
   // to "A hero" so a kill before naming still reads.
   pushSystem(world, `${p.name || 'A hero'} died in a battle.`);
-  world.death.alive = false;
-  world.death.deathX = p.x;
-  world.death.deathZ = p.z;
+  p.alive = false;
+  p.deathX = p.x;
+  p.deathZ = p.z;
 
   // Freeze the death summary before clearing the running totals so
   // the Hud's death recap has stable, snapshot-frozen numbers.
@@ -119,7 +124,7 @@ function respawn(world: World) {
   const p = localPlayer(world);
   // Lifecycle announce — fired once at the dead→alive transition.
   pushSystem(world, `${p.name || 'A hero'} respawned in the city.`);
-  world.death.alive = true;
+  p.alive = true;
   // Clear the previous life's recap; the next life starts a fresh
   // attribution log.
   world.death.summary = null;
@@ -148,9 +153,13 @@ function respawn(world: World) {
 }
 
 function tickTroller(world: World, e: Entity, index: number, dt: number) {
+  // D3d.1: troller pipeline is still anchor-only. Read the anchor's
+  // deathX/deathZ for the corpse target — D3d.2 will key by which
+  // player's death the troller is processing.
+  const anchor = localPlayer(world);
   const phase = e.phase ?? 'approach';
-  const targetX = e.trollerTargetX ?? world.death.deathX;
-  const targetZ = e.trollerTargetZ ?? world.death.deathZ;
+  const targetX = e.trollerTargetX ?? anchor.deathX;
+  const targetZ = e.trollerTargetZ ?? anchor.deathZ;
   const dx = targetX - e.x;
   const dz = targetZ - e.z;
   const dist = Math.hypot(dx, dz);
@@ -161,8 +170,8 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
       // Pick a random direction and walk that far away from the
       // corpse. Bag travels with the troller from now on.
       const angle = world.rng.next() * Math.PI * 2;
-      e.trollerTargetX = world.death.deathX + Math.cos(angle) * TROLLER_LEAVE_DISTANCE;
-      e.trollerTargetZ = world.death.deathZ + Math.sin(angle) * TROLLER_LEAVE_DISTANCE;
+      e.trollerTargetX = anchor.deathX + Math.cos(angle) * TROLLER_LEAVE_DISTANCE;
+      e.trollerTargetZ = anchor.deathZ + Math.sin(angle) * TROLLER_LEAVE_DISTANCE;
       e.phase = 'leave';
       e.carriesPlayerBag = true;
     }
@@ -189,7 +198,9 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
 
 function tickIndicatorBug(world: World, dt: number) {
   const bug = world.death.bug;
-  if (!bug || !world.death.alive) return;
+  // Anchor-only: indicator bug currently shown only when the anchor
+  // is alive and has a pending bag (D3d.2 makes this per-player).
+  if (!bug || !localPlayer(world).alive) return;
 
   bug.retargetTimer -= dt;
   if (bug.retargetTimer <= 0) {

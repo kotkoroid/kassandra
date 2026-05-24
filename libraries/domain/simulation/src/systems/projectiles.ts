@@ -35,7 +35,7 @@ export function tickProjectiles(world: World, dt: number) {
 
     const lp = localPlayer(world);
     if (
-      world.death.alive &&
+      lp.alive &&
       Math.hypot(p.x - lp.x, p.z - lp.z) < PROJECTILE_HIT_RADIUS
     ) {
       applyDamageToPlayer(world, p.damage, {

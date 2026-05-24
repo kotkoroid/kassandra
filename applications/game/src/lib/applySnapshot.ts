@@ -73,17 +73,18 @@ export function applySnapshot(s: Snapshot): void {
       spellCooldowns: { ...p.spellCooldowns },
       spellLevels: { ...p.spellLevels },
       activeSpell: p.activeSpell as ActiveSpell | null,
+      // PR-D3d.1: per-player death + pending state. The snapshot ships
+      // alive/deathX/deathZ per player; pending flags are server-only
+      // (the client never sends them via snapshot) so they default to
+      // false on the client mirror.
+      alive: p.alive,
+      deathX: p.deathX,
+      deathZ: p.deathZ,
+      pendingManualAttack: false,
+      pendingRespawn: false,
     };
   }
   world.players = nextPlayers;
-
-  // Extract local player's death state from the snapshot.
-  const localSnap = s.players.find((p) => p.id === world.localPlayerId);
-  if (localSnap) {
-    world.death.alive = localSnap.alive;
-    world.death.deathX = localSnap.deathX;
-    world.death.deathZ = localSnap.deathZ;
-  }
 
   world.entities = s.entities.map((e) => ({
     id: e.id,

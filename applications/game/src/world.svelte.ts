@@ -19,5 +19,5 @@ export function resetWorld(seed: number = Date.now() >>> 0) {
   world.spawnPointRespawnAt = fresh.spawnPointRespawnAt;
   world.nextId = fresh.nextId;
   world.inputQueue = fresh.inputQueue;
-  world.pending = fresh.pending;
+  // PR-D3d.1: world.pending is gone — pending flags live on Player now.
 }

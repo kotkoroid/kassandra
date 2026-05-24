@@ -55,7 +55,7 @@ export function levelUpSpell(
   spellId: string,
 ): void {
   const p = playerById(world, playerId);
-  if (!world.death.alive) return;
+  if (!p.alive) return;
   const def = SPELLS[spellId];
   if (!def) {
     sayToChat(world, 'Unknown spell.');
@@ -110,7 +110,7 @@ export function castSpell(
   if (p.playerClass !== 'warrior') return;
 
   // Dead players cannot cast.
-  if (!world.death.alive) return;
+  if (!p.alive) return;
 
   // Channel already running — don't interrupt with another cast.
   if (p.activeSpell !== null) return;

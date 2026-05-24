@@ -37,7 +37,7 @@ export function tickPlayer(
 
   // Passive health regen runs whether moving or idle, but only while
   // alive. Tied to stat, capped at PLAYER_MAX_HP.
-  if (world.death.alive && p.healthRegen > 0) {
+  if (p.alive && p.healthRegen > 0) {
     const maxHp = getEffectiveStat(p, 'maxHealth');
     if (p.health < maxHp) {
       p.health = Math.min(maxHp, p.health + getEffectiveStat(p, 'healthRegen') * dt);
@@ -51,15 +51,15 @@ export function tickPlayer(
 
   // While dead, body lies frozen. Drain the manual-attack flag so a
   // queued slash doesn't fire on respawn.
-  if (!world.death.alive) {
-    world.pending.manualAttack = false;
+  if (!p.alive) {
+    p.pendingManualAttack = false;
     return;
   }
 
   // While a channelled spell is running (Rush dash, Hail spin) the
   // player cannot move or slash — tickSpells owns position this tick.
   if (p.activeSpell !== null) {
-    world.pending.manualAttack = false;
+    p.pendingManualAttack = false;
     return;
   }
 
@@ -188,8 +188,8 @@ export function tickPlayer(
 
   // --- Manual attack (space-bar) --------------------------------
 
-  if (world.pending.manualAttack) {
-    world.pending.manualAttack = false;
+  if (p.pendingManualAttack) {
+    p.pendingManualAttack = false;
     // Cancel click-to-move navigation so the character plants and
     // slashes in place instead of continuing to walk through the swing.
     p.navTargetX = null;

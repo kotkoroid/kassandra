@@ -79,6 +79,11 @@ export function defaultPlayer(): Player {
     spellLevels: {},
     activeSpell: null,
     spellAnimTrigger: 0,
+    alive: true,
+    deathX: 0,
+    deathZ: 0,
+    pendingManualAttack: false,
+    pendingRespawn: false,
   };
 }
 
@@ -97,9 +102,6 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     healingCircles: [],
     lootBags: [],
     death: {
-      alive: true,
-      deathX: 0,
-      deathZ: 0,
       bagXp: 0,
       bug: null,
       attackers: [],
@@ -116,10 +118,6 @@ export function createWorld(seed: number = Date.now() >>> 0): World {
     spawnPointRespawnAt: new Map(),
     nextId: 1,
     inputQueue: [],
-    pending: {
-      manualAttack: false,
-      respawn: false,
-    },
   };
   return world;
 }

@@ -106,7 +106,7 @@ function tickMelee(
   // Player as candidate target. Water and the city both protect
   // them from melee aggro.
   const p = localPlayer(world);
-  if (world.death.alive && !isInWaterAt(p.x, p.z) && !isInCity(p.x, p.z)) {
+  if (p.alive && !isInWaterAt(p.x, p.z) && !isInCity(p.x, p.z)) {
     bestDist = Math.hypot(e.x - p.x, e.z - p.z);
     bestX = p.x;
     bestZ = p.z;
@@ -169,7 +169,7 @@ function tickSwain(world: World, e: Entity, dt: number) {
   const toPlayerX = swainPlayer.x - e.x;
   const toPlayerZ = swainPlayer.z - e.z;
 
-  if (!world.death.alive || isInCity(swainPlayer.x, swainPlayer.z)) {
+  if (!swainPlayer.alive || isInCity(swainPlayer.x, swainPlayer.z)) {
     // Freeze rotation alongside the fire gate so it doesn't keep
     // staring at the city wall.
     return;

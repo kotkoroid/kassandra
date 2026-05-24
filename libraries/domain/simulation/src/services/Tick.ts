@@ -180,16 +180,16 @@ function handleEvent(world: World, playerId: PlayerId, ev: SimEvent): void {
       p.autoAttack = ev.on;
       break;
     case 'manual_attack':
-      world.pending.manualAttack = true;
+      p.pendingManualAttack = true;
       break;
     case 'send_chat':
       applyChat(world, ev.text, ev.channel);
       break;
     case 'request_respawn':
-      world.pending.respawn = true;
+      p.pendingRespawn = true;
       break;
     case 'kill_player':
-      if (world.death.alive) p.health = 0;
+      if (p.alive) p.health = 0;
       break;
     case 'pickup_loot': {
       const bagIdx = world.lootBags.findIndex((b) => b.id === ev.bagId);
