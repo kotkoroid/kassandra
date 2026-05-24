@@ -217,7 +217,7 @@ function cmdSpawnMonster(
   if (typeof count === 'string') return [count];
   // PR-D3e.2: the scatter math lives in pure/chat.ts; this layer
   // binds `world.rng.next` as the rng callable.
-  const result = scatterSpawnsAroundPlayer(world, id, count, () => world.rng.next());
+  const result = scatterSpawnsAroundPlayer(world, id, count, () => world.rng());
   if (!result.ok) {
     return [`Monster ${id} has no spawn handler`];
   }

@@ -15,7 +15,6 @@ import {
   PLAYER_MAX_MANA,
   STAMINA_MAX,
 } from './constants.ts';
-import { createRng } from './rng.ts';
 import type { Player, PlayerId, World } from './types.ts';
 
 export function localPlayer(world: World): Player {
@@ -91,10 +90,27 @@ export function defaultPlayer(): Player {
   };
 }
 
+// PR-D3e.3: createWorld carries an inline Mulberry32 closure as
+// `world.rng` so sim functions stay self-sufficient (tests + dev can
+// drive the sim without wiring `RandomState` themselves). PartyRoom
+// (and PR-F integration tests) override `world.rng` after restore so
+// the same Mulberry32 state is shared with the `effect/Random`
+// Reference for property-replay determinism.
+function makeDefaultRng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function createWorld(seed: number = Date.now() >>> 0): World {
   const localPlayerId: PlayerId = crypto.randomUUID();
   const world: World = {
-    rng: createRng(seed),
+    rng: makeDefaultRng(seed),
     time: 0,
     tick: 0,
     localPlayerId,
@@ -133,4 +149,36 @@ export function addPlayer(world: World, playerId: PlayerId): void {
 // lives on the world so saves + replays roll forward consistently.
 export function genId(world: World, prefix: string): string {
   return `${prefix}${world.nextId++}`;
+}
+
+// --- Event buffer helpers (PR-D3e.3 — was `events.ts`) -----------
+//
+// PR-D3d.3 originally split these into a dedicated `events.ts`
+// module. They mutate `world.recentEvents` only, with no other
+// dependencies, so they fit cleanly here alongside the rest of the
+// world helpers. The `EventBus` service in `services/` still wraps
+// them as Effects for any future Effect-yielding consumer; sync
+// callers (`pure/combat.ts`, `pure/spells.ts`) hit these directly.
+
+import type { GameEvent } from './types.ts';
+
+// Hard cap so a runaway emission loop can't unbounded the buffer in a
+// single tick. Old events fall out first. 256 covers a heavy fight
+// frame (a swarm of damage popups + several kills) with headroom.
+const MAX_EVENTS_PER_TICK = 256;
+
+export function emit(world: World, event: GameEvent): void {
+  const buf = world.recentEvents;
+  buf.push(event);
+  if (buf.length > MAX_EVENTS_PER_TICK) {
+    buf.splice(0, buf.length - MAX_EVENTS_PER_TICK);
+  }
+}
+
+// Tick-boundary helper: clear the per-tick buffer after the snapshot
+// has been built. Called once per tick from the realm's Tick.step
+// (between snapshot publish and the next sim step).
+export function clearEvents(world: World): void {
+  // Mutate in place; the snapshot has already copied the array.
+  world.recentEvents.length = 0;
 }

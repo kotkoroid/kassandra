@@ -7,7 +7,6 @@
 import type { ChatChannel, SimEvent } from '@kassandra/protocol-foundation-library';
 import type { ItemId } from './items.ts';
 import type { MonsterId } from './monsters.ts';
-import type { Rng } from './rng.ts';
 
 export type { ChatChannel, SimEvent };
 
@@ -485,9 +484,13 @@ export type GameEvent =
 // --- The world --------------------------------------------------
 
 export interface World {
-  // Seeded PRNG used by every sim system. Math.random() is
-  // forbidden inside sim/.
-  rng: Rng;
+  // PR-D3e.3: rng is now a `() => number` callable bound by PartyRoom
+  // (server) or test setup (client) to the shared Mulberry32 state in
+  // `services/RandomState.ts`. The Effect-side equivalent
+  // (`effect/Random.Random` Reference) is provided by the same Layer,
+  // so Effect-yielding sites can `yield* Random.next` while sync
+  // sim impls keep using `world.rng()`.
+  rng: () => number;
   // Real game seconds since the world was created. Drives day/
   // night cycle, attack-speed clocks, bubble expiries, ttls, etc.
   time: number;

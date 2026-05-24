@@ -11,7 +11,14 @@
 // from the runtime `World` in two ways: Maps collapse to Records
 // (spawnPointRespawnAt, players), and a few derived/transient fields
 // drop (entityById is rebuilt on restore; recentEvents/inputQueue
-// start empty; world.rng → rngSeed via Mulberry32's exposed state).
+// start empty).
+//
+// PR-D3e.3: the Mulberry32 state moved from `world.rng` to the
+// `RandomState` service. `save` now takes an explicit `rngSeed` arg
+// (PartyRoom yields `RandomState.getSeed()` before calling) and
+// `restore` returns both the rehydrated world AND the persisted
+// seed so PartyRoom can wire `makeRandomLayer(seed)` and bind
+// `world.rng` to the shared callable.
 //
 // Versioning: payloads carry `version: 1`. A schema-changing PR
 // bumps the literal and adds a migrator (or, simpler, returns None
@@ -31,17 +38,26 @@ const STORAGE_KEY = 'world';
 const decodePersistent = Schema.decodeUnknownResult(PersistentWorld);
 const encodePersistent = Schema.encodeUnknownSync(PersistentWorld);
 
+export interface RestoredWorld {
+  readonly world: World;
+  readonly rngSeed: number;
+}
+
 export interface PartyStorageShape {
-  /** Serialize the current world and write to DO storage. */
-  readonly save: (world: World) => Effect.Effect<void>;
   /**
-   * Read the persisted world from DO storage and rehydrate it to a
-   * tickable runtime World. Returns `None` when nothing has been
-   * stored yet OR when the stored payload fails to decode (treated
-   * as "fresh party") so the bug-on-schema-bump cost is at worst a
-   * party reset, not a crash loop.
+   * Serialize the current world + Mulberry32 seed to DO storage.
+   * Caller (PartyRoom) yields `RandomState.getSeed()` before this so
+   * the persisted seed reflects exactly the post-last-tick state.
    */
-  readonly restore: Effect.Effect<Option.Option<World>>;
+  readonly save: (world: World, rngSeed: number) => Effect.Effect<void>;
+  /**
+   * Read the persisted world + rng seed from DO storage. Returns
+   * `None` when nothing has been stored yet OR when the stored
+   * payload fails to decode (treated as "fresh party") so the
+   * bug-on-schema-bump cost is at worst a party reset, not a crash
+   * loop.
+   */
+  readonly restore: Effect.Effect<Option.Option<RestoredWorld>>;
   /** Wipe the stored world. Called on owner disband. */
   readonly clear: Effect.Effect<void>;
 }
@@ -59,10 +75,10 @@ export const makePartyStorage = (
   state: Cloudflare.DurableObjectState['Service'],
 ): Effect.Effect<PartyStorageShape> =>
   Effect.succeed({
-    save: Effect.fn('PartyStorage.save')(function* (world) {
+    save: Effect.fn('PartyStorage.save')(function* (world, rngSeed) {
       const payload: typeof PersistentWorld.Type = {
         version: 1,
-        rngSeed: world.rng.seed,
+        rngSeed,
         time: world.time,
         tick: world.tick,
         localPlayerId: world.localPlayerId,
@@ -86,7 +102,7 @@ export const makePartyStorage = (
 
     restore: Effect.gen(function* () {
       const raw = yield* state.storage.get<unknown>(STORAGE_KEY);
-      if (raw === undefined) return Option.none<World>();
+      if (raw === undefined) return Option.none<RestoredWorld>();
 
       const decoded = decodePersistent(raw);
       if (decoded._tag === 'Failure') {
@@ -97,7 +113,7 @@ export const makePartyStorage = (
         yield* Effect.logWarning('PartyStorage.restore: payload failed to decode, dropping', {
           error: String(decoded.failure),
         });
-        return Option.none<World>();
+        return Option.none<RestoredWorld>();
       }
 
       const persisted = decoded.success;
@@ -106,12 +122,11 @@ export const makePartyStorage = (
       // from a fresh empty world (same defaults) and overwrite the
       // persisted fields — this keeps the shape additive (new
       // optional World fields keep their defaults instead of being
-      // `undefined`).
-      const world = createWorld(persisted.rngSeed);
-      // Mulberry32 seeds the state from the constructor arg; we
-      // overwrite it here so the stream continues from exactly
-      // where save() captured it.
-      world.rng.seed = persisted.rngSeed;
+      // `undefined`). `world.rng` here is the default Mulberry32
+      // closure baked into createWorld; PartyRoom rebinds it to the
+      // shared `RandomState` callable after this returns, using the
+      // `rngSeed` we hand back below.
+      const world = createWorld();
       world.time = persisted.time;
       world.tick = persisted.tick;
       world.localPlayerId = persisted.localPlayerId;
@@ -137,7 +152,7 @@ export const makePartyStorage = (
       world.inputQueue = [];
       world.recentEvents = [];
 
-      return Option.some(world);
+      return Option.some<RestoredWorld>({ world, rngSeed: persisted.rngSeed });
     }).pipe(Effect.annotateLogs({ service: 'PartyStorage' })),
 
     clear: Effect.gen(function* () {

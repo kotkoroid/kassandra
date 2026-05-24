@@ -1,7 +1,7 @@
 // PR-D3e.1 — pure-core extraction for the death pipeline.
 //
 // Each helper in `systems/death.ts` that previously called
-// `world.rng.next()` has a pure twin here. The twin takes a
+// `world.rng()` has a pure twin here. The twin takes a
 // `rng: () => number` callable parameter so the function's rng
 // dependency is explicit in its type signature — tests can inject a
 // fixed-sequence callable and get deterministic mutation.

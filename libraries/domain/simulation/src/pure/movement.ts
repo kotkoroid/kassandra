@@ -1,8 +1,9 @@
-// Player input + movement + engage + slash cadence.
-//
-// Every per-tick decision the local character makes lives here: the
-// WASD vs nav vs auto-engage resolution, the city-night seal, tree
-// collisions, stamina, passive health regen, and the slash clock.
+// PR-D3e.3: pure-core for player input + movement + engage + slash
+// cadence. Every per-tick decision the local character makes lives
+// here — WASD vs nav vs auto-engage resolution, city-night seal,
+// tree collisions, stamina, passive health regen, slash clock.
+// `slash` is imported from `combat.ts` (the top-level re-export over
+// pure/combat.ts); this module has no rng usage of its own.
 
 import { isInCity } from '../city.ts';
 import { getVisibleProps } from '../worldGen.ts';

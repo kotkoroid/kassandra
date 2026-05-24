@@ -1,10 +1,10 @@
-// Projectiles service — wraps systems/projectiles.ts.
+// Projectiles service — wraps pure/projectiles.ts.
 
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 
-import { tickProjectiles as tickProjectilesImpl } from '../systems/projectiles.ts';
+import { tickProjectiles as tickProjectilesImpl } from '../pure/projectiles.ts';
 import type { World } from '../types.ts';
 
 export interface ProjectilesShape {

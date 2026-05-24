@@ -36,7 +36,7 @@ export function spawnEntity(
   rotation?: number,
   spawnPointId?: string,
 ): Entity {
-  return spawnEntityPure(world, kind, x, z, rotation, spawnPointId, () => world.rng.next());
+  return spawnEntityPure(world, kind, x, z, rotation, spawnPointId, () => world.rng());
 }
 
 // PR-D3d.2: forPlayerId + bagXp are optional because chat-spawned

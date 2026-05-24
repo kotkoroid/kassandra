@@ -7,5 +7,5 @@ import { tickNpcChat as tickNpcChatPure } from '../pure/npcChat.ts';
 import type { World } from '../types.ts';
 
 export function tickNpcChat(world: World) {
-  tickNpcChatPure(world, () => world.rng.next());
+  tickNpcChatPure(world, () => world.rng());
 }

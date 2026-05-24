@@ -1,10 +1,10 @@
-// HealingCircles service — wraps systems/healingCircles.ts.
+// HealingCircles service — wraps pure/healingCircles.ts.
 
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 
-import { tickHealingCircles as tickHealingCirclesImpl } from '../systems/healingCircles.ts';
+import { tickHealingCircles as tickHealingCirclesImpl } from '../pure/healingCircles.ts';
 import type { World } from '../types.ts';
 
 export interface HealingCirclesShape {

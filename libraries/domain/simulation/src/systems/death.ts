@@ -16,7 +16,7 @@
 //                                     restore pools, teleport to city,
 //                                     spawn indicator bug.
 //
-// PR-D3e.1: every helper that previously consumed `world.rng.next()`
+// PR-D3e.1: every helper that previously consumed `world.rng()`
 // inline has been carved out into `pure/death.ts` and takes a
 // `rng: () => number` callable. This file's only remaining role is
 // to (1) walk the world's per-player + per-troller state, and (2)
@@ -42,7 +42,7 @@ export function tickDeath(world: World, dt: number) {
   // trollers can coexist (one per dying player), tagged by
   // entity.forPlayerId; each player's indicator bug + summary +
   // attackers list lives on their Player record.
-  const rng = () => world.rng.next();
+  const rng = () => world.rng();
 
   // 1. Detect fresh deaths and kick off per-player pipelines.
   for (const [pid, p] of Object.entries(world.players)) {

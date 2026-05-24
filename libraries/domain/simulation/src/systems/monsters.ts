@@ -75,7 +75,7 @@ export function tickMonsters(world: World, dt: number) {
         tickSwain(world, e, dt);
         break;
       case 'janna':
-        tickJanna(world, e, dt, () => world.rng.next());
+        tickJanna(world, e, dt, () => world.rng());
         break;
     }
   }

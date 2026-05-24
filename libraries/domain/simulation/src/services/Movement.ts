@@ -1,16 +1,15 @@
-// Movement service — wraps systems/player.ts tickPlayer.
+// Movement service — wraps pure/movement.ts tickPlayer.
 //
-// Named "Movement" (per the master plan §6.2) because that's its real
-// responsibility — the player.ts file accumulated movement + cooldowns
-// + nav over time, but the orchestrator-visible entry point is "tick
-// the player's movement for this frame." PR-D3 may split nav and
-// movement into separate cores if the boundaries get cleaner.
+// PR-D3e.3: the pure core lives at `pure/movement.ts` (renamed from
+// the earlier `systems/player.ts`). Named "Movement" per master plan
+// §6.2 because that's the orchestrator-visible responsibility — the
+// pure file accumulated movement + cooldowns + nav over time.
 
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 
-import { tickPlayer as tickPlayerImpl } from '../systems/player.ts';
+import { tickPlayer as tickPlayerImpl } from '../pure/movement.ts';
 import type { FrameInputs, PlayerId, World } from '../types.ts';
 
 export interface MovementShape {

@@ -1,11 +1,9 @@
 // Time service — PR-D1's simplest system migration.
 //
-// Wraps the existing systems/time.ts. The tick + pure derived helpers
-// (currentHour, isNight, etc.) all stay where they are; this Service
-// just exposes the orchestration-relevant entry point (`tick`) plus
-// the day/night predicates as Effects so other Effect-native systems
-// can compose with them without bouncing in and out of the Effect
-// context.
+// PR-D3e.3: math lives in `pure/time.ts`. This Service exposes the
+// orchestration-relevant entry point (`tick`) plus the day/night
+// predicates as Effects so other Effect-native systems can compose
+// without bouncing in and out of the Effect context.
 
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
@@ -16,7 +14,7 @@ import {
   isNight as isNightImpl,
   nightStatMultiplier as nightStatMultiplierImpl,
   tickTime as tickTimeImpl,
-} from '../systems/time.ts';
+} from '../pure/time.ts';
 import type { World } from '../types.ts';
 
 export interface TimeShape {

@@ -30,7 +30,7 @@ import {
   type MonsterAttributes,
   type MonsterId,
 } from '../monsters.ts';
-import { nightStatMultiplier } from '../systems/time.ts';
+import { nightStatMultiplier } from './time.ts';
 import type { Entity, EntityKind, World } from '../types.ts';
 import { genId, localPlayer } from '../world.ts';
 

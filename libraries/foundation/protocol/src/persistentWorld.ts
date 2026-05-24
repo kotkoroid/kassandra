@@ -14,8 +14,11 @@
 //     `spawnPointRespawnAt: Map<string, number>` both serialize as
 //     `Schema.Record(Schema.String, ...)` — JSON-friendly without
 //     special-casing.
-//   - `world.rng` (closure-based Mulberry32) collapses to the
-//     `seed: number` field — `createRng(seed)` rebuilds the stream.
+//   - Mulberry32 state collapses to the `rngSeed: number` field at
+//     the top of the envelope. Restore returns it alongside the
+//     rehydrated world so PartyRoom can build the `RandomState`
+//     service (PR-D3e.3) at exactly that seed and rebind
+//     `world.rng` to the shared callable.
 //
 // Versioning: the top-level envelope carries `version: 1`. On a
 // breaking schema change, bump the literal + (later) add a migrator.
@@ -327,7 +330,8 @@ const ChatMessage = Schema.Struct({
 
 export const PersistentWorld = Schema.Struct({
   version: Schema.Literal(1),
-  // Mulberry32 seed; createRng(seed) rebuilds the stream on restore.
+  // Mulberry32 seed; PartyRoom feeds it to `makeRandomLayer(seed)`
+  // on restore (PR-D3e.3).
   rngSeed: Schema.Number,
   time: Schema.Number,
   tick: Schema.Number,

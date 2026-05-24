@@ -31,8 +31,10 @@ import {
 import {
   addPlayer,
   createWorld,
+  makeRandomLayer,
   makeWorldRef,
   pushSystem,
+  RandomState,
   SimLayer,
   WorldRef,
   type PlayerId,
@@ -81,8 +83,18 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       const restored = yield* partyStorage.restore;
       const initialWorld = Option.match(restored, {
         onNone: () => createWorld(),
-        onSome: (w) => w,
+        onSome: (r) => r.world,
       });
+      // PR-D3e.3: Mulberry32 state lives in `RandomState` (sim service),
+      // not on `world.rng` directly. Build the Layer with the
+      // persisted seed (or a fresh one on first-ever boot) and rebind
+      // `world.rng` to the shared callable so sync sim impls and the
+      // `effect/Random` Reference advance the same stream.
+      const initialSeed = Option.match(restored, {
+        onNone: () => Date.now() >>> 0,
+        onSome: (r) => r.rngSeed,
+      });
+      const randomLayer = makeRandomLayer(initialSeed);
       const worldRef = yield* makeWorldRef(initialWorld);
       const sessionsRef = yield* makeSessionsRef;
       const inputBuffer = yield* makeInputBuffer;
@@ -99,12 +111,31 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       // Tick orchestrator: realm wrapper around sim's Tick service.
       // SimLayer is provided here with our WorldRef instance plumbed
       // through so sim's services (Combat, Spawner, …) see the same
-      // world the realm is mutating.
+      // world the realm is mutating. PR-D3e.3: `randomLayer` provides
+      // the shared Mulberry32-backed `effect/Random.Random` Reference
+      // + `RandomState` service; merged into SimLayer so every
+      // Effect-yielding sim site sees the same rng stream `world.rng`
+      // exposes synchronously.
       const tick = yield* makeTick({ worldRef, inputBuffer, snapshotPubSub }).pipe(
         Effect.provide(
-          SimLayer.pipe(Layer.provide(Layer.succeed(WorldRef)(worldRef))),
+          SimLayer.pipe(
+            Layer.provide(Layer.succeed(WorldRef)(worldRef)),
+            Layer.provideMerge(randomLayer),
+          ),
         ),
       );
+
+      // Bind `world.rng` to the same Mulberry32 stream that
+      // `RandomState`/`Random` advance. Effect.provide is only valid
+      // inside an Effect, but we want the callable here so the boot
+      // path can drop it onto the world.
+      yield* Effect.gen(function* () {
+        const rs = yield* RandomState;
+        yield* worldRef.modify((world) => {
+          world.rng = rs.next;
+          return world;
+        });
+      }).pipe(Effect.provide(randomLayer));
 
       // RPC bridge: direct Protocol over DurableWebSocket. The bridge
       // owns the per-client parsers and the disconnects queue; we feed
@@ -378,7 +409,10 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             // this point), so the snapshot here is consistent. Also
             // drop the periodic alarm — nothing to save while empty.
             const world = yield* worldRef.get;
-            yield* partyStorage.save(world);
+            yield* Effect.gen(function* () {
+              const rs = yield* RandomState;
+              yield* partyStorage.save(world, rs.getSeed());
+            }).pipe(Effect.provide(randomLayer));
             yield* state.storage.deleteAlarm();
           }
 
@@ -395,7 +429,10 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         const count = yield* sessionsRef.count;
         if (count === 0) return;
         const world = yield* worldRef.get;
-        yield* partyStorage.save(world);
+        yield* Effect.gen(function* () {
+          const rs = yield* RandomState;
+          yield* partyStorage.save(world, rs.getSeed());
+        }).pipe(Effect.provide(randomLayer));
         yield* state.storage.setAlarm(Date.now() + SAVE_ALARM_INTERVAL_MS);
       });
 

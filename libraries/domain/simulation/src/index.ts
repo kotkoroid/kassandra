@@ -121,7 +121,17 @@ export {
 } from './constants.ts';
 
 // --- RNG ---
-export { createRng, type Rng } from './rng.ts';
+// PR-D3e.3: the dedicated `rng.ts` module is gone. `world.rng` is now
+// a plain `() => number` callable backed by the shared Mulberry32
+// state in `services/RandomState.ts`; Effect-yielding sites get the
+// same state via the `effect/Random.Random` Reference that the
+// `RandomState` Layer provides.
+export {
+  RandomState,
+  makeRandomLayer,
+  makeRngCallable,
+  type RandomStateShape,
+} from './services/RandomState.ts';
 
 // --- Types ---
 export type {
@@ -172,7 +182,11 @@ export { getEffectiveStat, tickModifiers } from './stats.ts';
 // on the client — sim runs in the DO). Events now flow out of the
 // simulation as `Snapshot.recentEvents`; UI consumers dispatch from
 // `applySnapshot` instead of subscribing in-process.
-export { clearEvents, emit, type GameEvent } from './events.ts';
+// PR-D3e.3: `events.ts` is gone — `emit` + `clearEvents` are sync
+// world-buffer helpers in `world.ts`. `GameEvent` is a `types.ts`
+// shape exported below.
+export { clearEvents, emit } from './world.ts';
+export type { GameEvent } from './types.ts';
 
 // --- Input dispatch ---
 export { dispatch } from './input.ts';
@@ -215,7 +229,7 @@ export {
 export { SpatialGrid, grid, rebuildGrid } from './spatialGrid.ts';
 
 // --- Systems (time helpers used by scene) ---
-export { currentHour, isNightHour, isNight, nightStatMultiplier } from './systems/time.ts';
+export { currentHour, isNightHour, isNight, nightStatMultiplier } from './pure/time.ts';
 
 // --- Chat lifecycle helper (used by realm worker for join/leave lines) ---
 export { pushSystem } from './systems/chat.ts';

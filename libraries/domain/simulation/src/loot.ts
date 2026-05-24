@@ -17,31 +17,10 @@ export type LootTable = Record<ItemId, LootEntry>;
 
 export const LOOT: Record<MonsterId, LootTable> = catalog as Record<MonsterId, LootTable>;
 
-function entryChance(entry: LootEntry): number {
-  return typeof entry === 'number' ? entry : entry.chance;
-}
-
-function entryCount(entry: LootEntry): number {
-  if (typeof entry === 'number') return 1;
-  if ('count' in entry) return entry.count;
-  const span = entry.max - entry.min + 1;
-  return entry.min + Math.floor(Math.random() * span);
-}
-
-// Independent-roll model: every entry in the monster's table is
-// rolled separately. A kill may drop nothing, one item, or several.
-// Stack-count items (e.g. currency) appear as repeated ItemIds in
-// the returned array — the bag/loot UI groups by id at render time.
-export function rollLoot(monsterId: MonsterId): ItemId[] {
-  const table = LOOT[monsterId];
-  if (!table) return [];
-  const drops: ItemId[] = [];
-  for (const itemId of Object.keys(table)) {
-    const entry = table[itemId]!;
-    if (Math.random() * 100 < entryChance(entry)) {
-      const count = entryCount(entry);
-      for (let i = 0; i < count; i++) drops.push(itemId);
-    }
-  }
-  return drops;
-}
+// PR-D3e.3: the rng-consuming roller lives in `pure/loot.ts` taking
+// `rng: () => number`. Both pre-extraction sites here flowed through
+// `Math.random()`, breaking the sim-wide determinism guarantee.
+// Callers (combat.ts's `onEntityDeath`) bind `world.rng.next` at the
+// usage site, matching the pure-twin convention from PR-D3e.1/.2.
+export { rollLoot } from './pure/loot.ts';
+export type { ItemId, MonsterId };
