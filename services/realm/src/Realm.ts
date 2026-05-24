@@ -10,14 +10,12 @@ import * as Effect from 'effect/Effect';
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
 import PartyRoom from './PartyRoom.ts';
-import PlayerProfile from './PlayerProfile.ts';
 
 // Realm Worker — entry point for all game-server traffic.
 //
 // Routing:
-//   GET /parties/:partyId/ws?upgrade=websocket    → PartyRoom DO
-//   GET /profiles/:accountId/rpc?upgrade=websocket → PlayerProfile DO
-//   *                                              → 404
+//   GET /parties/:partyId/ws?upgrade=websocket → PartyRoom DO
+//   *                                          → 404
 //
 // PR-G5: every WS upgrade is authenticated by SESSION COOKIE. The
 // gateway sets `__Secure-kassandra.sid=<opaqueId>` on POST /sessions
@@ -33,7 +31,10 @@ import PlayerProfile from './PlayerProfile.ts';
 //   - rewrites the forwarded URL with `?playerId=<accountId>` so the
 //     PartyRoom DO sees a realm-controlled player identity, never
 //     client-controlled
-//   - on /profiles, enforces `record.accountId === pathAccountId`
+//
+// ADR-002: PlayerProfile DO + /profiles route are gone. Character
+// identity is per-realm and lives inside each PartyRoom's persisted
+// world.
 
 const extractOrigin = (headers: Record<string, string>): string | undefined =>
   headers['origin'];
@@ -57,9 +58,21 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     // for JWT_SECRET) to avoid leaking `ConfigError` into the Worker's
     // never-error channel.
     const env = yield* Cloudflare.WorkerEnvironment;
+    // Dev default mirrors the gateway: alchemy dev binds 5173 for its
+    // bundled-asset Vite, so a second standalone Vite (used for HMR
+    // against the live workers) lands on 5174+. Allow a small range
+    // so the default boots whichever port Vite picks. Production sets
+    // ALLOWED_ORIGIN explicitly.
     const allowedOrigin =
       (env as Record<string, string | undefined>)['ALLOWED_ORIGIN'] ??
-      'http://localhost:5173';
+      [
+        'http://localhost:5555',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
+        'http://game.localhost:1337',
+      ].join(',');
     const allowedOrigins = allowedOrigin
       .split(',')
       .map((s) => s.trim())
@@ -68,7 +81,6 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
       typeof origin === 'string' && allowedOrigins.includes(origin);
 
     const rooms = yield* PartyRoom;
-    const profiles = yield* PlayerProfile;
 
     return {
       fetch: Effect.gen(function* () {
@@ -77,8 +89,7 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
         const pathname = url.pathname;
 
         const partyMatch = pathname.match(/^\/parties\/([^/]+)\/ws$/);
-        const profileMatch = pathname.match(/^\/profiles\/([^/]+)\/rpc$/);
-        if (!partyMatch && !profileMatch) {
+        if (!partyMatch) {
           return HttpServerResponse.text('Not Found', { status: 404 });
         }
 
@@ -121,24 +132,12 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
         // indefinitely without absolute renewal complexity.
         yield* touchSession(sessionsKv, sid, record);
 
-        if (profileMatch) {
-          const pathAccountId = profileMatch[1]!;
-          // The session's accountId MUST match the path. Without
-          // this, any authenticated user could open a WS to any
-          // other PlayerProfile DO by editing the URL.
-          if (record.accountId !== pathAccountId) {
-            return HttpServerResponse.text('Forbidden', { status: 403 });
-          }
-          const profile = profiles.getByName(pathAccountId);
-          return yield* profile.fetch(request);
-        }
-
         // Parties: rewrite the URL so the DO sees the verified
         // playerId (= session.accountId) as a query parameter.
         // PartyRoom keeps its existing `?playerId=` parsing — but
         // the value is now realm-controlled. Any client query string
         // is discarded.
-        const partyId = partyMatch![1]!;
+        const partyId = partyMatch[1]!;
         const forwardedUrl = new URL(url);
         forwardedUrl.searchParams.set('playerId', record.accountId);
         const forwarded = request.modify({ url: forwardedUrl.toString() });

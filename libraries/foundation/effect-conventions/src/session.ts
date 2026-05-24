@@ -110,15 +110,26 @@ export interface CookieOptions {
   /** Seconds — mirrors the session record's TTL so the browser drops
    *  the cookie at the same time the KV record expires. */
   readonly maxAge: number;
+  /**
+   * `Strict` is the CSRF-hardest default and appropriate for prod.
+   * Several Chromium versions have quirks attaching Strict cookies
+   * to `ws://` upgrades even from same-origin pages — flip to
+   * `Lax` in dev if WS upgrades show "timeout waiting for open" /
+   * cookie missing. The Origin allow-list still provides the
+   * substantive CSRF defense.
+   * @default 'Strict'
+   */
+  readonly sameSite?: 'Strict' | 'Lax' | 'None';
 }
 
 export const buildSetCookie = (sid: string, opts: CookieOptions): string => {
   const name = opts.secure ? COOKIE_NAME_PROD : COOKIE_NAME_DEV;
+  const sameSite = opts.sameSite ?? 'Strict';
   const parts = [
     `${name}=${sid}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Strict',
+    `SameSite=${sameSite}`,
     `Max-Age=${opts.maxAge}`,
   ];
   if (opts.secure) parts.push('Secure');
@@ -126,9 +137,12 @@ export const buildSetCookie = (sid: string, opts: CookieOptions): string => {
   return parts.join('; ');
 };
 
-export const buildClearCookie = (opts: Pick<CookieOptions, 'secure' | 'domain'>): string => {
+export const buildClearCookie = (
+  opts: Pick<CookieOptions, 'secure' | 'domain' | 'sameSite'>,
+): string => {
   const name = opts.secure ? COOKIE_NAME_PROD : COOKIE_NAME_DEV;
-  const parts = [`${name}=`, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=0'];
+  const sameSite = opts.sameSite ?? 'Strict';
+  const parts = [`${name}=`, 'Path=/', 'HttpOnly', `SameSite=${sameSite}`, 'Max-Age=0'];
   if (opts.secure) parts.push('Secure');
   if (opts.domain) parts.push(`Domain=${opts.domain}`);
   return parts.join('; ');

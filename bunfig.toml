@@ -1,3 +1,11 @@
+# Polyfill `Socket.prototype.destroySoon` for Vite's bundled
+# `http-proxy`. Bun's `net.Socket` doesn't implement `destroySoon`;
+# Vite calls it during WS-upgrade teardown and crashes the proxy
+# with `TypeError: socket.destroySoon is not a function`. Loaded
+# into every Bun process this repo runs — including child Vite
+# alchemy dev spawns internally.
+preload = ["./scripts/bun-preload.ts"]
+
 [install]
 exact = true
 globalStore = true

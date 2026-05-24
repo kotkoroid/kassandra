@@ -7,7 +7,6 @@ import './consoleBridge';
 import './styles.css';
 
 import { auth, initAuth } from './auth.svelte';
-import { initProfile } from './profile.svelte';
 import { world } from './world.svelte';
 
 const target = document.getElementById('app');
@@ -16,18 +15,26 @@ if (!target) {
   throw new Error('Mount target #app not found.');
 }
 
-// PR-G2: settle the auth identity before the Svelte tree mounts.
-// `world.localPlayerId` becomes the verified accountId (= JWT.sub),
-// matching the realm's view of the player. Doing this synchronously
-// (top-level await) avoids the half-mounted state where components
-// race against an unfinished `auth` object.
+// Settle the auth identity before the Svelte tree mounts. ADR-002:
+// character identity lives per-realm inside each PartyRoom DO; the
+// browser-side `auth.accountId` is just the cookie-backed identity
+// used to gate realm WS upgrades. `world.localPlayerId` is rebound
+// here so any pre-connect UI render reads from a player record keyed
+// the same way the realm will key it (`?playerId=record.accountId`).
+//
+// `createWorld()` (in world.svelte.ts) populated `world.players` with
+// a random-UUID placeholder. Move that placeholder onto the
+// authoritative accountId key so `localPlayer(world)` doesn't throw
+// the moment any component reads it.
 await initAuth();
-world.localPlayerId = auth.accountId;
-
-// PR-G3: load the persisted CharacterRecord (if any) before mount so
-// App.svelte can decide whether to show CharacterCreation or skip
-// straight to game on PartySetup.onReady. Failure here is fatal —
-// without a known load state we can't decide which view to render.
-await initProfile();
+const placeholderId = world.localPlayerId;
+if (placeholderId !== auth.accountId) {
+  const placeholder = world.players[placeholderId];
+  if (placeholder !== undefined) {
+    delete world.players[placeholderId];
+    world.players[auth.accountId] = placeholder;
+  }
+  world.localPlayerId = auth.accountId;
+}
 
 export default mount(App, { target });

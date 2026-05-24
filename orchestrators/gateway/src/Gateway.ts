@@ -71,7 +71,41 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
     const envRec = env as Record<string, string | undefined>;
     const cookieSecure = isTruthy(envRec['SESSION_COOKIE_SECURE']);
     const cookieDomain = envRec['SESSION_COOKIE_DOMAIN'] ?? '';
-    const allowedOrigin = envRec['ALLOWED_ORIGIN'] ?? 'http://localhost:5173';
+    // Dev default is `Lax` to dodge a Chromium quirk where Strict
+    // cookies don't attach to `ws://` upgrades even from same-origin
+    // pages. Prod should set `Strict` explicitly. The Origin
+    // allow-list (below) is the substantive CSRF defense — SameSite
+    // is belt-and-suspenders. Permitted values: Strict | Lax | None.
+    const cookieSameSiteRaw = envRec['SESSION_COOKIE_SAMESITE'] ?? 'Lax';
+    const cookieSameSite: 'Strict' | 'Lax' | 'None' =
+      cookieSameSiteRaw === 'Strict' || cookieSameSiteRaw === 'None'
+        ? cookieSameSiteRaw
+        : 'Lax';
+    // Dev default permits common local-dev page origins. Note that
+    // `alchemy dev` itself binds port 5173 for its Cloudflare.Vite
+    // bundled-asset serving, so a *second* standalone Vite always
+    // falls back to 5174 (and onward if that's also busy). We allow
+    // a small range of fallback ports so the default boots whatever
+    // port Vite ends up on; production sets ALLOWED_ORIGIN
+    // explicitly and the default is irrelevant.
+    const allowedOrigin =
+      envRec['ALLOWED_ORIGIN'] ??
+      [
+        // Bun single-origin entry proxy (`scripts/ws-proxy.ts`).
+        // Recommended dev path because it sidesteps the alchemy
+        // local-subdomain WS forwarding bug for browsers.
+        'http://localhost:5555',
+        // Vite standalone (5173) + its fallback ports (alchemy dev's
+        // embedded Vite holds 5173, so a second Vite lands on 5174+).
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
+        // alchemy dev's bundled-asset endpoint (used when bypassing
+        // the Bun proxy entirely — browser WS will still fail, but
+        // POST /sessions works for diagnostics).
+        'http://game.localhost:1337',
+      ].join(',');
     const allowedOrigins = allowedOrigin
       .split(',')
       .map((s) => s.trim())
@@ -79,11 +113,13 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
 
     const cookieOpts = {
       secure: cookieSecure,
+      sameSite: cookieSameSite,
       ...(cookieDomain.length > 0 ? { domain: cookieDomain } : {}),
       maxAge: DEFAULT_TTL_SECONDS,
     } as const;
     const clearCookieOpts = {
       secure: cookieSecure,
+      sameSite: cookieSameSite,
       ...(cookieDomain.length > 0 ? { domain: cookieDomain } : {}),
     } as const;
 

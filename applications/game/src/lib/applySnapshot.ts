@@ -100,6 +100,32 @@ export function applySnapshot(s: Snapshot): void {
   }
   world.players = nextPlayers;
 
+  // PR-G5 dev guard: surface (and self-heal) the case where a snapshot's
+  // players don't include world.localPlayerId. The intended invariant
+  // post-PR-G2 is:
+  //   auth.accountId === cookie.sid → KV.accountId === ?playerId
+  //                                === server world.players key
+  //                                === client world.localPlayerId
+  // If this fails, every `$derived(localPlayer(world))` in the tree
+  // throws on the next reactivity tick. Re-anchoring to the first
+  // available key (the server's authoritative view) keeps the UI alive
+  // and the warning makes the mismatch visible in the in-game console
+  // bridge instead of an opaque cascade of invariant errors.
+  if (
+    world.localPlayerId &&
+    nextPlayers[world.localPlayerId] === undefined
+  ) {
+    const keys = Object.keys(nextPlayers);
+    console.warn(
+      '[applySnapshot] world.localPlayerId is not in snapshot.players —',
+      'localPlayerId=', world.localPlayerId,
+      'snapshot.players keys=', keys,
+    );
+    if (keys.length > 0) {
+      world.localPlayerId = keys[0]!;
+    }
+  }
+
   world.entities = s.entities.map((e) => ({
     id: e.id,
     kind: e.kind as EntityKind,

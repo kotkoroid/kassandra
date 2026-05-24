@@ -1,48 +1,91 @@
-// Dev-only WebSocket pass-through proxy.
+// Dev-only single-origin entry-point proxy.
 //
-// Why: `alchemy dev` mangles browser WebSocket upgrades through its
-// local-subdomain forwarder (see github.com/kotkoroid/alchemy-ws-repro).
-// Vite's `/realm` proxy is the documented workaround but breaks
-// browser→workerd subdomain upgrades. This script is a plain Bun WS
-// bridge that takes HTTP + WS traffic on a chosen local port and
-// forwards bytes-for-bytes to `realm.localhost:1337` (or any target).
+// `alchemy dev` exposes each worker on its own `*.localhost:1337`
+// subdomain. The local-subdomain proxy that alchemy uses to dispatch
+// across those subdomains mishandles browser-issued WebSocket
+// upgrades — the chain swallows `Sec-WebSocket-Extensions:
+// permessage-deflate` (which curl never sends, browsers always do)
+// and the 101 never makes it back. See
+// github.com/kotkoroid/alchemy-ws-repro for the minimal reproduction
+// (Bug #1: browser-only direct WS; Bug #2: WS through cross-subdomain
+// forward). PR-G5 cookies + the destroySoon polyfill removed the
+// other failure layers, but the underlying alchemy-WS forwarding
+// path remains broken for browsers.
 //
-// PR-G5: forwards the inbound `Cookie` header on the upstream WS open
-// so the session cookie set by the gateway reaches the realm. Browsers
-// attach the cookie to the upgrade request automatically (cookies
-// are host-scoped, port-agnostic — `localhost:5173` setting the
-// cookie means it travels to `localhost:5555` too); the proxy just
-// has to pipe it through to the upstream.
+// Workaround shape: route ALL browser traffic through a single Bun
+// process on `localhost:5555`. Bun's `Bun.serve` + `new WebSocket`
+// pair handles WS upgrades cleanly (no permessage-deflate quirk),
+// and we go server-to-server to each alchemy worker by exact
+// hostname — bypassing alchemy's local-proxy entirely on the
+// problematic hop.
+//
+//   browser → ws://localhost:5555/realm/profiles/:id/rpc
+//     → Bun proxy opens new WS to ws://realm.localhost:1337/profiles/:id/rpc
+//     → realm worker accepts, frames flow both ways
+//
+// Because the browser only ever sees `localhost:5555`, the session
+// cookie that the gateway sets stays on that origin and attaches to
+// every subsequent request — including the WS upgrade. No
+// cross-origin cookie scoping, no SameSite quirks, no Vite proxy
+// in the path.
 //
 // Usage:
-//   Terminal 1: bun run dev                    # alchemy dev
-//   Terminal 2: cd applications/game && bun vite  # standalone Vite for HMR
-//   Terminal 3: bun scripts/ws-proxy.ts         # this proxy on :5555
+//   Terminal 1: bun run dev                # alchemy: api/realm/game on *.localhost:1337
+//   Terminal 2: bun scripts/ws-proxy.ts    # single entry on localhost:5555
+//   Browser:    http://localhost:5555
 //
-// Then either:
-//   (a) point Vite's `/realm` proxy at `localhost:5555` instead of
-//       `realm.localhost:1337` (one-line edit in vite.config.ts), or
-//   (b) point the client WS URL at `ws://localhost:5555/...` directly
-//       in the `import.meta.env.DEV` branch of realm-client.ts and
-//       profile-client.ts.
-//
-// Tradeoffs:
-//   - Bun's WS server + WS client are both battle-tested for
-//     subprotocols and arbitrary headers, unlike Vite's `http-proxy`
-//     handoff to workerd subdomain WS upgrades.
-//   - Zero dependence on alchemy local infra: this proxy only needs
-//     `realm.localhost:1337` reachable (which `alchemy dev` provides).
-//   - Production path unaffected — this script runs only in dev.
+// Routing table:
+//   /api/*    → api.localhost:1337/*    (HTTP only; `/api` prefix stripped)
+//   /realm/*  → realm.localhost:1337/*  (HTTP + WS; `/realm` prefix stripped)
+//   /*        → game.localhost:1337/*   (HTTP fallthrough + Vite HMR WS; path passes through unchanged)
 
-const PORT = Number(Bun.env.WS_PROXY_PORT ?? 5555);
-const TARGET_HOST = Bun.env.WS_PROXY_TARGET ?? 'realm.localhost:1337';
-const TARGET_HTTP = `http://${TARGET_HOST}`;
-const TARGET_WS = `ws://${TARGET_HOST}`;
+const PORT = Number(Bun.env['WS_PROXY_PORT'] ?? 5555);
+const ALCHEMY_PORT = Number(Bun.env['WS_PROXY_ALCHEMY_PORT'] ?? 1337);
+
+interface UpstreamRoute {
+  /** Upstream `host:port` to fetch / open WS against. */
+  readonly host: string;
+  /** Rewrite the inbound URL path for the upstream. */
+  readonly rewrite: (pathname: string) => string;
+}
+
+const stripPrefix = (prefix: string) => (path: string) =>
+  path.startsWith(prefix) ? path.slice(prefix.length) || '/' : path;
+
+const ROUTES: ReadonlyArray<{ prefix: string; route: UpstreamRoute }> = [
+  {
+    prefix: '/api/',
+    route: {
+      host: `api.localhost:${ALCHEMY_PORT}`,
+      rewrite: stripPrefix('/api'),
+    },
+  },
+  {
+    prefix: '/realm/',
+    route: {
+      host: `realm.localhost:${ALCHEMY_PORT}`,
+      rewrite: stripPrefix('/realm'),
+    },
+  },
+];
+
+// Default fallthrough: game worker (Vite SPA + HMR ws).
+const FALLBACK: UpstreamRoute = {
+  host: `game.localhost:${ALCHEMY_PORT}`,
+  rewrite: (p) => p,
+};
+
+const resolveRoute = (pathname: string): UpstreamRoute => {
+  for (const { prefix, route } of ROUTES) {
+    if (pathname === prefix.slice(0, -1) || pathname.startsWith(prefix)) {
+      return route;
+    }
+  }
+  return FALLBACK;
+};
 
 interface BridgeData {
   upstream: WebSocket;
-  // Buffer client→upstream messages that arrive before the upstream
-  // socket finishes its own open handshake. Drained on upstream open.
   pending: Array<string | Buffer | Uint8Array>;
 }
 
@@ -53,64 +96,43 @@ const server = Bun.serve<BridgeData, undefined>({
   port: PORT,
   hostname: '0.0.0.0',
 
-  // HTTP path: pass-through fetch. Used for everything that isn't a
-  // WebSocket upgrade — e.g. a `curl` health-check.
   async fetch(req, server) {
     const url = new URL(req.url);
-    const targetUrl = `${TARGET_HTTP}${url.pathname}${url.search}`;
+    const route = resolveRoute(url.pathname);
+    const upstreamPath = route.rewrite(url.pathname) + url.search;
 
-    // Try to upgrade first. Bun's server.upgrade returns true if the
-    // request is a WS upgrade; we then attach client + upstream WS
-    // pairing in the websocket.open hook below.
+    // ---- WebSocket upgrade ------------------------------------
     if (req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
-      // Capture the subprotocols + the upstream URL on the upgrade
-      // attempt so `open` can wire the upstream WS.
-      const protocols = req.headers.get('sec-websocket-protocol');
-      const cookie = req.headers.get('cookie');
-      const origin = req.headers.get('origin');
-      const targetWsUrl = `${TARGET_WS}${url.pathname}${url.search}`;
-      // Bun's `WebSocket` constructor accepts a `headers` option (a
-      // non-standard extension over the browser signature) so the
-      // session cookie + origin reach the realm worker on the upstream
-      // upgrade handshake — without this the realm sees no Cookie
-      // header and rejects every dev connection with 401.
-      const upstreamInit: {
-        protocols?: ReadonlyArray<string>;
-        headers?: Record<string, string>;
-      } = {};
-      if (protocols) {
-        upstreamInit.protocols = protocols.split(',').map((s) => s.trim());
-      }
+      const targetWsUrl = `ws://${route.host}${upstreamPath}`;
+      // Forward Cookie + Origin so the realm's session lookup +
+      // Origin allow-list both pass. permessage-deflate is dropped:
+      // Bun's `new WebSocket()` doesn't request the extension by
+      // default, so the upstream handshake is "clean" regardless of
+      // what the browser asked for on its side.
       const upstreamHeaders: Record<string, string> = {};
+      const cookie = req.headers.get('cookie');
       if (cookie) upstreamHeaders['cookie'] = cookie;
+      const origin = req.headers.get('origin');
       if (origin) upstreamHeaders['origin'] = origin;
-      if (Object.keys(upstreamHeaders).length > 0) {
-        upstreamInit.headers = upstreamHeaders;
-      }
-      const upstream = new WebSocket(targetWsUrl, upstreamInit as ConstructorParameters<typeof WebSocket>[1]);
+      const upstream = new WebSocket(targetWsUrl, { headers: upstreamHeaders });
       const bridge: BridgeData = { upstream, pending: [] };
-      // Tell Bun to upgrade with the chosen subprotocol (echo first one).
-      const ok = server.upgrade(req, {
-        data: bridge,
-        headers: protocols
-          ? { 'Sec-WebSocket-Protocol': protocols.split(',')[0]!.trim() }
-          : undefined,
-      });
+      const ok = server.upgrade(req, { data: bridge });
       if (!ok) {
         upstream.close();
         return new Response('Upgrade failed', { status: 426 });
       }
       log('open', `→ ${targetWsUrl}`);
-      return; // upgrade response sent
+      return;
     }
 
+    // ---- HTTP pass-through ------------------------------------
+    const targetUrl = `http://${route.host}${upstreamPath}`;
     log('http', `${req.method} ${url.pathname}${url.search} → ${targetUrl}`);
     try {
-      // Drop the inbound Host header — alchemy dev's local-subdomain
-      // proxy reads Host to dispatch to the right worker, and Bun's
-      // fetch will repopulate it from the target URL anyway. Forwarding
-      // `Host: localhost:5555` would dump the request into the
-      // catch-all "no worker matches" error.
+      // Drop the inbound Host header — Bun's fetch will set the
+      // correct one for the target URL, and forwarding the proxy's
+      // own Host would land in alchemy's "no worker matches"
+      // catch-all.
       const headers = new Headers(req.headers);
       headers.delete('host');
       const upstreamRes = await fetch(targetUrl, {
@@ -136,10 +158,6 @@ const server = Bun.serve<BridgeData, undefined>({
   },
 
   websocket: {
-    // Bun calls `open` after the upgrade-side socket is ready, but the
-    // upstream WS we created in `fetch` is still mid-handshake. Wire
-    // up both directions; buffer downstream→upstream messages until
-    // upstream's open event fires.
     open(ws) {
       const { upstream } = ws.data;
       upstream.binaryType = 'arraybuffer';
@@ -148,21 +166,31 @@ const server = Bun.serve<BridgeData, undefined>({
         log('upstream', 'open');
         for (const m of ws.data.pending) {
           try {
-            upstream.send(m as any);
+            upstream.send(m as ArrayBufferLike | string);
           } catch (e) {
             log('upstream-send', String(e));
           }
         }
         ws.data.pending = [];
       };
-      upstream.onmessage = (ev) => {
+      upstream.onmessage = (ev: MessageEvent) => {
         try {
-          ws.send(ev.data as any);
+          // Log shape so we can see whether realm is responding at
+          // all + whether frames are arriving as text or binary.
+          const data = ev.data;
+          const kind =
+            typeof data === 'string'
+              ? `text(${data.length})`
+              : data instanceof ArrayBuffer
+                ? `bin(${data.byteLength})`
+                : `unk(${typeof data})`;
+          log('upstream→client', kind);
+          ws.send(data);
         } catch (e) {
           log('client-send', String(e));
         }
       };
-      upstream.onclose = (ev) => {
+      upstream.onclose = (ev: CloseEvent) => {
         log('upstream', `close ${ev.code} ${ev.reason}`);
         try {
           ws.close(ev.code === 1006 ? 1000 : ev.code, ev.reason);
@@ -178,14 +206,19 @@ const server = Bun.serve<BridgeData, undefined>({
 
     message(ws, message) {
       const { upstream, pending } = ws.data;
+      const kind =
+        typeof message === 'string'
+          ? `text(${message.length})`
+          : `bin(${(message as Uint8Array).byteLength})`;
+      log('client→upstream', kind);
       if (upstream.readyState === WebSocket.OPEN) {
         try {
-          upstream.send(message as any);
+          upstream.send(message as ArrayBufferLike | string);
         } catch (e) {
           log('upstream-send', String(e));
         }
       } else {
-        // Buffer until upstream opens.
+        log('client→upstream', 'buffering (upstream not open yet)');
         pending.push(message as string | Buffer | Uint8Array);
       }
     },
@@ -199,4 +232,10 @@ const server = Bun.serve<BridgeData, undefined>({
   },
 });
 
-log('listen', `http+ws on http://localhost:${server.port} → ${TARGET_HTTP}`);
+log(
+  'listen',
+  `single-origin entry on http://localhost:${server.port}\n` +
+    `  /api/*   → api.localhost:${ALCHEMY_PORT}\n` +
+    `  /realm/* → realm.localhost:${ALCHEMY_PORT}\n` +
+    `  /*       → game.localhost:${ALCHEMY_PORT}`,
+);

@@ -65,6 +65,12 @@ const SAVE_ALARM_INTERVAL_MS = 30_000;
 interface SessionData {
   sessionId: string;
   playerId: PlayerId;
+  // PR-G5 fix: alchemy hands a fresh `DurableWebSocket` wrapper to
+  // `webSocketMessage` each call, so a `Map<DurableWebSocket,
+  // clientId>` keyed by reference always misses. The bridge clientId
+  // lives in the attachment instead — survives both wrapper
+  // recreation and DO hibernation.
+  clientId: number;
 }
 
 export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRoom>()(
@@ -144,12 +150,11 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         Effect.provide(RpcSerialization.layerJson),
       );
 
-      // wsToClientId maps the DO's webSocketMessage callback's `socket`
-      // arg back to the bridge's per-connection clientId. Survives
-      // hibernation alongside the SessionsRef rehydrate below.
-      const wsToClientId = new Map<Cloudflare.DurableWebSocket, number>();
-
       // -- hibernation rehydrate ------------------------------------------
+      // PR-G5 fix: the bridge clientId lives in the per-socket
+      // attachment (see SessionData) rather than a reference-keyed
+      // Map — alchemy hands a fresh DurableWebSocket wrapper to
+      // every webSocketMessage call, so a Map lookup never matches.
       for (const socket of yield* state.getWebSockets()) {
         const data = socket.deserializeAttachment<SessionData>();
         if (data) {
@@ -158,7 +163,13 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           const clientId = yield* bridge.acceptSocket(socket, [
             ['playerid', data.playerId],
           ]);
-          wsToClientId.set(socket, clientId);
+          // Bridge clientIds are per-DO-instance — re-stamp the
+          // attachment with the freshly-assigned one.
+          socket.serializeAttachment({
+            sessionId: data.sessionId,
+            playerId: data.playerId,
+            clientId,
+          } satisfies SessionData);
         }
       }
 
@@ -305,7 +316,6 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         const [response, socket] = yield* Cloudflare.upgrade();
 
         const sessionId = crypto.randomUUID();
-        socket.serializeAttachment({ sessionId, playerId } satisfies SessionData);
 
         yield* sessionsRef.add(sessionId, socket, playerId);
         yield* inputBuffer.initPlayer(playerId);
@@ -317,7 +327,14 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         const clientId = yield* bridge.acceptSocket(socket, [
           ['playerid', playerId],
         ]);
-        wsToClientId.set(socket, clientId);
+        // PR-G5 fix: stash clientId in the attachment so
+        // webSocketMessage / webSocketClose can find it without a
+        // reference-keyed Map (alchemy reissues the wrapper).
+        socket.serializeAttachment({
+          sessionId,
+          playerId,
+          clientId,
+        } satisfies SessionData);
 
         yield* worldRef.modify((world) => {
           addPlayer(world, playerId);
@@ -364,11 +381,14 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         message: string | ArrayBuffer,
       ) =>
         Effect.gen(function* () {
-          const clientId = wsToClientId.get(socket);
-          if (clientId === undefined) return;
-          const data =
+          // Read clientId from the attachment — alchemy hands a
+          // fresh DurableWebSocket wrapper each call, so a
+          // reference-keyed lookup never matches.
+          const data = socket.deserializeAttachment<SessionData>();
+          if (!data || data.clientId === undefined) return;
+          const payload =
             typeof message === 'string' ? message : new Uint8Array(message);
-          yield* bridge.onMessage(clientId, data);
+          yield* bridge.onMessage(data.clientId, payload);
         });
 
       const onClose = (
@@ -380,10 +400,8 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           const data = ws.deserializeAttachment<SessionData>();
 
           // Notify the RPC bridge first so any in-flight streams unwind.
-          const clientId = wsToClientId.get(ws);
-          if (clientId !== undefined) {
-            yield* bridge.onClose(clientId);
-            wsToClientId.delete(ws);
+          if (data?.clientId !== undefined) {
+            yield* bridge.onClose(data.clientId);
           }
 
           if (data) {

@@ -56,3 +56,23 @@ Reference prior work by **commit hash** (linked to the GitHub commit), not by `P
 - DO hibernation is *not* WT-portable; we accept that durability is a separate concern (covered by its own future ADR, not this one).
 
 **Revisit when** Cloudflare ships server-side WebTransport for Workers / Durable Objects **with** hibernation parity ([workerd#6451](https://github.com/cloudflare/workerd/issues/6451)) AND browser support reaches stable across Chrome, Edge, Firefox, and Safari. At that point this ADR is superseded by a migration ADR; until then it stands without time pressure.
+
+
+### ADR-002 — Character is per-realm, not per-account
+
+**Date:** 2026-05-24
+**Status:** Accepted
+
+**Context.** PR-G3 ([aa3b300](https://github.com/kotkoroid/kassandra/commit/aa3b300)) introduced a `PlayerProfile` Durable Object keyed by `accountId` to hold one canonical `CharacterRecord`. PR-G4 layered debounced save-back on top so progression made during play landed back in that DO. The intent was an "account = identity + save vault" model: one character, carried into every party. Smoke-testing the dev loop made the consequence concrete — disbanding a party and creating a new one rejoined with the same character, no character-creation prompt, no opportunity to roll a different class for a different realm. That isn't the game we want.
+
+**Decision.** Character identity and progression are **per-realm** (per-party). The `PartyRoom` DO is the sole source of truth for a player's character within that realm; rejoining the same `PartyRoom` rehydrates your character (via the world snapshot persisted under PR-E in [d1d8863](https://github.com/kotkoroid/kassandra/commit/d1d8863)), joining a different one rolls fresh. The `PlayerProfile` DO + RPC + client + boot-time load are deleted in their entirety. The session cookie minted by [62e64c1](https://github.com/kotkoroid/kassandra/commit/62e64c1) continues to gate access — account = authentication, not save data.
+
+**Rationale.** `PartyRoom` already persists the full world (`PartyStorage` from PR-E), which includes each player's `Player` record indexed by `playerId === accountId` once you connect. That gives per-realm-per-account semantics for free. `PlayerProfile` was a second source of truth layered *over* a system that didn't need one — every save had to flow through both layers, and the account-wide override defeated the per-realm distinctness we now want. Subtraction wins over feature-flagging the "show creation panel on rejoin" path because the underlying storage model was wrong, not the UI flow. ~250 LOC + one DO class + one KV-less RPC group go away; the boot path collapses from `initAuth → initProfile → mount` to `initAuth → mount`.
+
+**Consequences (the painful parts).**
+- No cross-realm progression carry-over. Level 40 in Realm A doesn't help in Realm B — that's the game-design commitment, not a limitation.
+- Account-wide data (friends list, settings, achievements, cosmetics owned, the "your characters across realms" roster) has no home today. When one is needed, a new account-scoped DO can be added with a shape fit to *that* use case — not retrofitted onto the deleted CharacterRecord vault.
+- `CharacterCreation.svelte` runs every time the local player's name is empty on first snapshot, including reconnects to a *new* realm. UX-side: this means a fresh party with no character → creation panel; a party where you already created → straight to game. Determined entirely by `world.players[localPlayerId].name === ''` on first snapshot.
+- `App.svelte` no longer has a "skip creation" cached path — the snapshot decides, not a client-side flag.
+
+**Revisit when** account-wide persistent data is needed (cosmetics inventory, cross-realm friend list, ranked-mode rating) AND the natural shape of that data is a single struct co-located with character identity. Until then, the per-realm `PartyRoom` storage is sufficient and a separate per-account DO would only be reintroducing the problem this ADR solved.

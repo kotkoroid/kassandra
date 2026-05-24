@@ -13,8 +13,6 @@ import * as Stream from 'effect/Stream';
 import { auth } from './auth.svelte';
 import { applySnapshot } from './lib/applySnapshot';
 import { makeRealmClientLayer, RealmClient } from './lib/realm-client';
-import { flushSave, notifyWorldUpdate } from './profile.svelte';
-import { world } from './world.svelte';
 
 export const realm = $state({
   connected: false,
@@ -63,12 +61,6 @@ export function connect(id: string) {
             }
           }
           applySnapshot(snapshot);
-          // PR-G4: after the local world mirror updates, check for
-          // progression drift vs the last-saved CharacterRecord. The
-          // notifier debounces internally, so a stretch of rapid
-          // updates collapses to one SaveCharacter at the trailing
-          // edge.
-          notifyWorldUpdate(world);
         }),
       );
     }),
@@ -94,12 +86,6 @@ export function connect(id: string) {
 }
 
 export function disconnect() {
-  // PR-G4: drain any pending debounced SaveCharacter before tearing
-  // down the party WS. Fire-and-forget — the user is already on
-  // their way out, and the call is bounded by one DO round-trip
-  // (or returns immediately if nothing's queued). Errors are
-  // swallowed inside flushSave itself.
-  void flushSave(world);
   if (runtime) {
     // Fire-and-forget dispose — we don't need to await teardown to
     // mark the state changes; the user is already on their way out.

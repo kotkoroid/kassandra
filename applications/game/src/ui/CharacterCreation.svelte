@@ -9,21 +9,18 @@
       PLAYER_CLASSES,
       type PlayerClass,
   } from '../cosmetics';
-  import type { CharacterRecord } from '@kassandra/protocol-foundation-library';
   import { localPlayer } from '@kassandra/simulation-domain-library';
   import Player from '../scene/Player.svelte';
-  import { saveCharacter } from '../profile.svelte';
-  import { connect, sendFrame } from '../realm.svelte';
+  import { sendFrame } from '../realm.svelte';
   import { world } from '../world.svelte';
 
   // Local alias so the existing form bindings stay readable.
   const player = $derived(localPlayer(world));
 
   interface Props {
-    activePartyId: string;
     onCreate: () => void;
   }
-  let { activePartyId, onCreate }: Props = $props();
+  let { onCreate }: Props = $props();
 
   const NAMES = [
     'Aldric',
@@ -87,48 +84,19 @@
     player.playerClass = randomClass();
   }
 
-  async function create() {
+  function create() {
     const trimmed = player.name.trim();
     if (!trimmed) return;
     if (activating) return; // ignore double-clicks during the animation
     activating = true;
     const { sex, hairColor, armor, playerClass } = player;
-    // PR-G3: persist the freshly-created character to the PlayerProfile
-    // DO BEFORE opening the party WS. The save vault is the source of
-    // truth for identity across parties — if SaveCharacter fails, we
-    // unwind the activating flag and let the user retry instead of
-    // proceeding into a session whose identity is not durably stored.
-    // Progression fields are stubbed with the same defaults the world
-    // starts a fresh Player at; PR-G4 will replace these with the
-    // server's snapshot on disconnect/save-back.
-    const record: CharacterRecord = {
-      name: trimmed,
-      sex,
-      hairColor,
-      armor,
-      playerClass,
-      level: 1,
-      experience: 0,
-      bag: [],
-      lars: 0,
-      equippedWeaponId: '',
-      abilities: [],
-      skillPoints: 0,
-      classSpellPoints: 0,
-      spellLevels: {},
-    };
-    try {
-      await saveCharacter(record);
-    } catch (err) {
-      console.error('SaveCharacter failed', err);
-      activating = false;
-      return;
-    }
-    // Run the platform activation animation in parallel with opening
-    // the party WS. The visual still gets its full ACTIVATION_DURATION_MS
-    // beat; the network round-trip to PartyRoom kicks off immediately.
+    // ADR-002: the realm WS is already open (App.svelte connect'd on
+    // party-ready before showing this view). Ship the create_character
+    // SimEvent so PartyRoom stamps identity into its world; the next
+    // snapshot rehydrates `world.players[localPlayerId]` with the
+    // chosen name + cosmetics. ACTIVATION_DURATION_MS gives the
+    // platform animation its full beat before the view swap.
     setTimeout(() => {
-      connect(activePartyId);
       sendFrame(0, 0, [
         { kind: 'create_character', name: trimmed, sex, hairColor, armor, playerClass },
       ]);
