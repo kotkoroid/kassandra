@@ -13,13 +13,14 @@
 // the ProfileSession middleware exposes that as AccountSession to
 // every handler.
 //
-// What's NOT here (deferred):
-//   - JWT verification (PR-G2). Today the `?accountId=` query param
-//     IS the secret — same trust model as parties. A follow-up adds
-//     `Authorization: Bearer <jwt>` and compares the `sub` claim,
-//     raising WrongAccountError on mismatch.
+// What's NOT here:
 //   - Multi-character per account. The DO instance is single-record;
 //     adding characters would need a `characterId` arg on the RPCs.
+//
+// PR-G2 trust model: this DO trusts the path's accountId because the
+// realm Worker verified the bearer JWT's `sub` claim against the
+// same path component before forwarding. DOs aren't publicly
+// addressable on Cloudflare; the only entrypoint is the realm.
 
 import {
   AccountSession,
@@ -95,9 +96,8 @@ export default class PlayerProfile extends Cloudflare.DurableObjectNamespace<Pla
           return PlayerProfileRpc.of({
             LoadCharacter: () =>
               Effect.gen(function* () {
-                // PR-G1: no auth check yet. PR-G2 compares
-                // AccountSession.accountId against the JWT sub claim
-                // and raises WrongAccountError on mismatch.
+                // PR-G2: AccountSession.accountId === path accountId
+                // === verified JWT sub, by realm-side verification.
                 const stored = yield* profileStorage.load;
                 return Option.getOrNull(stored);
               }),
@@ -128,9 +128,9 @@ export default class PlayerProfile extends Cloudflare.DurableObjectNamespace<Pla
       const onFetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, 'http://localhost');
-        // PR-G1: accountId comes from the path `/profiles/:accountId/rpc`
-        // — the realm worker already validated the pattern before
-        // routing here. PR-G2 will require a matching JWT sub claim.
+        // PR-G2: accountId comes from the path `/profiles/:accountId/rpc`;
+        // the realm Worker has already verified that the bearer JWT's
+        // sub claim matches this path component.
         const pathMatch = url.pathname.match(/^\/profiles\/([^/]+)\/rpc$/);
         const accountId = pathMatch?.[1] ?? '';
         if (!accountId) {

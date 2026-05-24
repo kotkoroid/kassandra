@@ -10,6 +10,7 @@ import * as Effect from 'effect/Effect';
 import * as ManagedRuntime from 'effect/ManagedRuntime';
 import * as Stream from 'effect/Stream';
 
+import { auth } from './auth.svelte';
 import { applySnapshot } from './lib/applySnapshot';
 import { makeRealmClientLayer, RealmClient } from './lib/realm-client';
 import { world } from './world.svelte';
@@ -34,10 +35,13 @@ let pendingEvents: SimEvent[] = [];
 
 export function connect(id: string) {
   if (runtime) disconnect();
+  if (!auth.token) {
+    throw new Error('realm.connect called before auth bootstrap completed');
+  }
 
   realm.partyId = id;
 
-  runtime = ManagedRuntime.make(makeRealmClientLayer(id, world.localPlayerId));
+  runtime = ManagedRuntime.make(makeRealmClientLayer(id, auth.token));
 
   // Long-lived snapshot subscription: every emitted Snapshot updates
   // the local world mirror. The Stream completes when the WebSocket

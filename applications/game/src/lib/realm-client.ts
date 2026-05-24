@@ -1,10 +1,13 @@
 // RealmClient — typed effect/unstable/rpc client to the realm DO.
 //
-// PR-C2: replaces the hand-rolled `new WebSocket(...)` + JSON.stringify
-// + applySnapshot pipeline in realm.svelte.ts. The wire protocol is
-// now whatever RpcSerialization.layerJson + RpcClient negotiate; the
-// client's typed methods are derived from libraries/foundation/protocol's
-// RealmRpc group.
+// PR-C2: replaced the hand-rolled `new WebSocket(...)` + JSON.stringify
+// pipeline in realm.svelte.ts with effect/unstable/rpc derived from
+// libraries/foundation/protocol's RealmRpc group.
+//
+// PR-G2: the WS now carries a JWT via the `bearer.<token>` subprotocol.
+// The realm verifies it and rewrites the URL to inject `?playerId=<sub>`
+// before forwarding to the PartyRoom DO — so the client no longer
+// passes its own playerId (the JWT sub IS the playerId).
 
 import { RealmRpc } from '@kassandra/protocol-foundation-library';
 import * as Context from 'effect/Context';
@@ -38,13 +41,13 @@ export class RealmClient extends Context.Service<
  * subdomain proxy's WebSocket-upgrade bug (browser → workerd path).
  * In prod we hit VITE_REALM_URL directly.
  */
-const wsUrlFor = (partyId: string, playerId: string): string => {
+const wsUrlFor = (partyId: string): string => {
   const base = import.meta.env.DEV
     ? `ws://${window.location.host}/realm`
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');
-  return `${base}/parties/${partyId}/ws?playerId=${encodeURIComponent(playerId)}`;
+  return `${base}/parties/${partyId}/ws`;
 };
 
 /**
@@ -53,15 +56,25 @@ const wsUrlFor = (partyId: string, playerId: string): string => {
  * global), Socket from the URL, RPC protocol over that Socket, then
  * the RealmClient itself.
  *
+ * The `token` is sent as the `bearer.<token>` WebSocket subprotocol
+ * (PR-G2). Browsers are the only entity that can set
+ * Sec-WebSocket-Protocol on a WS open, so this is functionally
+ * equivalent to an Authorization header — and avoids cross-origin
+ * cookie configuration between gateway and realm.
+ *
  * The returned layer is scoped: building it opens the WebSocket and
  * starts the protocol fiber; closing the scope closes both. Use with
  * a long-lived scope tied to the party's lifetime — typically an
  * `Effect.runFork` of a program piped through this layer.
  */
-export const makeRealmClientLayer = (partyId: string, playerId: string) =>
+export const makeRealmClientLayer = (partyId: string, token: string) =>
   RealmClient.layer.pipe(
     Layer.provide(RpcClient.layerProtocolSocket()),
-    Layer.provide(Socket.layerWebSocket(wsUrlFor(partyId, playerId))),
+    Layer.provide(
+      Socket.layerWebSocket(wsUrlFor(partyId), {
+        protocols: [`bearer.${token}`],
+      }),
+    ),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
     Layer.provide(RpcSerialization.layerJson),
   );

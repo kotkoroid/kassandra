@@ -71,6 +71,7 @@
       "name": "@kassandra/gateway-orchestrator",
       "version": "0.0.0",
       "dependencies": {
+        "@kassandra/effect-conventions-foundation-library": "workspace:*",
         "alchemy": "2.0.0-beta.44",
         "effect": "4.0.0-beta.66",
       },

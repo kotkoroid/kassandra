@@ -6,5 +6,10 @@
     "types": ["bun"],
     "allowImportingTsExtensions": true,
     "emitDeclarationOnly": true
-  }
+  },
+  "references": [
+    {
+      "path": "../../libraries/foundation/effect-conventions/tsconfig.lib.json"
+    }
+  ]
 }

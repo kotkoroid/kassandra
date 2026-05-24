@@ -263,8 +263,12 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       const onFetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, 'http://localhost');
-        // Client passes its locally-generated UUID so both sides agree
-        // on the player identity without an extra round-trip.
+        // PR-G2: `playerId` is the JWT `sub` claim, written into the
+        // forwarded URL by the realm Worker after verifying the
+        // bearer subprotocol. DOs aren't publicly addressable, so
+        // the only way a request reaches here is through that
+        // realm-controlled rewrite — the fallback below is just
+        // defence-in-depth in case the contract drifts.
         const playerId: PlayerId = url.searchParams.get('playerId') ?? crypto.randomUUID();
 
         const [response, socket] = yield* Cloudflare.upgrade();
