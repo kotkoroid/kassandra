@@ -9,6 +9,9 @@
       "path": "./libraries/domain/simulation"
     },
     {
+      "path": "./libraries/foundation/effect-conventions"
+    },
+    {
       "path": "./libraries/foundation/protocol"
     },
     {
