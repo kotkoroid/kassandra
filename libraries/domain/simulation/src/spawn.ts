@@ -1,6 +1,11 @@
 // Entity factories. Every place that creates an entity (spawners,
 // chat /m command, spider split, death pipeline's troller) routes
 // through here so stat-locking + id generation stay consistent.
+//
+// PR-D3e.2: the rng-consuming `spawnEntity` math lives in
+// `pure/spawn.ts`. This module keeps the same public surface; only
+// thing changed is that `spawnEntity` is now a thin wrapper that
+// binds `world.rng.next` as the rng callable.
 
 import {
   getMonster,
@@ -17,77 +22,11 @@ import {
   MONSTER_TROLLER,
   MONSTER_WARMAIDEN,
   MONSTER_WOLF,
-  type MonsterAttributes,
   type MonsterId,
 } from './monsters.ts';
-import { nightStatMultiplier } from './systems/time.ts';
+import { spawnEntity as spawnEntityPure } from './pure/spawn.ts';
 import type { Entity, EntityKind, PlayerId, World } from './types.ts';
-import { genId, localPlayer } from './world.ts';
-
-// Apply the night multiplier once at spawn and freeze the result on
-// the entity. A daytime spawn keeps its baseline stats even if night
-// falls mid-fight; a night spawn keeps its boosted stats into dawn.
-function snapshot(world: World, base: MonsterAttributes) {
-  const mul = nightStatMultiplier(world);
-  return {
-    damage: base.damage * mul,
-    attackSpeed: base.attackSpeed * mul,
-    health: base.health * mul,
-    healthRegen: base.healthRegen * mul,
-  };
-}
-
-export type SpiderKind = 'spider-big' | 'spider-medium' | 'spider-tiny';
-
-// 'toward' = +Z forward (beast convention); 'away' = −Z forward (swain/janna convention).
-type FacingMode = 'none' | 'toward' | 'away';
-
-type KindConfig = {
-  idPrefix: string;
-  monsterId: MonsterId;
-  facing: FacingMode;
-  staggerAttack: boolean;
-};
-
-const KIND_CONFIG: Record<Exclude<EntityKind, 'troller'>, KindConfig> = {
-  'spider-big': { idPrefix: 's', monsterId: MONSTER_SPIDER, facing: 'none', staggerAttack: false },
-  'spider-medium': {
-    idPrefix: 's',
-    monsterId: MONSTER_SMALL_SPIDER,
-    facing: 'none',
-    staggerAttack: false,
-  },
-  'spider-tiny': {
-    idPrefix: 's',
-    monsterId: MONSTER_TINY_SPIDER,
-    facing: 'none',
-    staggerAttack: false,
-  },
-  wolf: { idPrefix: 'b', monsterId: MONSTER_WOLF, facing: 'toward', staggerAttack: false },
-  bear: { idPrefix: 'b', monsterId: MONSTER_BEAR, facing: 'toward', staggerAttack: false },
-  warmaiden: {
-    idPrefix: 'b',
-    monsterId: MONSTER_WARMAIDEN,
-    facing: 'toward',
-    staggerAttack: false,
-  },
-  shadowmaiden: {
-    idPrefix: 'b',
-    monsterId: MONSTER_SHADOWMAIDEN,
-    facing: 'toward',
-    staggerAttack: false,
-  },
-  swain: { idPrefix: 'e', monsterId: MONSTER_SWAIN, facing: 'away', staggerAttack: true },
-  bowmaiden: { idPrefix: 'e', monsterId: MONSTER_BOWMAIDEN, facing: 'away', staggerAttack: true },
-  spellmaiden: {
-    idPrefix: 'e',
-    monsterId: MONSTER_SPELLMAIDEN,
-    facing: 'away',
-    staggerAttack: true,
-  },
-  janna: { idPrefix: 'j', monsterId: MONSTER_JANNA, facing: 'away', staggerAttack: false },
-  azir: { idPrefix: 'a', monsterId: MONSTER_AZIR, facing: 'toward', staggerAttack: false },
-};
+import { genId } from './world.ts';
 
 export function spawnEntity(
   world: World,
@@ -97,39 +36,7 @@ export function spawnEntity(
   rotation?: number,
   spawnPointId?: string,
 ): Entity {
-  const cfg = KIND_CONFIG[kind];
-  const monster = getMonster(cfg.monsterId);
-  const stats = snapshot(world, monster.attributes);
-  const spawnPlayer = localPlayer(world);
-  const dx = spawnPlayer.x - x;
-  const dz = spawnPlayer.z - z;
-  const r =
-    rotation ??
-    (cfg.facing === 'toward'
-      ? Math.atan2(dx, dz)
-      : cfg.facing === 'away'
-        ? Math.atan2(-dx, -dz)
-        : 0);
-  const e: Entity = {
-    id: genId(world, cfg.idPrefix),
-    kind,
-    monsterId: cfg.monsterId,
-    x,
-    z,
-    rotation: r,
-    hp: stats.health,
-    maxHp: stats.health,
-    damage: stats.damage,
-    attackSpeed: stats.attackSpeed,
-    healthRegen: stats.healthRegen,
-    experience: monster.attributes.experience,
-    attackCooldown: cfg.staggerAttack ? world.rng.next() / Math.max(stats.attackSpeed, 0.0001) : 0,
-    ...(spawnPointId !== undefined && { spawnPointId }),
-    ...(kind === 'janna' && { healCooldown: world.rng.next() * 7 }),
-  };
-  world.entities.push(e);
-  world.entityById.set(e.id, e);
-  return e;
+  return spawnEntityPure(world, kind, x, z, rotation, spawnPointId, () => world.rng.next());
 }
 
 // PR-D3d.2: forPlayerId + bagXp are optional because chat-spawned
@@ -217,6 +124,8 @@ export function spawnByMonsterId(
       return null;
   }
 }
+
+export type SpiderKind = 'spider-big' | 'spider-medium' | 'spider-tiny';
 
 // Re-export the kind list so consumers can iterate.
 export { MONSTER_BEAR, MONSTER_JANNA, MONSTER_SWAIN, MONSTER_TROLLER, MONSTER_WOLF };

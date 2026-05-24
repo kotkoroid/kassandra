@@ -8,12 +8,8 @@
 import { isInCity } from '../city.ts';
 import { getMonster } from '../monsters.ts';
 import { applyDamageToEntityRef, applyDamageToPlayer } from '../combat.ts';
-import {
-  HEAL_CIRCLE_OFFSET_MAX,
-  HEAL_CIRCLE_TTL,
-  JANNA_HEAL_COOLDOWN,
-  PROJECTILE_SPEED,
-} from '../constants.ts';
+import { PROJECTILE_SPEED } from '../constants.ts';
+import { tickJanna } from '../pure/monsters.ts';
 import type { Entity, EntityKind, World } from '../types.ts';
 import { isInWaterAt } from '../util.ts';
 import { genId, localPlayer } from '../world.ts';
@@ -79,7 +75,7 @@ export function tickMonsters(world: World, dt: number) {
         tickSwain(world, e, dt);
         break;
       case 'janna':
-        tickJanna(world, e, dt);
+        tickJanna(world, e, dt, () => world.rng.next());
         break;
     }
   }
@@ -196,28 +192,6 @@ function tickSwain(world: World, e: Entity, dt: number) {
   }
 }
 
-// Janna stands still, faces the player, and periodically drops a
-// healing circle somewhere near herself. The circle's actual
-// effect lives in sim/systems/healingCircles.ts.
-function tickJanna(world: World, e: Entity, dt: number) {
-  const jannaPlayer = localPlayer(world);
-  const toPlayerX = jannaPlayer.x - e.x;
-  const toPlayerZ = jannaPlayer.z - e.z;
-  e.rotation = Math.atan2(-toPlayerX, -toPlayerZ);
-
-  const cooldown = (e.healCooldown ?? 0) - dt;
-  if (cooldown <= 0) {
-    e.healCooldown = JANNA_HEAL_COOLDOWN;
-    const angle = world.rng.next() * Math.PI * 2;
-    const offset = world.rng.next() * HEAL_CIRCLE_OFFSET_MAX;
-    world.healingCircles.push({
-      id: genId(world, 'c'),
-      ownerId: e.id,
-      x: e.x + Math.cos(angle) * offset,
-      z: e.z + Math.sin(angle) * offset,
-      ttl: HEAL_CIRCLE_TTL,
-    });
-  } else {
-    e.healCooldown = cooldown;
-  }
-}
+// PR-D3e.2: tickJanna's body moved to pure/monsters.ts so the rng
+// dependency is explicit in its signature. The case dispatch above
+// supplies `world.rng.next` as the rng callable.

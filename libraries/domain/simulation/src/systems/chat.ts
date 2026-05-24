@@ -12,7 +12,7 @@
 
 import { getMonster, MONSTERS, type MonsterId } from '../monsters.ts';
 import { SAY_TTL } from '../constants.ts';
-import { spawnByMonsterId } from '../spawn.ts';
+import { scatterSpawnsAroundPlayer } from '../pure/chat.ts';
 import type { ChatChannel, World } from '../types.ts';
 import { isHostile, removeEntity } from '../util.ts';
 import { genId, localPlayer } from '../world.ts';
@@ -215,15 +215,11 @@ function cmdSpawnMonster(
   if (!id) return [`Unknown monster id: ${idArg}`];
   const count = parseCount(countArg);
   if (typeof count === 'string') return [count];
-  const player = localPlayer(world);
-  for (let i = 0; i < count; i++) {
-    const angle = world.rng.next() * Math.PI * 2;
-    const dist = 4 + world.rng.next() * 4;
-    const x = player.x + Math.cos(angle) * dist;
-    const z = player.z + Math.sin(angle) * dist;
-    if (!spawnByMonsterId(world, id, x, z)) {
-      return [`Monster ${id} has no spawn handler`];
-    }
+  // PR-D3e.2: the scatter math lives in pure/chat.ts; this layer
+  // binds `world.rng.next` as the rng callable.
+  const result = scatterSpawnsAroundPlayer(world, id, count, () => world.rng.next());
+  if (!result.ok) {
+    return [`Monster ${id} has no spawn handler`];
   }
   const name = getMonster(id).name;
   return [count === 1 ? `Spawned ${name}` : `Spawned ${count} ${name}`];
