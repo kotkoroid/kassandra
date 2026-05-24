@@ -127,6 +127,6 @@ export function applySnapshot(s: Snapshot): void {
   const events = s.recentEvents.map((e) => ({ ...e })) as GameEvent[];
   world.recentEvents = events;
   for (const ev of events) {
-    dispatchSimEvent(ev, s.time);
+    dispatchSimEvent(ev, s.time, world.localPlayerId);
   }
 }

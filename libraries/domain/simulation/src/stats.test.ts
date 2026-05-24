@@ -58,6 +58,11 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     deathZ: 0,
     pendingManualAttack: false,
     pendingRespawn: false,
+    // PR-D3d.2: per-player death pipeline fields are required on Player.
+    attackers: [],
+    fightStartedAt: null,
+    summary: null,
+    bug: null,
     ...overrides,
   };
 }

@@ -5,7 +5,7 @@
 // arrive via `Snapshot.recentEvents`; `applySnapshot` calls
 // `dispatchSimEvent` once per event each tick.
 
-import type { GameEvent } from '@kassandra/simulation-domain-library';
+import type { GameEvent, PlayerId } from '@kassandra/simulation-domain-library';
 
 export interface DamagePop {
   id: number;
@@ -36,8 +36,18 @@ export const damageNumbers = $state<{ list: DamagePop[] }>({ list: [] });
  * emitted (taken from the snapshot the event arrived in). It anchors
  * the popup's TTL to sim time, not wall-clock — pausing the sim
  * pauses the popups.
+ *
+ * `localPlayerId` is compared against the event's `byPlayerId` to
+ * pick the popup colour: damage *I* dealt = yellow ("given"),
+ * everything else = red ("taken"). Bug-bash fix: pre-PR, the event
+ * carried a boolean that mis-coloured every other player's damage
+ * as my own.
  */
-export function dispatchSimEvent(ev: GameEvent, simTime: number): void {
+export function dispatchSimEvent(
+  ev: GameEvent,
+  simTime: number,
+  localPlayerId: PlayerId,
+): void {
   if (ev.kind !== 'damage-dealt') return;
   const rounded = Math.max(0, Math.round(ev.amount));
   if (rounded === 0) return;
@@ -46,7 +56,7 @@ export function dispatchSimEvent(ev: GameEvent, simTime: number): void {
     x: ev.x,
     z: ev.z,
     amount: rounded,
-    color: ev.byPlayer ? 'yellow' : 'red',
+    color: ev.byPlayerId === localPlayerId ? 'yellow' : 'red',
     spawnedAt: simTime,
   });
   // Hard cap so a fire-rate spike can't unbounded the array between

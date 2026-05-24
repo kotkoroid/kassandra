@@ -25,10 +25,11 @@ const SPIDER_CHILD_DIST = 0.4;
  * - `null` — environmental damage (NPC vs NPC, projectile from a
  *   monster, etc.). No XP, no loot ownership.
  *
- * Callers that used `true` now pass the slayer's pid; callers that
- * used `false` pass `null`. The emitted `damage-dealt` event keeps the
- * boolean `byPlayer` flag (UI consumers still want a yes/no for the
- * damage popup colour).
+ * Bug-bash: the emitted `damage-dealt` event was also widened —
+ * `byPlayer: boolean` became `byPlayerId: PlayerId | null` so MP UI
+ * clients can compare against their own `localPlayerId` for the
+ * damage-popup colour. Pre-fix every client saw every other player's
+ * yellow popups as if they'd dealt the damage themselves.
  */
 export function applyDamageToEntity(
   world: World,
@@ -44,7 +45,7 @@ export function applyDamageToEntity(
     x: e.x,
     z: e.z,
     amount,
-    byPlayer: attribution !== null,
+    byPlayerId: attribution,
   });
   if (e.hp <= 0) onEntityDeath(world, index, attribution);
 }
@@ -87,7 +88,8 @@ export function applyDamageToPlayer(
     x: player.x,
     z: player.z,
     amount: dealt,
-    byPlayer: false,
+    // Monster→player damage has no attacking player.
+    byPlayerId: null,
   });
   if (player.fightStartedAt === null) {
     player.fightStartedAt = world.time;
@@ -170,7 +172,7 @@ function onEntityDeath(world: World, index: number, attribution: PlayerId | null
     monsterId: e.monsterId,
     x: e.x,
     z: e.z,
-    byPlayer: attribution !== null,
+    byPlayerId: attribution,
   });
   removeEntity(world, index);
 }

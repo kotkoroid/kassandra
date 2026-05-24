@@ -19,7 +19,7 @@ import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
  * Typed client service. After `yield* RealmClient` inside any Effect
  * that has the layer provided, every RPC method is a typed function
  * call:
- *   client.SendInputs({ tick, moveX, moveZ })           // Effect<void>
+ *   client.SendInputs({ moveX, moveZ })                  // Effect<void>
  *   client.SendEvent({ event })                          // Effect<void>
  *   client.SnapshotStream()                              // Stream<Snapshot>
  *   client.Disbanded()                                   // Stream<void>

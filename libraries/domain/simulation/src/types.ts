@@ -461,7 +461,11 @@ export type GameEvent =
       monsterId: MonsterId;
       x: number;
       z: number;
-      byPlayer: boolean;
+      // The player credited with the kill, or null for an
+      // environmental kill (NPC vs NPC, projectile from a monster).
+      // UI consumers compare against `world.localPlayerId` to decide
+      // whether to show e.g. an XP popup on *this* client.
+      byPlayerId: PlayerId | null;
     }
   | { kind: 'player-level-up'; level: number }
   | {
@@ -469,9 +473,12 @@ export type GameEvent =
       x: number;
       z: number;
       amount: number;
-      // True = a player dealt the damage; false = a player received it.
-      // (Naming kept stable for UI consumers that gate the popup colour.)
-      byPlayer: boolean;
+      // PR-bug-bash: was `byPlayer: boolean` (any-player vs not).
+      // In multiplayer that mis-coloured every popup yellow on every
+      // client. Now carries the attacker's PlayerId (or null for
+      // monster→player damage) so each client can compare against its
+      // own `localPlayerId` to colour "given" vs "taken" correctly.
+      byPlayerId: PlayerId | null;
     }
   | { kind: 'spell-cast'; spellId: string; x: number; z: number };
 

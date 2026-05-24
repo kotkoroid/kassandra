@@ -132,18 +132,22 @@ export function spawnEntity(
   return e;
 }
 
+// PR-D3d.2: forPlayerId + bagXp are optional because chat-spawned
+// trollers (`/m troller`) don't carry a bag and aren't tied to a
+// dying player. Death-pipeline spawns always pass both; chat spawns
+// pass neither and the troller wanders harmlessly.
 export function spawnTroller(
   world: World,
   x: number,
   z: number,
   carriesPlayerBag: boolean,
-  forPlayerId: PlayerId,
-  bagXp: number,
+  forPlayerId?: PlayerId,
+  bagXp?: number,
 ): Entity {
   const monster = getMonster(MONSTER_TROLLER);
   // Troller doesn't scale with night — it's a delivery NPC, not a
   // combat threat.
-  const owner = world.players[forPlayerId];
+  const owner = forPlayerId !== undefined ? world.players[forPlayerId] : undefined;
   const e: Entity = {
     id: genId(world, 't'),
     kind: 'troller',
@@ -162,9 +166,10 @@ export function spawnTroller(
     phaseTimer: 0,
     carriesPlayerBag,
     // PR-D3d.2: troller is tagged with the dying player's id and
-    // carries their stashed bagXp until drop.
-    forPlayerId,
-    bagXp,
+    // carries their stashed bagXp until drop. Both undefined for
+    // chat-spawn (carriesPlayerBag = false in that case).
+    ...(forPlayerId !== undefined ? { forPlayerId } : {}),
+    ...(bagXp !== undefined ? { bagXp } : {}),
     trollerTargetX: owner?.deathX ?? x,
     trollerTargetZ: owner?.deathZ ?? z,
   };

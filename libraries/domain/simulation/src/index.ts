@@ -177,8 +177,6 @@ export { clearEvents, emit, type GameEvent } from './events.ts';
 // --- Input dispatch ---
 export { dispatch } from './input.ts';
 
-// --- Simulation entry point ---
-
 // --- Spawn helpers ---
 export { spawnEntity, spawnTroller, spawnByMonsterId, type SpiderKind } from './spawn.ts';
 

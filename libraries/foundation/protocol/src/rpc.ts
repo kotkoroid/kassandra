@@ -74,11 +74,12 @@ export class PartySession extends RpcMiddleware.Service<
 export class RealmRpc extends RpcGroup.make(
   /**
    * Hot path: movement vector for the current animation frame.
-   * Fire-and-forget; latest wins on the server side.
+   * Fire-and-forget; latest wins on the server side. No client tick
+   * is sent — the realm runs the authoritative clock and the client
+   * has no prediction layer to reconcile against.
    */
   Rpc.make('SendInputs', {
     payload: {
-      tick: Schema.Number,
       moveX: Schema.Number,
       moveZ: Schema.Number,
     },

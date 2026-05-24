@@ -109,7 +109,7 @@ export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
   runtime.runFork(
     Effect.gen(function* () {
       const client = yield* RealmClient;
-      yield* client.SendInputs({ tick: world.tick, moveX, moveZ });
+      yield* client.SendInputs({ moveX, moveZ });
       yield* Effect.forEach(events, (event) => client.SendEvent({ event }), {
         discard: true,
       });

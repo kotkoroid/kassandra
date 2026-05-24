@@ -229,7 +229,10 @@ export const GameEventSnapshot = Schema.Union([
     monsterId: Schema.String,
     x: Schema.Number,
     z: Schema.Number,
-    byPlayer: Schema.Boolean,
+    // Bug-bash: `byPlayer: boolean` became `byPlayerId: PlayerId | null`
+    // so multiplayer clients can compare against their localPlayerId
+    // instead of mis-attributing every kill to themselves.
+    byPlayerId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
     kind: Schema.Literal('player-level-up'),
@@ -240,7 +243,7 @@ export const GameEventSnapshot = Schema.Union([
     x: Schema.Number,
     z: Schema.Number,
     amount: Schema.Number,
-    byPlayer: Schema.Boolean,
+    byPlayerId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
     kind: Schema.Literal('spell-cast'),

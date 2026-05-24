@@ -51,11 +51,18 @@ export interface CombatShape {
     amount: number,
     attacker: { monsterId: string; name: string },
   ) => Effect.Effect<void>;
-  /** Spawn the death bag at the given position when the local player dies. */
+  /**
+   * Spawn a death bag at the given position for the named player.
+   * PR-D3d.2: bagXp + forPlayerId travel with the troller on the
+   * entity itself and are passed here on drop so each bag is
+   * reclaimable only by the player it belongs to.
+   */
   readonly dropPlayerDeathBag: (
     world: World,
     x: number,
     z: number,
+    bagXp: number,
+    forPlayerId: PlayerId,
   ) => Effect.Effect<void>;
   /** Award XP to `playerId`; handles level-up cascading. */
   readonly grantExperience: (
@@ -88,8 +95,8 @@ export const makeCombat: Effect.Effect<CombatShape> = Effect.succeed({
     },
   ),
   dropPlayerDeathBag: Effect.fn('Combat.dropPlayerDeathBag')(
-    function* (world, x, z) {
-      dropPlayerDeathBagImpl(world, x, z);
+    function* (world, x, z, bagXp, forPlayerId) {
+      dropPlayerDeathBagImpl(world, x, z, bagXp, forPlayerId);
     },
   ),
   grantExperience: Effect.fn('Combat.grantExperience')(

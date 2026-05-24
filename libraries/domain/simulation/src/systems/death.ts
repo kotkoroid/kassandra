@@ -198,9 +198,15 @@ function tickTroller(world: World, e: Entity, index: number, dt: number) {
       e.phase = 'collect';
       e.phaseTimer = TROLLER_COLLECT_TIME;
     } else if (phase === 'leave') {
-      // Drop the bag (carrying this troller's stashed bagXp) and
-      // despawn the troller.
-      dropPlayerDeathBag(world, e.x, e.z, e.bagXp ?? 0);
+      // Drop the bag (carrying this troller's stashed bagXp +
+      // forPlayerId) and despawn the troller. The bag is stamped
+      // with the player so only they can auto-pick it up.
+      // If `forPlayerId` is missing (chat-spawn edge case where a
+      // troller somehow reached 'leave'), the bag still spawns but
+      // is owner-less and only expires.
+      if (e.forPlayerId !== undefined) {
+        dropPlayerDeathBag(world, e.x, e.z, e.bagXp ?? 0, e.forPlayerId);
+      }
       removeEntity(world, index);
     }
     return;
