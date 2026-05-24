@@ -34,7 +34,7 @@ export type GameEvent =
     }
   | { kind: 'spell-cast'; spellId: string; x: number; z: number };
 
-type Handler = (world: World, event: GameEvent) => void;
+export type Handler = (world: World, event: GameEvent) => void;
 
 const handlers = new Set<Handler>();
 
