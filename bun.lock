@@ -25,6 +25,7 @@
       "name": "@kassandra/game-application",
       "version": "0.0.0",
       "dependencies": {
+        "@kassandra/protocol-foundation-library": "workspace:*",
         "@kassandra/simulation-domain-library": "workspace:*",
         "@threlte/core": "8.1.4",
         "@threlte/extras": "9.4.1",

@@ -1,4 +1,22 @@
-import type { ClientMessageType, SimEvent } from '@kassandra/simulation-domain-library';
+import { ServerMessage } from '@kassandra/protocol-foundation-library';
+import type {
+  ActiveSpell,
+  ArmorColor,
+  ClientMessageType,
+  EntityKind,
+  HairColor,
+  HealingCircle,
+  Player,
+  PlayerClass,
+  Projectile,
+  Sex,
+  SimEvent,
+  WorldLootBag,
+} from '@kassandra/simulation-domain-library';
+import * as Cause from 'effect/Cause';
+import * as Exit from 'effect/Exit';
+import * as Schema from 'effect/Schema';
+
 import { world } from './world.svelte';
 
 export const realm = $state({
@@ -15,6 +33,17 @@ export const realm = $state({
 let ws: WebSocket | null = null;
 // Events queued before the socket opens (e.g. create_character sent right after connect()).
 let pendingEvents: SimEvent[] = [];
+
+// PR-C: Schema decoder built once at module load. `fromJsonString`
+// composes a wire-form decoder out of the runtime ServerMessage schema
+// (which lives in libraries/foundation/protocol — single source of
+// truth shared with services/realm). `decodeUnknownExit` runs sync and
+// returns an Exit, dodging both try/catch (for parse failures) and
+// Effect runtime ceremony (for what is a pure pull-decode).
+const decodeServerMessage = Schema.decodeUnknownExit(Schema.fromJsonString(ServerMessage));
+
+type DecodedServerMessage = Schema.Schema.Type<typeof ServerMessage>;
+type DecodedSnapshot = Extract<DecodedServerMessage, { kind: 'snapshot' }>['snapshot'];
 
 export function connect(id: string) {
   if (ws) {
@@ -45,26 +74,39 @@ export function connect(id: string) {
   };
 
   ws.onmessage = (e: MessageEvent<string>) => {
-    let msg: { kind: string; snapshot?: unknown };
-    try {
-      msg = JSON.parse(e.data) as { kind: string; snapshot?: unknown };
-    } catch {
+    const exit = decodeServerMessage(e.data);
+    if (Exit.isFailure(exit)) {
+      // Adversarial / corrupted frame. Drop and continue — the next
+      // tick's snapshot will overwrite any stale local state anyway.
+      // No reflect-back to the server today.
+      console.warn('[realm] decode failed:', Cause.pretty(exit.cause));
       return;
     }
-    if (msg.kind === 'snapshot') {
-      applySnapshot(msg as ReturnType<typeof buildSnapshotShape>);
-    } else if (msg.kind === 'disbanded') {
-      // Owner has disbanded the party. Server is about to close every
-      // socket — preempt by disconnecting locally, clear ?party= from
-      // the URL, and bump the disband counter so App.svelte can route
-      // back to PartySetup. Order: bump first, then disconnect, so the
-      // App's $effect sees the counter change in the same micro-task
-      // batch as partyId becoming null.
-      realm.disbandCount += 1;
-      disconnect();
-      const url = new URL(window.location.href);
-      url.searchParams.delete('party');
-      window.history.replaceState(null, '', url.toString());
+    const msg = exit.value;
+    switch (msg.kind) {
+      case 'snapshot':
+        applySnapshot(msg.snapshot);
+        break;
+      case 'ack':
+        // Server processed inputs for `msg.tick` — no client-side state
+        // update needed today; informational. Could drive a latency
+        // graph or smoothed tick estimate in the future.
+        break;
+      case 'disbanded':
+        // Owner has disbanded the party. Server is about to close every
+        // socket — preempt by disconnecting locally, clear ?party= from
+        // the URL, and bump the disband counter so App.svelte can route
+        // back to PartySetup. Order: bump first, then disconnect, so the
+        // App's $effect sees the counter change in the same micro-task
+        // batch as partyId becoming null.
+        realm.disbandCount += 1;
+        disconnect();
+        {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('party');
+          window.history.replaceState(null, '', url.toString());
+        }
+        break;
     }
   };
 
@@ -104,103 +146,24 @@ export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
   ws.send(JSON.stringify(msg));
 }
 
-// Minimal snapshot shape — mirrors worldToSnapshot() in PartyRoom.ts.
-type SnapshotMsg = ReturnType<typeof buildSnapshotShape>;
-function buildSnapshotShape() {
-  // This function is never called; it only exists to give applySnapshot
-  // a concrete type to work against without importing the protocol package.
-  return {} as {
-    kind: 'snapshot';
-    snapshot: {
-      tick: number;
-      time: number;
-      ownerId: string | null;
-      players: Array<{
-        id: string;
-        name: string;
-        sex: 'male' | 'female';
-        hairColor: string;
-        armor: string;
-        playerClass: string;
-        level: number;
-        experience: number;
-        health: number;
-        mana: number;
-        stamina: number;
-        x: number;
-        z: number;
-        rotation: number;
-        attackSpeed: number;
-        healthRegen: number;
-        damage: number;
-        equippedWeaponId: string;
-        bag: string[];
-        lars: number;
-        skillPoints: number;
-        classSpellPoints: number;
-        autoAttack: boolean;
-        engageTargetId: string | null;
-        engageActive: boolean;
-        navTargetX: number | null;
-        navTargetZ: number | null;
-        lastSlashTime: number;
-        slashTrigger: number;
-        exhausted: boolean;
-        saying: string;
-        sayExpiresAt: number;
-        levelUpTrigger: number;
-        spellAnimTrigger: number;
-        spellCooldowns: Record<string, number>;
-        spellLevels: Record<string, number>;
-        activeSpell: unknown;
-        alive: boolean;
-        deathX: number;
-        deathZ: number;
-      }>;
-      entities: Array<{
-        id: string;
-        kind: string;
-        monsterId: string;
-        x: number;
-        z: number;
-        rotation: number;
-        hp: number;
-        maxHp: number;
-        saying?: string;
-      }>;
-      projectiles: Array<{ id: string; x: number; z: number; vx: number; vz: number }>;
-      healingCircles: Array<{ id: string; ownerId: string; x: number; z: number; ttl: number }>;
-      lootBags: Array<{
-        id: string;
-        x: number;
-        z: number;
-        items: Array<{ owner: string; itemId: string }>;
-        ttl: number;
-        isDeathBag: boolean;
-        bagXp: number;
-      }>;
-      chatMessages: Array<{ id: string; author: string; text: string; channel: string }>;
-    };
-  };
-}
-
-function applySnapshot(msg: SnapshotMsg) {
-  const s = msg.snapshot;
-
+// PR-C: Snapshot ingest is now Schema-typed end-to-end. The decoded
+// `s` matches the wire schema exactly, so the per-field assignments
+// are type-safe with no `as never` escape hatches. The fields the
+// snapshot doesn't carry (modifiers, effects, abilities, activeQuests)
+// stay server-only and default to empty on the client mirror.
+function applySnapshot(s: DecodedSnapshot) {
   world.tick = s.tick;
   world.time = s.time;
   world.ownerId = s.ownerId;
 
-  // Full-replace players. Fields not in the snapshot (modifiers, effects,
-  // abilities, activeQuests) default to empty — they are server-only.
-  const nextPlayers: typeof world.players = {};
+  const nextPlayers: Record<string, Player> = {};
   for (const p of s.players) {
     nextPlayers[p.id] = {
       name: p.name,
-      sex: p.sex as 'male' | 'female',
-      hairColor: p.hairColor as never,
-      armor: p.armor as never,
-      playerClass: p.playerClass as never,
+      sex: p.sex as Sex,
+      hairColor: p.hairColor as HairColor,
+      armor: p.armor as ArmorColor,
+      playerClass: p.playerClass as PlayerClass,
       level: p.level,
       experience: p.experience,
       health: p.health,
@@ -215,7 +178,7 @@ function applySnapshot(msg: SnapshotMsg) {
       equippedWeaponId: p.equippedWeaponId,
       modifiers: [],
       effects: [],
-      bag: p.bag,
+      bag: [...p.bag],
       lars: p.lars,
       abilities: [],
       skillPoints: p.skillPoints,
@@ -233,9 +196,9 @@ function applySnapshot(msg: SnapshotMsg) {
       sayExpiresAt: p.sayExpiresAt,
       levelUpTrigger: p.levelUpTrigger,
       spellAnimTrigger: p.spellAnimTrigger,
-      spellCooldowns: p.spellCooldowns,
-      spellLevels: p.spellLevels,
-      activeSpell: p.activeSpell as never,
+      spellCooldowns: { ...p.spellCooldowns },
+      spellLevels: { ...p.spellLevels },
+      activeSpell: p.activeSpell as ActiveSpell | null,
     };
   }
   world.players = nextPlayers;
@@ -248,9 +211,22 @@ function applySnapshot(msg: SnapshotMsg) {
     world.death.deathZ = localSnap.deathZ;
   }
 
-  world.entities = s.entities as typeof world.entities;
-  world.projectiles = s.projectiles as typeof world.projectiles;
-  world.healingCircles = s.healingCircles as typeof world.healingCircles;
-  world.lootBags = s.lootBags as typeof world.lootBags;
-  world.chat.messages = s.chatMessages as typeof world.chat.messages;
+  world.entities = s.entities.map((e) => ({
+    id: e.id,
+    kind: e.kind as EntityKind,
+    monsterId: e.monsterId,
+    x: e.x,
+    z: e.z,
+    rotation: e.rotation,
+    hp: e.hp,
+    maxHp: e.maxHp,
+    saying: e.saying,
+  })) as typeof world.entities;
+  world.projectiles = s.projectiles.map((p) => ({ ...p })) as Projectile[];
+  world.healingCircles = s.healingCircles.map((h) => ({ ...h })) as HealingCircle[];
+  world.lootBags = s.lootBags.map((b) => ({
+    ...b,
+    items: b.items.map((i) => ({ ...i })),
+  })) as WorldLootBag[];
+  world.chat.messages = s.chatMessages.map((m) => ({ ...m }));
 }

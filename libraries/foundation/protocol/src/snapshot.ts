@@ -116,6 +116,7 @@ export const PlayerSnapshot = Schema.Struct({
 
   // Spells
   spellCooldowns: Schema.Record(Schema.String, Schema.Number),
+  spellLevels: Schema.Record(Schema.String, Schema.Number),
   activeSpell: Schema.NullOr(ActiveSpell),
 
   // Death state (per-player in multiplayer)

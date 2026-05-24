@@ -4,6 +4,9 @@
   "references": [
     {
       "path": "../../libraries/domain/simulation/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libraries/foundation/protocol/tsconfig.lib.json"
     }
   ],
   "compilerOptions": {
