@@ -1,9 +1,12 @@
-import { verify as verifyJwt } from '@kassandra/effect-conventions-foundation-library';
-import * as Alchemy from 'alchemy';
+import {
+  parseSessionCookie,
+  readSession,
+  SessionsKvNamespace,
+  touchSession,
+} from '@kassandra/effect-conventions-foundation-library';
 import * as Cloudflare from 'alchemy/Cloudflare';
-import * as Config from 'effect/Config';
+import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
-import * as Redacted from 'effect/Redacted';
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
 import PartyRoom from './PartyRoom.ts';
@@ -16,45 +19,24 @@ import PlayerProfile from './PlayerProfile.ts';
 //   GET /profiles/:accountId/rpc?upgrade=websocket → PlayerProfile DO
 //   *                                              → 404
 //
-// PR-G2: every WS upgrade is authenticated. The browser ships its JWT
-// inside `Sec-WebSocket-Protocol` (subprotocol `bearer.<jwt>`); the
-// realm verifies the HS256 signature against the JWT_SECRET binding
-// shared with the gateway (see orchestrators/gateway/src/Gateway.ts),
-// then forwards to the DO with the verified identity:
-//   - /parties → rewritten URL `?playerId=<jwt.sub>`. The DO is no
-//     longer free to trust a client-supplied playerId query — it
-//     receives a realm-controlled value derived from the verified sub.
-//   - /profiles → `jwt.sub` must equal the path `:accountId`. 403 on
-//     mismatch. (The DO still reads accountId from the path; the edge
-//     check enforces that it's actually yours.)
-//
-// Bad/missing token → 401. The error response carries no body details
-// to avoid surfacing the verify path's failure mode to a probing
-// client; the gateway is the only legitimate token source.
+// PR-G5: every WS upgrade is authenticated by SESSION COOKIE. The
+// gateway sets `__Secure-kassandra.sid=<opaqueId>` on POST /sessions
+// (HttpOnly+Secure+SameSite=Strict+Domain=eTLD+1); the browser ships
+// the cookie on the WS upgrade handshake same-site; the realm parses
+// it out, reads the session record from the shared KV namespace, and:
+//   - rejects with 401 on missing/expired/unknown sid
+//   - rejects with 403 on Origin mismatch (CSRF defense alongside the
+//     SameSite cookie attribute — belt-and-suspenders since SameSite
+//     is browser-honored only)
+//   - slides the session TTL on every successful upgrade (active
+//     players never time out; idle ones reclaim automatically)
+//   - rewrites the forwarded URL with `?playerId=<accountId>` so the
+//     PartyRoom DO sees a realm-controlled player identity, never
+//     client-controlled
+//   - on /profiles, enforces `record.accountId === pathAccountId`
 
-// Same dev fallback as the gateway. Production must set JWT_SECRET as
-// a real secret binding — any mismatch between the two workers'
-// secrets would surface as universal 401 on verify, fail-closed.
-const DEV_JWT_SECRET_FALLBACK = 'dev-only-jwt-secret-replace-in-production';
-
-const BEARER_PREFIX = 'bearer.';
-
-// Parse the JWT out of the request's `Sec-WebSocket-Protocol` header.
-// The browser sends a comma-separated list (whitespace allowed); we
-// look for a token of the form `bearer.<jwt>` and ignore other
-// subprotocols (e.g. a future `kassandra.v1` handshake marker the
-// realm might echo back).
-const extractBearerToken = (headerValue: string | undefined): string | null => {
-  if (!headerValue) return null;
-  const candidates = headerValue.split(',').map((s) => s.trim());
-  for (const candidate of candidates) {
-    if (candidate.startsWith(BEARER_PREFIX)) {
-      const token = candidate.slice(BEARER_PREFIX.length);
-      if (token.length > 0) return token;
-    }
-  }
-  return null;
-};
+const extractOrigin = (headers: Record<string, string>): string | undefined =>
+  headers['origin'];
 
 export default class Realm extends Cloudflare.Worker<Realm>()(
   'Realm',
@@ -65,16 +47,25 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     },
   },
   Effect.gen(function* () {
-    // PR-G2: bind JWT_SECRET on this Worker's env. Same Config source as
-    // the gateway's Alchemy.Secret call, so both workers resolve to the
-    // same value at deploy time (the secret IS the agreement between
-    // signer and verifier).
-    yield* Alchemy.Secret(
-      'JWT_SECRET',
-      Config.redacted('JWT_SECRET').pipe(
-        Config.withDefault(Redacted.make(DEV_JWT_SECRET_FALLBACK)),
-      ),
-    );
+    // PR-G5: bind the shared session KV. The Gateway yields the SAME
+    // `SessionsKvNamespace` constant so both Workers are bound to one
+    // physical namespace.
+    const sessionsResource = yield* SessionsKvNamespace;
+    const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
+
+    // Origin allow-list. Read directly from env (same shape PR-G2 used
+    // for JWT_SECRET) to avoid leaking `ConfigError` into the Worker's
+    // never-error channel.
+    const env = yield* Cloudflare.WorkerEnvironment;
+    const allowedOrigin =
+      (env as Record<string, string | undefined>)['ALLOWED_ORIGIN'] ??
+      'http://localhost:5173';
+    const allowedOrigins = allowedOrigin
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const originAllowed = (origin: string | undefined): boolean =>
+      typeof origin === 'string' && allowedOrigins.includes(origin);
 
     const rooms = yield* PartyRoom;
     const profiles = yield* PlayerProfile;
@@ -96,58 +87,64 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
           return HttpServerResponse.text('Expected WebSocket upgrade', { status: 426 });
         }
 
-        // Authenticate. Read the JWT from the WS subprotocol header
-        // (cleanest cross-origin shape — see PR-G2 commit notes on
-        // why we picked subprotocol over cookies). The browser is the
-        // only entity that can set Sec-WebSocket-Protocol on a WS
-        // open handshake, so this is functionally equivalent to an
-        // Authorization header.
-        const token = extractBearerToken(request.headers['sec-websocket-protocol']);
-        if (!token) {
+        // CSRF defense: pair SameSite=Strict on the cookie with an
+        // explicit Origin allow-list check on the upgrade. Browsers
+        // can initiate WS cross-origin (no preflight), so an Origin
+        // check is the only server-side guarantee.
+        const originHeader = extractOrigin(request.headers);
+        if (!originAllowed(originHeader)) {
+          yield* Effect.logWarning('Origin rejected').pipe(
+            Effect.annotateLogs({ origin: originHeader ?? '<missing>', path: pathname }),
+          );
+          return HttpServerResponse.text('Forbidden', { status: 403 });
+        }
+
+        const sid = parseSessionCookie(request.headers['cookie']);
+        if (!sid) {
           return HttpServerResponse.text('Unauthorized', { status: 401 });
         }
 
-        const env = yield* Cloudflare.WorkerEnvironment;
-        const secret = (env as Record<string, unknown>)['JWT_SECRET'] as string;
-
-        const verifyResult = yield* Effect.result(verifyJwt({ secret, token }));
-        if (verifyResult._tag === 'Failure') {
-          // Swallow the specific error tag — don't leak signature vs
-          // expired vs malformed to the client. All three collapse to
-          // 401 here; the server-side log captures the underlying
-          // tag for triage.
-          yield* Effect.logWarning('JWT verify failed').pipe(
-            Effect.annotateLogs({ tag: verifyResult.failure._tag, path: pathname }),
+        // Read + validate. All failure modes (not-found / decode-fail /
+        // expired) collapse to 401 — the client treats 401 as "log in
+        // again". Server-side log carries the specific tag for triage.
+        const readResult = yield* Effect.result(readSession(sessionsKv, sid));
+        if (readResult._tag === 'Failure') {
+          yield* Effect.logWarning('Session read failed').pipe(
+            Effect.annotateLogs({ tag: readResult.failure._tag, path: pathname }),
           );
           return HttpServerResponse.text('Unauthorized', { status: 401 });
         }
-        const claims = verifyResult.success;
+        const record = readResult.success;
+
+        // Sliding TTL — touch on every successful upgrade. Cheap
+        // (single KV put) and keeps active players logged in
+        // indefinitely without absolute renewal complexity.
+        yield* touchSession(sessionsKv, sid, record);
 
         if (profileMatch) {
-          const accountId = profileMatch[1]!;
-          // PR-G2: the verified sub claim MUST match the path's
-          // accountId. Without this check, any authenticated user
-          // could open a WS to anyone else's PlayerProfile DO simply
-          // by changing the URL.
-          if (claims.sub !== accountId) {
+          const pathAccountId = profileMatch[1]!;
+          // The session's accountId MUST match the path. Without
+          // this, any authenticated user could open a WS to any
+          // other PlayerProfile DO by editing the URL.
+          if (record.accountId !== pathAccountId) {
             return HttpServerResponse.text('Forbidden', { status: 403 });
           }
-          const profile = profiles.getByName(accountId);
+          const profile = profiles.getByName(pathAccountId);
           return yield* profile.fetch(request);
         }
 
         // Parties: rewrite the URL so the DO sees the verified
-        // playerId (= JWT.sub) as a query parameter. PartyRoom keeps
-        // its existing `?playerId=` parsing — but the value is now
-        // realm-controlled, not client-controlled. Any client query
-        // string is discarded.
+        // playerId (= session.accountId) as a query parameter.
+        // PartyRoom keeps its existing `?playerId=` parsing — but
+        // the value is now realm-controlled. Any client query string
+        // is discarded.
         const partyId = partyMatch![1]!;
         const forwardedUrl = new URL(url);
-        forwardedUrl.searchParams.set('playerId', claims.sub);
+        forwardedUrl.searchParams.set('playerId', record.accountId);
         const forwarded = request.modify({ url: forwardedUrl.toString() });
         const room = rooms.getByName(partyId);
         return yield* room.fetch(forwarded);
       }),
     };
-  }),
+  }).pipe(Effect.provide(KVNamespaceBindingLive)),
 ) {}

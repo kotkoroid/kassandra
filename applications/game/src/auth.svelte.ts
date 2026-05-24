@@ -1,18 +1,28 @@
-// PR-G2: client-side auth bootstrap.
+// PR-G5: client-side auth bootstrap (cookie-based session).
 //
 // The browser holds a stable `accountId` (a UUID) in localStorage. On
 // app boot it POSTs `{accountId}` to the gateway's /sessions endpoint
-// and receives an HS256 JWT (signed with the gateway+realm shared
-// secret). Every subsequent WebSocket open attaches that token via the
-// `bearer.<jwt>` subprotocol; the realm verifies before forwarding to
-// any DO.
+// with `credentials: 'include'`. The gateway creates a session record
+// in KV and replies with an HttpOnly+Secure+SameSite=Strict cookie
+// (`__Secure-kassandra.sid` in prod, `kassandra.sid` in dev). The
+// browser ships that cookie automatically on every subsequent same-site
+// request — including WebSocket upgrades to the realm — so this module
+// never has to handle the credential itself.
 //
-// Account model is intentionally trivial for v1 — there is no signup,
-// no password, no recovery flow. The accountId IS the identity; lose
-// localStorage and you've lost your character. A future PR-G3 follow-up
-// will move accounts into a real registry, but for now this is the
-// same trust model parties already had (party UUID in the URL = capability)
-// just scoped per-browser.
+// What changed from PR-G2:
+//   - No JWT in the response body, no token state, no expiry tracking.
+//     The credential is opaque + server-controlled; revocation is a
+//     single DELETE /sessions away.
+//   - `auth.token` is gone. Components that previously read it to
+//     decide if auth had settled now read `auth.accountId !== ''`.
+//   - `logout()` is new: it DELETEs the session, clearing both the
+//     KV record and the cookie.
+//
+// Account model is still intentionally trivial for v1 — no signup,
+// no password, no recovery. The accountId IS the identity; lose
+// localStorage and you've lost your character. A future PR can move
+// accounts into a real registry; for now this is a per-browser
+// capability scoped by the secure cookie.
 
 const STORAGE_KEY = 'kassandra.accountId';
 
@@ -35,42 +45,51 @@ const GATEWAY_BASE = import.meta.env.DEV
   : import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, '');
 
 /**
- * Reactive auth state. Components and Effect runtimes that need a
- * fresh token read `auth.token` directly — once `auth.token` is set,
- * it's valid until `auth.exp` (seconds-since-epoch). PR-G3 will add
- * a refresh-before-expiry effect; today, the 24 h default TTL is
- * generous enough that a single session never needs to renew.
+ * Reactive auth state. `accountId === ''` means auth hasn't settled
+ * yet; non-empty means the session cookie is live and the realm will
+ * accept WS upgrades. The cookie itself is HttpOnly and inaccessible
+ * to JS — by design.
  */
 export const auth = $state({
   accountId: '',
-  token: null as string | null,
-  // Seconds-since-epoch, matching the JWT `exp` claim.
-  exp: 0,
 });
 
-async function fetchToken(accountId: string): Promise<{ token: string; exp: number }> {
+async function postSession(accountId: string): Promise<{ accountId: string }> {
   const res = await fetch(`${GATEWAY_BASE}/sessions`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accountId }),
   });
   if (!res.ok) {
     throw new Error(`session bootstrap failed: ${res.status} ${res.statusText}`);
   }
-  return res.json() as Promise<{ token: string; exp: number }>;
+  return res.json() as Promise<{ accountId: string }>;
 }
 
 /**
  * Called once from `main.ts` before the Svelte app mounts. Settles
  * `auth.accountId` synchronously, then awaits the gateway round-trip
- * for the JWT. Throws on gateway failure — letting the app crash
- * loudly is better than silently mounting in a half-auth state where
- * every WS upgrade returns 401.
+ * for the Set-Cookie response. Throws on gateway failure — letting
+ * the app crash loudly is better than silently mounting in a half-auth
+ * state where every WS upgrade returns 401.
  */
 export async function initAuth(): Promise<void> {
   const accountId = loadOrCreateAccountId();
-  auth.accountId = accountId;
-  const { token, exp } = await fetchToken(accountId);
-  auth.token = token;
-  auth.exp = exp;
+  const accepted = await postSession(accountId);
+  auth.accountId = accepted.accountId;
+}
+
+/**
+ * Revoke the current session server-side and clear the cookie. The
+ * accountId stays in localStorage — it's the stable identity, not the
+ * credential. A subsequent `initAuth()` mints a fresh session for the
+ * same accountId.
+ */
+export async function logout(): Promise<void> {
+  await fetch(`${GATEWAY_BASE}/sessions`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  auth.accountId = '';
 }

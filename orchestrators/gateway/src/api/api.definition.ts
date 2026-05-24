@@ -1,14 +1,6 @@
-import {
-  HttpApi,
-  HttpApiEndpoint,
-  HttpApiGroup,
-} from 'effect/unstable/httpapi';
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi';
 import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema';
 import { CreatePartySuccess } from './parties/create-party.schema.ts';
-import {
-  CreateSessionRequest,
-  CreateSessionSuccess,
-} from './sessions/create-session.schema.ts';
 
 const ApiGroupParties = HttpApiGroup.make('Parties').add(
   HttpApiEndpoint.post('create-party', '/parties', {
@@ -16,16 +8,11 @@ const ApiGroupParties = HttpApiGroup.make('Parties').add(
   }),
 );
 
-// PR-G2: account-scoped JWT issuance. Client posts the accountId it
-// holds in localStorage; gateway signs an HS256 token with the shared
-// JWT_SECRET; realm verifies the token on every WS upgrade.
-const ApiGroupSessions = HttpApiGroup.make('Sessions').add(
-  HttpApiEndpoint.post('create-session', '/sessions', {
-    payload: CreateSessionRequest,
-    success: HttpApiSchema.status(201)(CreateSessionSuccess),
-  }),
-);
+// PR-G5: sessions are NOT defined in HttpApi. They need fine-grained
+// control over `Set-Cookie` response headers (HttpOnly+Secure+SameSite
+// +Domain attrs) which doesn't fit the HttpApi handler return-shape.
+// Gateway.ts handles `POST /sessions` and `DELETE /sessions` directly
+// via raw HttpServerResponse before delegating other paths to this
+// HttpApi router.
 
-export const ApiDefinition = HttpApi.make('Api')
-  .add(ApiGroupParties)
-  .add(ApiGroupSessions);
+export const ApiDefinition = HttpApi.make('Api').add(ApiGroupParties);

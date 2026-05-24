@@ -40,9 +40,9 @@ export const profile = $state({
 });
 
 // Module-scoped runtime — built once at `initProfile()` and reused for
-// every SaveCharacter call. `auth.token` is captured at construction;
-// PR-G3 doesn't refresh tokens mid-session (the 24 h TTL covers a
-// single play session), so the static capture is safe.
+// every SaveCharacter call. PR-G5: no token is captured; the WS
+// upgrade carries the HttpOnly session cookie automatically and the
+// realm verifies it server-side on every connection.
 let runtime: ManagedRuntime.ManagedRuntime<ProfileClient, never> | null = null;
 
 // PR-G4: debounce bookkeeping. `lastSaved` is the source of truth
@@ -64,10 +64,10 @@ let pendingPromiseResolve: (() => void) | null = null;
  * Throws on network/auth failure — same fail-loud stance as initAuth().
  */
 export async function initProfile(): Promise<void> {
-  if (!auth.token) {
+  if (!auth.accountId) {
     throw new Error('initProfile called before auth bootstrap completed');
   }
-  runtime = ManagedRuntime.make(makeProfileClientLayer(auth.accountId, auth.token));
+  runtime = ManagedRuntime.make(makeProfileClientLayer(auth.accountId));
   const loaded = await runtime.runPromise(
     Effect.gen(function* () {
       const client = yield* ProfileClient;

@@ -16,8 +16,16 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
         changeOrigin: true,
       },
+      // PR-D3e.3 dev-loop fix: the client now hits the Bun WS proxy
+      // (`scripts/ws-proxy.ts` on `localhost:5555`) directly — see
+      // realm-client.ts / profile-client.ts. This `/realm` proxy is
+      // kept only for occasional debugging via the Vite-served origin
+      // (e.g. visiting `localhost:5173/realm/parties/...` in a tab);
+      // it's not on the live WS path. Vite's WS proxy mangles the
+      // `Sec-WebSocket-Protocol` 101 response so this `ws: true`
+      // entry only works for HTTP probes.
       '/realm': {
-        target: 'http://realm.localhost:1337',
+        target: 'http://localhost:5555',
         rewrite: (path) => path.replace(/^\/realm/, ''),
         changeOrigin: true,
         ws: true,

@@ -1,10 +1,10 @@
 // ProfileClient — typed effect/unstable/rpc client to the PlayerProfile DO.
 //
 // Mirror of realm-client.ts but bound to PlayerProfileRpc instead of
-// RealmRpc, and the WS URL hits /profiles/:accountId/rpc. JWT travels
-// the same way (Sec-WebSocket-Protocol: bearer.<jwt>) — the realm
-// verifies that the token's `sub` claim matches the accountId in the
-// path before forwarding to the DO.
+// RealmRpc, and the WS URL hits /profiles/:accountId/rpc. PR-G5: the
+// HttpOnly session cookie travels with the WS upgrade automatically;
+// the realm parses it, looks the session up in KV, and forwards to
+// the PlayerProfile DO only if `session.accountId === pathAccountId`.
 //
 // One PlayerProfile WS per browser session: opened during boot to
 // LoadCharacter, kept open so SaveCharacter on the creation submit
@@ -37,13 +37,16 @@ export class ProfileClient extends Context.Service<
 
 /**
  * Build the WS URL for the PlayerProfile connection. Same dev/prod
- * pattern as realm-client.ts: dev routes through Vite's `/realm` proxy
- * to dodge the alchemy local-subdomain WebSocket bug; prod hits
- * VITE_REALM_URL directly.
+ * pattern as realm-client.ts: dev hits the Bun WS proxy on
+ * `localhost:5555`; prod hits VITE_REALM_URL under the same eTLD+1
+ * as the app so the cookie travels same-site.
+ *
+ * Override with `VITE_REALM_WS_OVERRIDE` if you have a different
+ * dev proxy / port setup.
  */
 const wsUrlFor = (accountId: string): string => {
   const base = import.meta.env.DEV
-    ? `ws://${window.location.host}/realm`
+    ? (import.meta.env['VITE_REALM_WS_OVERRIDE'] ?? 'ws://localhost:5555')
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');
@@ -51,19 +54,15 @@ const wsUrlFor = (accountId: string): string => {
 };
 
 /**
- * Full layer stack for the PlayerProfile connection. PR-G2 JWT
- * shipping: `bearer.<token>` subprotocol on the WS handshake; the
- * realm worker verifies the signature + the `sub`-vs-path match
+ * Full layer stack for the PlayerProfile connection. The session
+ * cookie travels with the WS upgrade automatically; the realm reads
+ * it, looks up the KV record, and enforces `record.accountId === path`
  * before any DO message flows.
  */
-export const makeProfileClientLayer = (accountId: string, token: string) =>
+export const makeProfileClientLayer = (accountId: string) =>
   ProfileClient.layer.pipe(
     Layer.provide(RpcClient.layerProtocolSocket()),
-    Layer.provide(
-      Socket.layerWebSocket(wsUrlFor(accountId), {
-        protocols: [`bearer.${token}`],
-      }),
-    ),
+    Layer.provide(Socket.layerWebSocket(wsUrlFor(accountId))),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
     Layer.provide(RpcSerialization.layerJson),
   );

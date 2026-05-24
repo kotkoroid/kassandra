@@ -1,13 +1,12 @@
 // RealmClient — typed effect/unstable/rpc client to the realm DO.
 //
-// PR-C2: replaced the hand-rolled `new WebSocket(...)` + JSON.stringify
-// pipeline in realm.svelte.ts with effect/unstable/rpc derived from
-// libraries/foundation/protocol's RealmRpc group.
-//
-// PR-G2: the WS now carries a JWT via the `bearer.<token>` subprotocol.
-// The realm verifies it and rewrites the URL to inject `?playerId=<sub>`
-// before forwarding to the PartyRoom DO — so the client no longer
-// passes its own playerId (the JWT sub IS the playerId).
+// PR-G5: the WS handshake no longer carries a `bearer.<jwt>`
+// subprotocol — the browser ships the HttpOnly session cookie
+// automatically on the upgrade (same-site, same-eTLD+1 between app
+// and realm in prod; same `localhost` in dev). The realm parses the
+// `Cookie` header, looks the session up in KV, and forwards to the
+// PartyRoom DO with `?playerId=<accountId>` derived from the verified
+// session record.
 
 import { RealmRpc } from '@kassandra/protocol-foundation-library';
 import * as Context from 'effect/Context';
@@ -36,14 +35,16 @@ export class RealmClient extends Context.Service<
 }
 
 /**
- * Build the WebSocket URL for a party connection. In dev we route through
- * the Vite proxy at `/realm` to dodge the alchemy@2.0.0-beta.44 local
- * subdomain proxy's WebSocket-upgrade bug (browser → workerd path).
- * In prod we hit VITE_REALM_URL directly.
+ * Build the WebSocket URL for a party connection. In dev we hit the
+ * Bun WS proxy (`scripts/ws-proxy.ts`) directly on `localhost:5555`.
+ * The proxy forwards the upgrade — including the session cookie — to
+ * `realm.localhost:1337`. In prod we hit VITE_REALM_URL directly,
+ * which lives under the same eTLD+1 as the app so the cookie travels
+ * same-site without any cross-origin trickery.
  */
 const wsUrlFor = (partyId: string): string => {
   const base = import.meta.env.DEV
-    ? `ws://${window.location.host}/realm`
+    ? (import.meta.env['VITE_REALM_WS_OVERRIDE'] ?? 'ws://localhost:5555')
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');
@@ -56,25 +57,18 @@ const wsUrlFor = (partyId: string): string => {
  * global), Socket from the URL, RPC protocol over that Socket, then
  * the RealmClient itself.
  *
- * The `token` is sent as the `bearer.<token>` WebSocket subprotocol
- * (PR-G2). Browsers are the only entity that can set
- * Sec-WebSocket-Protocol on a WS open, so this is functionally
- * equivalent to an Authorization header — and avoids cross-origin
- * cookie configuration between gateway and realm.
+ * The session cookie travels automatically with the WS upgrade — no
+ * subprotocol, no Authorization header, no client-side token state.
  *
  * The returned layer is scoped: building it opens the WebSocket and
  * starts the protocol fiber; closing the scope closes both. Use with
  * a long-lived scope tied to the party's lifetime — typically an
  * `Effect.runFork` of a program piped through this layer.
  */
-export const makeRealmClientLayer = (partyId: string, token: string) =>
+export const makeRealmClientLayer = (partyId: string) =>
   RealmClient.layer.pipe(
     Layer.provide(RpcClient.layerProtocolSocket()),
-    Layer.provide(
-      Socket.layerWebSocket(wsUrlFor(partyId), {
-        protocols: [`bearer.${token}`],
-      }),
-    ),
+    Layer.provide(Socket.layerWebSocket(wsUrlFor(partyId))),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
     Layer.provide(RpcSerialization.layerJson),
   );

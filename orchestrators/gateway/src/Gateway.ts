@@ -1,30 +1,49 @@
-import * as Alchemy from 'alchemy';
+import {
+  buildClearCookie,
+  buildSetCookie,
+  createSession,
+  DEFAULT_TTL_SECONDS,
+  parseSessionCookie,
+  revokeSession,
+  SessionsKvNamespace,
+} from '@kassandra/effect-conventions-foundation-library';
 import * as Cloudflare from 'alchemy/Cloudflare';
-import { sign as signJwt } from '@kassandra/effect-conventions-foundation-library';
-import * as Config from 'effect/Config';
+import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
-import * as Redacted from 'effect/Redacted';
+import * as Layer from 'effect/Layer';
+import * as Schema from 'effect/Schema';
 import * as Etag from 'effect/unstable/http/Etag';
+import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
+import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import * as HttpPlatform from 'effect/unstable/http/HttpPlatform';
 import * as HttpRouter from 'effect/unstable/http/HttpRouter';
 import * as HttpApiBuilder from 'effect/unstable/httpapi/HttpApiBuilder';
-import * as Layer from 'effect/Layer';
 import * as Path from 'effect/Path';
 import { ApiDefinition } from './api/api.definition.ts';
 import { CreatePartySuccess } from './api/parties/create-party.schema.ts';
-import { CreateSessionSuccess } from './api/sessions/create-session.schema.ts';
+import {
+  CreateSessionRequest,
+  CreateSessionSuccess,
+} from './api/sessions/create-session.schema.ts';
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   fileResponse: () => Effect.die('HttpPlatform.fileResponse not supported'),
   fileWebResponse: () => Effect.die('HttpPlatform.fileWebResponse not supported'),
 });
 
-// PR-G2 dev fallback. The deployed Worker reads JWT_SECRET from its
-// secret_text binding; local `bun run dev` falls back to this constant
-// so the dev loop boots without manual env setup. Production deploys
-// MUST set JWT_SECRET (the secret is the same one the Realm binds, so
-// any divergence breaks verification immediately).
-const DEV_JWT_SECRET_FALLBACK = 'dev-only-jwt-secret-replace-in-production';
+// PR-G5 cookie/origin config. The Worker reads these from env at boot;
+// `alchemy.run.ts` sets dev defaults, production must override.
+//   COOKIE_SECURE   — '1' in prod (TLS-only cookie); '0' in dev so
+//                     localhost http:// can carry it.
+//   COOKIE_DOMAIN   — eTLD+1 shared across api/realm/app subdomains in
+//                     prod (e.g. 'kotkoroid.com'); empty in dev so the
+//                     cookie defaults to host-only on localhost.
+//   ALLOWED_ORIGIN  — exact app origin for CORS allow + the explicit
+//                     origin check on session endpoints. Comma-separated
+//                     list permitted; first match wins on echo.
+const isTruthy = (v: string | undefined) => v === '1' || v === 'true';
+
+const decodeSessionRequest = Schema.decodeUnknownEffect(CreateSessionRequest);
 
 export default class Gateway extends Cloudflare.Worker<Gateway>()(
   'Api',
@@ -35,16 +54,60 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
     },
   },
   Effect.gen(function* () {
-    // PR-G2: bind JWT_SECRET as a secret_text on this Worker's env.
-    // The Realm Worker binds the same name with the same Config source,
-    // so both sides see the same value at deploy time. At runtime the
-    // session handler reads it via WorkerEnvironment.
-    yield* Alchemy.Secret(
-      'JWT_SECRET',
-      Config.redacted('JWT_SECRET').pipe(
-        Config.withDefault(Redacted.make(DEV_JWT_SECRET_FALLBACK)),
-      ),
-    );
+    // PR-G5: bind the shared KV namespace that stores opaque session
+    // records. Realm yields the SAME `SessionsKvNamespace` constant so
+    // both Workers end up bound to one physical KV namespace.
+    // `KVNamespaceBindingLive` is provided below so the `.bind(...)`
+    // call resolves its KVNamespaceBinding requirement.
+    const sessionsResource = yield* SessionsKvNamespace;
+    const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
+
+    // Config-driven cookie attributes. We read directly from
+    // `WorkerEnvironment` (the same pattern PR-G2 used for JWT_SECRET)
+    // instead of `Config.string(...).withDefault(...)` because the
+    // Config form leaks `ConfigError` into the Worker's effect channel,
+    // and the Worker class demands `never` errors at construction.
+    const env = yield* Cloudflare.WorkerEnvironment;
+    const envRec = env as Record<string, string | undefined>;
+    const cookieSecure = isTruthy(envRec['SESSION_COOKIE_SECURE']);
+    const cookieDomain = envRec['SESSION_COOKIE_DOMAIN'] ?? '';
+    const allowedOrigin = envRec['ALLOWED_ORIGIN'] ?? 'http://localhost:5173';
+    const allowedOrigins = allowedOrigin
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const cookieOpts = {
+      secure: cookieSecure,
+      ...(cookieDomain.length > 0 ? { domain: cookieDomain } : {}),
+      maxAge: DEFAULT_TTL_SECONDS,
+    } as const;
+    const clearCookieOpts = {
+      secure: cookieSecure,
+      ...(cookieDomain.length > 0 ? { domain: cookieDomain } : {}),
+    } as const;
+
+    // Build CORS headers for a given response. Vary:Origin so caches
+    // don't reuse a response across origins; credentials:true is
+    // mandatory once the cookie flow starts.
+    const corsHeadersFor = (originHeader: string | undefined) => {
+      const allowed =
+        originHeader && allowedOrigins.includes(originHeader) ? originHeader : allowedOrigins[0]!;
+      return {
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'content-type',
+        Vary: 'Origin',
+      };
+    };
+
+    // Reject session requests whose Origin header doesn't match the
+    // configured app. This is the CSRF defense layer that pairs with
+    // SameSite=Strict on the cookie itself — SameSite handles browsers
+    // that respect it; the Origin check covers everything else.
+    const originAllowed = (originHeader: string | undefined): boolean =>
+      typeof originHeader === 'string' && allowedOrigins.includes(originHeader);
 
     const partiesApi = HttpApiBuilder.group(ApiDefinition, 'Parties', (handlers) =>
       handlers.handle('create-party', () =>
@@ -52,27 +115,78 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
       ),
     );
 
-    const sessionsApi = HttpApiBuilder.group(ApiDefinition, 'Sessions', (handlers) =>
-      handlers.handle('create-session', ({ payload }) =>
-        Effect.gen(function* () {
-          const env = yield* Cloudflare.WorkerEnvironment;
-          const secret = (env as Record<string, unknown>)['JWT_SECRET'] as string;
-          const { token, exp } = yield* signJwt({
-            secret,
-            subject: payload.accountId,
-          });
-          return new CreateSessionSuccess({ token, exp });
-        }),
-      ),
+    // Build the inner HttpApi request handler ONCE at worker boot.
+    // `toHttpEffect` returns `Effect<Effect<Response>, ...>` — the outer
+    // is one-shot setup (layer-build), the inner handles each request.
+    // Yielding here collapses to just the request-handling effect.
+    const httpApiFetch = yield* HttpApiBuilder.layer(ApiDefinition).pipe(
+      Layer.provide([partiesApi]),
+      Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+      Layer.provide(HttpRouter.cors({ allowedOrigins, credentials: true })),
+      HttpRouter.toHttpEffect,
     );
 
     return {
-      fetch: HttpApiBuilder.layer(ApiDefinition).pipe(
-        Layer.provide([partiesApi, sessionsApi]),
-        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
-        Layer.provide(HttpRouter.cors()),
-        HttpRouter.toHttpEffect,
-      ),
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, 'http://localhost');
+        const originHeader = request.headers['origin'] as string | undefined;
+        const cors = corsHeadersFor(originHeader);
+
+        // ----- /sessions: cookie-flow endpoints -----
+        if (url.pathname === '/sessions') {
+          // CORS preflight. Any path that the browser will hit with a
+          // non-simple verb + credentials needs to answer OPTIONS.
+          if (request.method === 'OPTIONS') {
+            return HttpServerResponse.empty({ status: 204, headers: cors });
+          }
+
+          if (!originAllowed(originHeader)) {
+            return HttpServerResponse.text('Forbidden', { status: 403, headers: cors });
+          }
+
+          if (request.method === 'POST') {
+            const bodyResult = yield* Effect.result(
+              request.json.pipe(Effect.flatMap(decodeSessionRequest)),
+            );
+            if (bodyResult._tag === 'Failure') {
+              return HttpServerResponse.text('Bad Request', { status: 400, headers: cors });
+            }
+            const { accountId } = bodyResult.success;
+            const { sid } = yield* createSession(sessionsKv, { accountId });
+            return yield* HttpServerResponse.schemaJson(CreateSessionSuccess)(
+              new CreateSessionSuccess({ accountId }),
+              {
+                status: 201,
+                headers: {
+                  ...cors,
+                  'Set-Cookie': buildSetCookie(sid, cookieOpts),
+                },
+              },
+            );
+          }
+
+          if (request.method === 'DELETE') {
+            const sid = parseSessionCookie(request.headers['cookie']);
+            if (sid) {
+              yield* revokeSession(sessionsKv, sid);
+            }
+            return HttpServerResponse.empty({
+              status: 204,
+              headers: {
+                ...cors,
+                'Set-Cookie': buildClearCookie(clearCookieOpts),
+              },
+            });
+          }
+
+          return HttpServerResponse.text('Method Not Allowed', { status: 405, headers: cors });
+        }
+
+        // Everything else: delegate to the HttpApi router (currently
+        // just /parties).
+        return yield* httpApiFetch;
+      }),
     };
-  }),
+  }).pipe(Effect.provide(KVNamespaceBindingLive)),
 ) {}

@@ -36,13 +36,13 @@ let pendingEvents: SimEvent[] = [];
 
 export function connect(id: string) {
   if (runtime) disconnect();
-  if (!auth.token) {
+  if (!auth.accountId) {
     throw new Error('realm.connect called before auth bootstrap completed');
   }
 
   realm.partyId = id;
 
-  runtime = ManagedRuntime.make(makeRealmClientLayer(id, auth.token));
+  runtime = ManagedRuntime.make(makeRealmClientLayer(id));
 
   // Long-lived snapshot subscription: every emitted Snapshot updates
   // the local world mirror. The Stream completes when the WebSocket
