@@ -57,9 +57,20 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     // for JWT_SECRET) to avoid leaking `ConfigError` into the Worker's
     // never-error channel.
     const env = yield* Cloudflare.WorkerEnvironment;
+    // Dev default mirrors the gateway: alchemy dev binds 5173 for its
+    // bundled-asset Vite, so a second standalone Vite (used for HMR
+    // against the live workers) lands on 5174+. Allow a small range
+    // so the default boots whichever port Vite picks. Production sets
+    // ALLOWED_ORIGIN explicitly.
     const allowedOrigin =
       (env as Record<string, string | undefined>)['ALLOWED_ORIGIN'] ??
-      'http://localhost:5173';
+      [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
+        'http://game.localhost:1337',
+      ].join(',');
     const allowedOrigins = allowedOrigin
       .split(',')
       .map((s) => s.trim())

@@ -35,16 +35,18 @@ export class RealmClient extends Context.Service<
 }
 
 /**
- * Build the WebSocket URL for a party connection. In dev we hit the
- * Bun WS proxy (`scripts/ws-proxy.ts`) directly on `localhost:5555`.
- * The proxy forwards the upgrade — including the session cookie — to
- * `realm.localhost:1337`. In prod we hit VITE_REALM_URL directly,
- * which lives under the same eTLD+1 as the app so the cookie travels
- * same-site without any cross-origin trickery.
+ * Build the WebSocket URL for a party connection.
+ *
+ * PR-G5: the WS rides the page's own origin so the HttpOnly session
+ * cookie attaches automatically — dev hits Vite's `/realm` proxy
+ * (`localhost:5173/realm/...`), prod hits the realm under the same
+ * eTLD+1 as the app. No subprotocol, no token in JS, no client-side
+ * cookie scoping (cookies are host-locked in dev so all traffic must
+ * share the page origin).
  */
 const wsUrlFor = (partyId: string): string => {
   const base = import.meta.env.DEV
-    ? (import.meta.env['VITE_REALM_WS_OVERRIDE'] ?? 'ws://localhost:5555')
+    ? `ws://${window.location.host}/realm`
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');
