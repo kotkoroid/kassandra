@@ -1,40 +1,24 @@
 import * as Schema from 'effect/Schema';
 
-export const ChatChannel = Schema.Union([
-  Schema.Literal('Normal'),
-  Schema.Literal('Global'),
-  Schema.Literal('Group'),
-]);
+export const ChatChannel = Schema.Literals(['Normal', 'Global', 'Group']);
 
 export const SimEvent = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('create_character'),
     name: Schema.String,
-    sex: Schema.Union([Schema.Literal('male'), Schema.Literal('female')]),
-    hairColor: Schema.Union([
-      Schema.Literal('black'),
-      Schema.Literal('brown'),
-      Schema.Literal('blonde'),
-      Schema.Literal('red'),
-      Schema.Literal('gray'),
-      Schema.Literal('white'),
+    sex: Schema.Literals(['male', 'female']),
+    hairColor: Schema.Literals(['black', 'brown', 'blonde', 'red', 'gray', 'white']),
+    armor: Schema.Literals([
+      'silver',
+      'gold',
+      'black',
+      'brown',
+      'red',
+      'green',
+      'blue',
+      'white',
     ]),
-    armor: Schema.Union([
-      Schema.Literal('silver'),
-      Schema.Literal('gold'),
-      Schema.Literal('black'),
-      Schema.Literal('brown'),
-      Schema.Literal('red'),
-      Schema.Literal('green'),
-      Schema.Literal('blue'),
-      Schema.Literal('white'),
-    ]),
-    playerClass: Schema.Union([
-      Schema.Literal('warrior'),
-      Schema.Literal('assassin'),
-      Schema.Literal('mage'),
-      Schema.Literal('bruiser'),
-    ]),
+    playerClass: Schema.Literals(['warrior', 'assassin', 'mage', 'bruiser']),
   }),
   Schema.Struct({ kind: Schema.Literal('click_ground'), x: Schema.Number, z: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal('engage'), targetId: Schema.String }),

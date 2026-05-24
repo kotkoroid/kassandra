@@ -2,49 +2,37 @@ import * as Schema from 'effect/Schema';
 
 // --- Enums -------------------------------------------------------
 
-const Sex = Schema.Union([Schema.Literal('male'), Schema.Literal('female')]);
+const Sex = Schema.Literals(['male', 'female']);
 
-const HairColor = Schema.Union([
-  Schema.Literal('black'),
-  Schema.Literal('brown'),
-  Schema.Literal('blonde'),
-  Schema.Literal('red'),
-  Schema.Literal('gray'),
-  Schema.Literal('white'),
+const HairColor = Schema.Literals(['black', 'brown', 'blonde', 'red', 'gray', 'white']);
+
+const ArmorColor = Schema.Literals([
+  'silver',
+  'gold',
+  'black',
+  'brown',
+  'red',
+  'green',
+  'blue',
+  'white',
 ]);
 
-const ArmorColor = Schema.Union([
-  Schema.Literal('silver'),
-  Schema.Literal('gold'),
-  Schema.Literal('black'),
-  Schema.Literal('brown'),
-  Schema.Literal('red'),
-  Schema.Literal('green'),
-  Schema.Literal('blue'),
-  Schema.Literal('white'),
-]);
+const PlayerClass = Schema.Literals(['warrior', 'assassin', 'mage', 'bruiser']);
 
-const PlayerClass = Schema.Union([
-  Schema.Literal('warrior'),
-  Schema.Literal('assassin'),
-  Schema.Literal('mage'),
-  Schema.Literal('bruiser'),
-]);
-
-export const EntityKind = Schema.Union([
-  Schema.Literal('spider-big'),
-  Schema.Literal('spider-medium'),
-  Schema.Literal('spider-tiny'),
-  Schema.Literal('wolf'),
-  Schema.Literal('bear'),
-  Schema.Literal('warmaiden'),
-  Schema.Literal('shadowmaiden'),
-  Schema.Literal('swain'),
-  Schema.Literal('bowmaiden'),
-  Schema.Literal('spellmaiden'),
-  Schema.Literal('janna'),
-  Schema.Literal('azir'),
-  Schema.Literal('troller'),
+export const EntityKind = Schema.Literals([
+  'spider-big',
+  'spider-medium',
+  'spider-tiny',
+  'wolf',
+  'bear',
+  'warmaiden',
+  'shadowmaiden',
+  'swain',
+  'bowmaiden',
+  'spellmaiden',
+  'janna',
+  'azir',
+  'troller',
 ]);
 
 // --- Spell channel state -----------------------------------------
@@ -193,11 +181,7 @@ export const ChatMessageSnapshot = Schema.Struct({
   id: Schema.String,
   author: Schema.String,
   text: Schema.String,
-  channel: Schema.Union([
-    Schema.Literal('Normal'),
-    Schema.Literal('Global'),
-    Schema.Literal('Group'),
-  ]),
+  channel: Schema.Literals(['Normal', 'Global', 'Group']),
 });
 
 // --- Top-level snapshot ------------------------------------------
