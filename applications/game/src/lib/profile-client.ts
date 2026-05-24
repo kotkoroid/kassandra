@@ -37,13 +37,16 @@ export class ProfileClient extends Context.Service<
 
 /**
  * Build the WS URL for the PlayerProfile connection. Same dev/prod
- * pattern as realm-client.ts: WS rides the page origin via Vite's
- * `/realm` proxy in dev so the HttpOnly session cookie attaches
- * (cookies are host-locked in dev, must match the page origin).
+ * pattern as realm-client.ts: dev hits the Bun WS proxy on
+ * `localhost:5555`; prod hits VITE_REALM_URL under the same eTLD+1
+ * as the app so the cookie travels same-site.
+ *
+ * Override with `VITE_REALM_WS_OVERRIDE` if you have a different
+ * dev proxy / port setup.
  */
 const wsUrlFor = (accountId: string): string => {
   const base = import.meta.env.DEV
-    ? `ws://${window.location.host}/realm`
+    ? (import.meta.env['VITE_REALM_WS_OVERRIDE'] ?? 'ws://localhost:5555')
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');

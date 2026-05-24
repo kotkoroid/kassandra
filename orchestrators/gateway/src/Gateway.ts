@@ -71,22 +71,7 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
     const envRec = env as Record<string, string | undefined>;
     const cookieSecure = isTruthy(envRec['SESSION_COOKIE_SECURE']);
     const cookieDomain = envRec['SESSION_COOKIE_DOMAIN'] ?? '';
-    // Dev default permits common local-dev page origins. Note that
-    // `alchemy dev` itself binds port 5173 for its Cloudflare.Vite
-    // bundled-asset serving, so a *second* standalone Vite always
-    // falls back to 5174 (and onward if that's also busy). We allow
-    // a small range of fallback ports so the default boots whatever
-    // port Vite ends up on; production sets ALLOWED_ORIGIN
-    // explicitly and the default is irrelevant.
-    const allowedOrigin =
-      envRec['ALLOWED_ORIGIN'] ??
-      [
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:5175',
-        'http://localhost:5176',
-        'http://game.localhost:1337',
-      ].join(',');
+    const allowedOrigin = envRec['ALLOWED_ORIGIN'] ?? 'http://localhost:5173';
     const allowedOrigins = allowedOrigin
       .split(',')
       .map((s) => s.trim())
