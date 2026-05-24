@@ -53,6 +53,7 @@ export {
   type SpawnerShape,
 } from './Spawner.ts';
 export { makeSpells, Spells, SpellsLayer, type SpellsShape } from './Spells.ts';
+export { makeTick, Tick, TickLayer, type TickShape } from './Tick.ts';
 export { makeTime, Time, TimeLayer, type TimeShape } from './Time.ts';
 export {
   makeWorldRef,

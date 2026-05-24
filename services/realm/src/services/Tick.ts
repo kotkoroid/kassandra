@@ -11,10 +11,8 @@
 
 import type { Snapshot } from '@kassandra/protocol-foundation-library';
 import {
-  tick,
-  type FrameInputs,
-  type PlayerId,
-  type SimEvent,
+  Tick as SimTick,
+  type WorldRefShape,
 } from '@kassandra/simulation-domain-library';
 import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
@@ -24,8 +22,6 @@ import type * as PubSub from 'effect/PubSub';
 import * as PubSubMod from 'effect/PubSub';
 import * as Ref from 'effect/Ref';
 import * as Schedule from 'effect/Schedule';
-
-import type { WorldRefShape } from '@kassandra/simulation-domain-library';
 
 import type { InputBufferShape } from './InputBuffer.ts';
 
@@ -47,42 +43,31 @@ export class Tick extends Context.Service<Tick, TickShape>()(
 ) {}
 
 /**
- * Build a Tick orchestrator over the given services. Pure factory —
- * the result depends only on the values passed in, so PartyRoom can
- * construct everything in its own per-DO setup without going through
- * Layer.
+ * Build a Tick orchestrator over the given services. Yields sim's
+ * `Tick` service (the actual per-step orchestration); PartyRoom
+ * provides it via SimLayer when constructing this.
  *
- * PR-B2: snapshots publish to a PubSub<Snapshot> instead of being
- * JSON-stringified and broadcast to sockets directly. RpcServer's
- * `SnapshotStream` handler subscribes via `Stream.fromPubSub` — fan-out
- * + framing + serialization all become RpcServer's job.
+ * What this layer adds on top of sim's Tick:
+ *   - Drain the per-player InputBuffer once per step.
+ *   - After the sim step, build the wire-form snapshot and publish it
+ *     to the PubSub that the RpcServer's SnapshotStream handler reads.
+ *
+ * Sim handles the actual simulation; realm handles the realm-specific
+ * I/O (inputs from RPC handlers, snapshots fanned out to clients).
  */
 export const makeTick = (deps: {
   readonly worldRef: WorldRefShape;
   readonly inputBuffer: InputBufferShape;
   readonly snapshotPubSub: PubSub.PubSub<Snapshot>;
-}): Effect.Effect<TickShape> =>
+}): Effect.Effect<TickShape, never, SimTick> =>
   Effect.gen(function* () {
+    const simTick = yield* SimTick;
     const { worldRef, inputBuffer, snapshotPubSub } = deps;
 
     const step = (dt: number) =>
       Effect.gen(function* () {
         const { allInputs, allEvents } = yield* inputBuffer.drainFrame;
-        yield* worldRef.modify((w) => {
-          // Same mutate-in-place pattern as the old code path. The Ref
-          // is set to the same reference; downstream consumers `yield*
-          // worldRef.get` and see the new state. tick becomes pure /
-          // Effect-native in PR-D. The cast turns ReadonlyArray into
-          // the mutable shape `tick()` still accepts — sim library
-          // signature widens in PR-D2.
-          tick(
-            w,
-            dt,
-            allInputs as Record<PlayerId, FrameInputs>,
-            allEvents as Record<PlayerId, SimEvent[]>,
-          );
-          return w;
-        });
+        yield* simTick.step(dt, allInputs, allEvents);
         const snapshot = yield* worldRef.snapshot;
         yield* PubSubMod.publish(snapshotPubSub, snapshot);
       });

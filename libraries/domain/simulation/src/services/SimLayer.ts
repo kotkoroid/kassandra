@@ -23,6 +23,7 @@ import { NpcChatLayer } from './NpcChat.ts';
 import { ProjectilesLayer } from './Projectiles.ts';
 import { SpawnerLayer } from './Spawner.ts';
 import { SpellsLayer } from './Spells.ts';
+import { TickLayer } from './Tick.ts';
 import { TimeLayer } from './Time.ts';
 
 /**
@@ -30,11 +31,15 @@ import { TimeLayer } from './Time.ts';
  * implementation (e.g., `Layer.effect(WorldRef)(makeWorldRef(initial))`)
  * to get a full runtime.
  *
- * PR-D3 adds an Effect-native `Tick` orchestrator that yields every
- * service in here to drive the simulation in one step. Until then,
- * the realm side still calls the function-based `tick()` directly.
+ * PR-D3a structure: every per-system layer is a sibling (none depend
+ * on each other), but `TickLayer` requires every other one. We can't
+ * use a flat `Layer.mergeAll` because mergeAll unions requirements
+ * rather than wiring siblings — TickLayer's deps would leak out.
+ * Instead, build a flat layer of the sibling services first, then
+ * `provideMerge` it into TickLayer so the orchestrator's requirements
+ * are satisfied and ALL services are exposed in the result.
  */
-export const SimLayer = Layer.mergeAll(
+const SimSystemLayers = Layer.mergeAll(
   CombatLayer,
   DeathLayer,
   EventBusLayer,
@@ -49,3 +54,5 @@ export const SimLayer = Layer.mergeAll(
   SpellsLayer,
   TimeLayer,
 );
+
+export const SimLayer = TickLayer.pipe(Layer.provideMerge(SimSystemLayers));

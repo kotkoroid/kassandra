@@ -33,6 +33,8 @@ import {
   createWorld,
   makeWorldRef,
   pushSystem,
+  SimLayer,
+  WorldRef,
   type PlayerId,
 } from '@kassandra/simulation-domain-library';
 import * as Cloudflare from 'alchemy/Cloudflare';
@@ -80,8 +82,15 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       const snapshotPubSub = yield* PubSub.unbounded<Snapshot>();
       const disbandPubSub = yield* PubSub.unbounded<void>();
 
-      // Tick orchestrator now publishes to snapshotPubSub.
-      const tick = yield* makeTick({ worldRef, inputBuffer, snapshotPubSub });
+      // Tick orchestrator: realm wrapper around sim's Tick service.
+      // SimLayer is provided here with our WorldRef instance plumbed
+      // through so sim's services (Combat, Spawner, …) see the same
+      // world the realm is mutating.
+      const tick = yield* makeTick({ worldRef, inputBuffer, snapshotPubSub }).pipe(
+        Effect.provide(
+          SimLayer.pipe(Layer.provide(Layer.succeed(WorldRef)(worldRef))),
+        ),
+      );
 
       // RPC bridge: direct Protocol over DurableWebSocket. The bridge
       // owns the per-client parsers and the disconnects queue; we feed
