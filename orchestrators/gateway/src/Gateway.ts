@@ -7,6 +7,7 @@ import {
   revokeSession,
   SessionsKvNamespace,
 } from '@kassandra/effect-conventions-foundation-library';
+import { AlchemyContext } from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
@@ -102,7 +103,7 @@ function deriveScope(hostHeader: string | undefined): RequestScope {
 
 const decodeSessionRequest = Schema.decodeUnknownEffect(CreateSessionRequest);
 
-export default class Gateway extends Cloudflare.Worker<Gateway>()(
+class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
   'Api',
   {
     main: import.meta.path,
@@ -246,3 +247,15 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
     };
   }).pipe(Effect.provide(KVNamespaceBindingLive)),
 ) {}
+
+// Public URL of this Worker. In dev, alchemy's LocalWorkerProvider
+// serves under http://api.localhost:<port>; in deploy the custom
+// domain is live. The stack file just reads `.url` and never has to
+// know which mode it's in.
+const PROD_URL = `https://api.${PROD_APP_HOST}`;
+
+export default Effect.gen(function* () {
+  const { dev } = yield* AlchemyContext;
+  const worker = yield* GatewayWorker;
+  return { url: dev ? worker.url : PROD_URL };
+});

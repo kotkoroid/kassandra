@@ -1,42 +1,19 @@
 import {
-  parseSessionCookie,
-  readSession,
-  SessionsKvNamespace,
-  touchSession,
+    parseSessionCookie,
+    readSession,
+    SessionsKvNamespace,
+    touchSession,
 } from '@kassandra/effect-conventions-foundation-library';
+import { AlchemyContext } from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
+import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import RealmRoom from './RealmRoom.ts';
 
-// Realm Worker — entry point for all game-server traffic.
-//
-// Routing:
-//   GET /realms/:realmId/ws?upgrade=websocket → RealmRoom DO
-//   *                                          → 404
-//
-// PR-G5: every WS upgrade is authenticated by SESSION COOKIE. The
-// gateway sets `__Secure-kassandra.sid=<opaqueId>` on POST /sessions
-// (HttpOnly+Secure+SameSite=Strict+Domain=eTLD+1); the browser ships
-// the cookie on the WS upgrade handshake same-site; the realm parses
-// it out, reads the session record from the shared KV namespace, and:
-//   - rejects with 401 on missing/expired/unknown sid
-//   - rejects with 403 on Origin mismatch (CSRF defense alongside the
-//     SameSite cookie attribute — belt-and-suspenders since SameSite
-//     is browser-honored only)
-//   - slides the session TTL on every successful upgrade (active
-//     players never time out; idle ones reclaim automatically)
-//   - rewrites the forwarded URL with `?playerId=<accountId>` so the
-//     RealmRoom DO sees a realm-controlled player identity, never
-//     client-controlled
-//
-// ADR-002: PlayerProfile DO + /profiles route are gone. Character
-// identity is per-realm and lives inside each RealmRoom's persisted
-// world.
-
 const PROD_APP_HOST = 'kassandra.kotkoroid.com';
+
 const DEV_ORIGINS = [
   'http://localhost:5555',
   'http://localhost:5173',
@@ -74,16 +51,13 @@ function originsFor(hostHeader: string | undefined): string[] {
   return [`https://${site}`];
 }
 
-export default class Realm extends Cloudflare.Worker<Realm>()(
+class RealmWorker extends Cloudflare.Worker<RealmWorker>()(
   'Realm',
   {
     main: import.meta.path,
     compatibility: {
       flags: ['nodejs_compat'],
     },
-    // Production custom hostname. Alchemy infers the Cloudflare Zone
-    // from the suffix. Dev mode ignores this (LocalWorkerProvider
-    // unconditionally sets `domains: []`).
     domain: `realm.${PROD_APP_HOST}`,
   },
   Effect.gen(function* () {
@@ -171,3 +145,15 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     };
   }).pipe(Effect.provide(KVNamespaceBindingLive)),
 ) {}
+
+// Public URL of this Worker. In dev, alchemy's LocalWorkerProvider
+// serves under http://realm.localhost:<port>; in deploy the custom
+// domain is live. The stack file just reads `.url` and never has to
+// know which mode it's in.
+const PROD_URL = `https://realm.${PROD_APP_HOST}`;
+
+export default Effect.gen(function* () {
+  const { dev } = yield* AlchemyContext;
+  const worker = yield* RealmWorker;
+  return { url: dev ? worker.url : PROD_URL };
+});

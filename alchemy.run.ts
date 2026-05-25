@@ -1,37 +1,31 @@
-import * as Alchemy from 'alchemy';
-import * as Cloudflare from 'alchemy/Cloudflare';
-import * as Effect from 'effect/Effect';
-import Gateway from './orchestrators/gateway/src/Gateway.ts';
-import Realm from './services/realm/src/Realm.ts';
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Game from "./applications/game/Game.ts";
+import Gateway from "./orchestrators/gateway/src/Gateway.ts";
+import Realm from "./services/realm/src/Realm.ts";
 
 export default Alchemy.Stack(
-  'Kassandra',
+  "Kassandra",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    // Worker - Gateway Orchestrator
     const gateway = yield* Gateway;
+
+    // Worker - Realm Service
     const realm = yield* Realm;
 
-    const game = yield* Cloudflare.Vite('Game', {
-      rootDir: './applications/game',
-      compatibility: {
-        flags: ['nodejs_compat'],
-      },
-      env: {
-        VITE_GATEWAY_URL: gateway.url,
-        VITE_REALM_URL: realm.url,
-      },
-      // Production custom hostname. The realm + gateway live one DNS
-      // label deeper (realm/api.kassandra.kotkoroid.com) so the same
-      // session cookie scoped to .kassandra.kotkoroid.com travels to
-      // all three. Alchemy's local dev provider ignores this field.
-      domain: 'kassandra.kotkoroid.com',
+    // Worker - Game Application
+    const game = yield* Game({
+      VITE_GATEWAY_URL: gateway.url,
+      VITE_REALM_URL: realm.url,
     });
 
     return {
-      url: game.url,
+      gameUrl: game.url,
       gatewayUrl: gateway.url,
       realmUrl: realm.url,
     };
