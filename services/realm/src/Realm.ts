@@ -36,8 +36,43 @@ import PartyRoom from './PartyRoom.ts';
 // identity is per-realm and lives inside each PartyRoom's persisted
 // world.
 
+const PROD_APP_HOST = 'kassandra.kotkoroid.com';
+const DEV_ORIGINS = [
+  'http://localhost:5555',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+  'http://game.localhost:1337',
+];
+
 const extractOrigin = (headers: Record<string, string>): string | undefined =>
   headers['origin'];
+
+// Per-request origin allow-list — mirrors `deriveScope` in Gateway.ts.
+// The same Realm Worker binary serves dev (realm.localhost:1337) and
+// prod (realm.kassandra.kotkoroid.com); the request's Host header tells
+// us which, and the allowed origin set follows.
+function isLocalDevHost(host: string): boolean {
+  if (host === '') return true;
+  const bare = host.split(':')[0]!;
+  if (bare === 'localhost' || bare.endsWith('.localhost')) return true;
+  if (host.includes(':1337')) return true;
+  if (/:5(17[3-6]|555)$/.test(host)) return true;
+  return false;
+}
+
+function originsFor(hostHeader: string | undefined): string[] {
+  const host = (hostHeader ?? '').toLowerCase();
+  if (isLocalDevHost(host)) return DEV_ORIGINS;
+  // Cloudflare terminates TLS at the edge, so any non-localhost host
+  // means HTTPS. Derive the cookie's parent site by dropping the first
+  // DNS label (realm.kassandra.kotkoroid.com → kassandra.kotkoroid.com)
+  // and accept https://<site> as the only valid origin.
+  const labels = host.split(':')[0]!.split('.');
+  const site = labels.length >= 3 ? labels.slice(1).join('.') : labels.join('.');
+  return [`https://${site}`];
+}
 
 export default class Realm extends Cloudflare.Worker<Realm>()(
   'Realm',
@@ -46,6 +81,10 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     compatibility: {
       flags: ['nodejs_compat'],
     },
+    // Production custom hostname. Alchemy infers the Cloudflare Zone
+    // from the suffix. Dev mode ignores this (LocalWorkerProvider
+    // unconditionally sets `domains: []`).
+    domain: `realm.${PROD_APP_HOST}`,
   },
   Effect.gen(function* () {
     // PR-G5: bind the shared session KV. The Gateway yields the SAME
@@ -53,32 +92,6 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     // physical namespace.
     const sessionsResource = yield* SessionsKvNamespace;
     const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
-
-    // Origin allow-list. Read directly from env (same shape PR-G2 used
-    // for JWT_SECRET) to avoid leaking `ConfigError` into the Worker's
-    // never-error channel.
-    const env = yield* Cloudflare.WorkerEnvironment;
-    // Dev default mirrors the gateway: alchemy dev binds 5173 for its
-    // bundled-asset Vite, so a second standalone Vite (used for HMR
-    // against the live workers) lands on 5174+. Allow a small range
-    // so the default boots whichever port Vite picks. Production sets
-    // ALLOWED_ORIGIN explicitly.
-    const allowedOrigin =
-      (env as Record<string, string | undefined>)['ALLOWED_ORIGIN'] ??
-      [
-        'http://localhost:5555',
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:5175',
-        'http://localhost:5176',
-        'http://game.localhost:1337',
-      ].join(',');
-    const allowedOrigins = allowedOrigin
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    const originAllowed = (origin: string | undefined): boolean =>
-      typeof origin === 'string' && allowedOrigins.includes(origin);
 
     const rooms = yield* PartyRoom;
 
@@ -101,11 +114,22 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
         // CSRF defense: pair SameSite=Strict on the cookie with an
         // explicit Origin allow-list check on the upgrade. Browsers
         // can initiate WS cross-origin (no preflight), so an Origin
-        // check is the only server-side guarantee.
+        // check is the only server-side guarantee. The allow-list is
+        // derived from the request's own host so dev (localhost) and
+        // prod (realm.kassandra.kotkoroid.com) work from the same
+        // Worker binary.
         const originHeader = extractOrigin(request.headers);
-        if (!originAllowed(originHeader)) {
+        const allowedOrigins = originsFor(request.headers['host']);
+        if (
+          typeof originHeader !== 'string' ||
+          !allowedOrigins.includes(originHeader)
+        ) {
           yield* Effect.logWarning('Origin rejected').pipe(
-            Effect.annotateLogs({ origin: originHeader ?? '<missing>', path: pathname }),
+            Effect.annotateLogs({
+              origin: originHeader ?? '<missing>',
+              path: pathname,
+              allowed: allowedOrigins.join(','),
+            }),
           );
           return HttpServerResponse.text('Forbidden', { status: 403 });
         }

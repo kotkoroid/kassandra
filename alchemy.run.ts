@@ -23,6 +23,11 @@ export default Alchemy.Stack(
         VITE_GATEWAY_URL: gateway.url,
         VITE_REALM_URL: realm.url,
       },
+      // Production custom hostname. The realm + gateway live one DNS
+      // label deeper (realm/api.kassandra.kotkoroid.com) so the same
+      // session cookie scoped to .kassandra.kotkoroid.com travels to
+      // all three. Alchemy's local dev provider ignores this field.
+      domain: 'kassandra.kotkoroid.com',
     });
 
     return {
