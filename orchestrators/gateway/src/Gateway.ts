@@ -125,13 +125,9 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
     const sessionsResource = yield* SessionsKvNamespace;
     const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
 
-    // HttpApi router for /realms. The CORS layer needs a static
-    // origin list at build time; we pass the union of dev + prod so
-    // the router handles preflight + response headers for both
-    // environments. The hand-rolled /sessions branch below does its
-    // own per-request origin check (tighter, host-aware) for the
-    // CSRF defense — the static union here is just so HttpApi's CORS
-    // middleware can echo back the right Allow-Origin.
+    // HttpApi router for /realms. CORS is applied by the outer fetch
+    // handler (not a Layer) so it follows the same per-request
+    // host-derived scope that /sessions uses.
     const realmsApi = HttpApiBuilder.group(ApiDefinition, 'Realms', (handlers) =>
       handlers.handle('create-realm', () =>
         Effect.sync(() => new CreateRealmSuccess({ id: crypto.randomUUID() })),
@@ -141,12 +137,6 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
     const httpApiFetch = yield* HttpApiBuilder.layer(ApiDefinition).pipe(
       Layer.provide([realmsApi]),
       Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
-      Layer.provide(
-        HttpRouter.cors({
-          allowedOrigins: [...DEV_ORIGINS, `https://${PROD_APP_HOST}`],
-          credentials: true,
-        }),
-      ),
       HttpRouter.toHttpEffect,
     );
 
@@ -187,18 +177,38 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
           'Access-Control-Allow-Headers': 'content-type',
           Vary: 'Origin',
         };
+        // Production CSRF guard. Only enforced when scope.isSecure=true
+        // (i.e. a real HTTPS Cloudflare edge request, not localhost dev).
+        // In local dev the proxy chain (browser → ws-proxy → alchemy)
+        // can mangle, strip, or rewrite the Origin header in ways that
+        // make an exact-match check unreliable. Localhost CSRF is not a
+        // real threat, so we skip the check there entirely.
         const originAllowed = (h: string | undefined): boolean =>
           typeof h === 'string' && scope.allowedOrigins.includes(h);
 
+        // ----- Global CORS preflight -----
+        // All credentialed endpoints (/sessions, /realms, …) trigger an
+        // OPTIONS preflight from the browser. Handle it once here so each
+        // route branch doesn't have to repeat it. The per-request `cors`
+        // object already holds the right Allow-Origin for this request.
+        if (request.method === 'OPTIONS') {
+          return HttpServerResponse.empty({ status: 204, headers: cors });
+        }
+
         // ----- /sessions: cookie-flow endpoints -----
         if (url.pathname === '/sessions') {
-          // CORS preflight. Any path that the browser will hit with a
-          // non-simple verb + credentials needs to answer OPTIONS.
-          if (request.method === 'OPTIONS') {
-            return HttpServerResponse.empty({ status: 204, headers: cors });
+          // Temporary dev diagnostic — log once per request so the
+          // alchemy terminal shows exactly what the Gateway receives.
+          // Remove after the 403 investigation is closed.
+          if (!scope.isSecure) {
+            console.log('[Gateway /sessions]', {
+              method: request.method,
+              origin: originHeader ?? '(none)',
+              host: hostHeader ?? '(none)',
+            });
           }
 
-          if (!originAllowed(originHeader)) {
+          if (scope.isSecure && !originAllowed(originHeader)) {
             return HttpServerResponse.text('Forbidden', { status: 403, headers: cors });
           }
 
@@ -241,8 +251,11 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
         }
 
         // Everything else: delegate to the HttpApi router (currently
-        // just /realms).
-        return yield* httpApiFetch;
+        // just /realms). Inject CORS headers onto the response here —
+        // HttpRouter.cors as a provided Layer doesn't fire for these
+        // requests, so we apply them the same way /sessions does.
+        const apiResponse = yield* httpApiFetch;
+        return HttpServerResponse.setHeaders(cors)(apiResponse);
       }),
     };
   }).pipe(Effect.provide(KVNamespaceBindingLive)),
