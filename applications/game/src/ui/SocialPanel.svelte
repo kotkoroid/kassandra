@@ -1,32 +1,39 @@
 <script lang="ts">
   import { socialOpen } from '../social.svelte';
 
-  // Three collapsible sections, mirroring the inspiration's
-  // Friends / Guild / Blocked layout. None of these are backed by
-  // real sim state yet, so every section renders "Empty" until the
-  // social features actually land.
+  // Four collapsible sections — Favorites (account-scoped), Party
+  // (current realm's owner-anchored party), Group (an ad-hoc roster
+  // smaller than the party, e.g. a dungeon team), Blocked (suppressed
+  // chat/visibility). None of these are backed by real sim state yet,
+  // so every section renders "Empty" until the social features
+  // actually land. The taxonomy aligns with ADR-002: Party is
+  // per-realm (matches PartyRoom membership); Favorites is the
+  // account-wide social graph that won't exist until an
+  // account-scoped DO is reintroduced.
   interface Entry {
     name: string;
     online: boolean;
   }
 
   interface Section {
-    key: 'friends' | 'guild' | 'blocked';
+    key: 'favorites' | 'party' | 'group' | 'blocked';
     label: string;
     entries: Entry[];
   }
 
   const sections: Section[] = [
-    { key: 'friends', label: 'Friends', entries: [] },
-    { key: 'guild', label: 'Guild', entries: [] },
+    { key: 'favorites', label: 'Favorites', entries: [] },
+    { key: 'party', label: 'Party', entries: [] },
+    { key: 'group', label: 'Group', entries: [] },
     { key: 'blocked', label: 'Blocked', entries: [] },
   ];
 
   // All sections expanded by default — the inspiration shows every
   // header with a chevron, so let users collapse individually.
   let collapsed = $state<Record<Section['key'], boolean>>({
-    friends: false,
-    guild: false,
+    favorites: false,
+    party: false,
+    group: false,
     blocked: false,
   });
 </script>
