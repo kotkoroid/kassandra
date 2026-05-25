@@ -51,14 +51,16 @@
   // spot for sharp UI overlays without quartering the fragment budget.
   const dpr = Math.min(window.devicePixelRatio, 1.5);
 
-  // Listen for disband events from the realm. realm.disbandCount is
-  // bumped exactly once per 'disbanded' message; the local `seenDisbands`
-  // cursor (plain `let`, intentionally NOT $state — writing to it must
-  // not retrigger this effect) tracks which bumps we've already handled.
-  let seenDisbands = 0;
+  // Listen for end-of-session events from the realm. `sessionEndCount`
+  // is bumped on both server-initiated disbands and client-initiated
+  // leaves (see realm.svelte's `disbandParty` / `leaveParty`); the local
+  // `seenEnds` cursor (plain `let`, intentionally NOT $state — writing
+  // to it must not retrigger this effect) tracks which bumps we've
+  // already handled.
+  let seenEnds = 0;
   $effect(() => {
-    if (realm.disbandCount > seenDisbands) {
-      seenDisbands = realm.disbandCount;
+    if (realm.sessionEndCount > seenEnds) {
+      seenEnds = realm.sessionEndCount;
       view = 'party';
     }
   });

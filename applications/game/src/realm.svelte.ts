@@ -17,10 +17,12 @@ import { makeRealmClientLayer, RealmClient } from './lib/realm-client';
 export const realm = $state({
   connected: false,
   partyId: null as string | null,
-  // Monotonic counter bumped each time the server signals a disband
-  // (via the Disbanded RPC stream). App.svelte watches this to redirect
-  // back to PartySetup.
-  disbandCount: 0,
+  // Monotonic counter bumped each time the active session ends — either
+  // the owner disbanded (server's Disbanded stream emitted) or the local
+  // player chose to leave (`leaveParty()` below). App.svelte watches
+  // this to redirect back to PartySetup; both end-of-session reasons
+  // funnel through one signal because the consumer doesn't care which.
+  sessionEndCount: 0,
 });
 
 // One ManagedRuntime per party connection. Synchronous-constructed,
@@ -74,7 +76,7 @@ export function connect(id: string) {
       const client = yield* RealmClient;
       yield* Stream.runForEach(client.Disbanded(), () =>
         Effect.sync(() => {
-          realm.disbandCount += 1;
+          realm.sessionEndCount += 1;
           disconnect();
           const url = new URL(window.location.href);
           url.searchParams.delete('party');
@@ -140,4 +142,25 @@ export function disbandParty() {
       );
     }),
   );
+}
+
+/**
+ * Non-owner counterpart to `disbandParty`. The local player walks away
+ * from the party without tearing it down for everyone else. No
+ * dedicated RPC is needed — closing the WebSocket is the canonical
+ * leave signal: PartyRoom's `webSocketClose` handler removes this
+ * player's record from the world, persists the snapshot (PR-E), and
+ * notes the departure in chat. The party stays alive for whoever's
+ * left; the owner role does NOT transfer (current design — owner
+ * leaving without disbanding leaves the party orphaned, which is an
+ * accepted limitation until a "promote new owner on owner-leave" PR
+ * lands).
+ */
+export function leaveParty() {
+  if (!runtime) return;
+  realm.sessionEndCount += 1;
+  disconnect();
+  const url = new URL(window.location.href);
+  url.searchParams.delete('party');
+  window.history.replaceState(null, '', url.toString());
 }

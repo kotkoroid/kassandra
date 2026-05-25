@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { disbandParty as disbandPartyRpc } from '../realm.svelte';
+  import {
+    disbandParty as disbandPartyRpc,
+    leaveParty as leavePartyRpc,
+  } from '../realm.svelte';
   import { settings } from '../settings.svelte';
   import { world } from '../world.svelte';
 
@@ -30,6 +33,14 @@
     // swallows it just in case. The server's Disbanded stream fires,
     // every client (including this one) sees the redirect.
     disbandPartyRpc();
+    onClose();
+  }
+
+  function leaveParty() {
+    // Non-owner counterpart. No server RPC — closing the WS triggers
+    // PartyRoom's webSocketClose handler which removes this player
+    // from the world. Other players stay; the party persists.
+    leavePartyRpc();
     onClose();
   }
 </script>
@@ -111,13 +122,13 @@
         </ul>
       </section>
 
-      {#if isOwner}
-        <section>
-          <h3
-            class="mb-2 text-xs font-semibold tracking-widest text-amber-200/80 uppercase"
-          >
-            Party
-          </h3>
+      <section>
+        <h3
+          class="mb-2 text-xs font-semibold tracking-widest text-amber-200/80 uppercase"
+        >
+          Party
+        </h3>
+        {#if isOwner}
           <button
             type="button"
             class="w-full border border-red-700/60 bg-red-900/30 px-3 py-1.5 text-sm font-semibold tracking-wider text-red-200 uppercase hover:bg-red-900/60"
@@ -128,8 +139,20 @@
           <p class="mt-1 text-xs text-amber-200/60">
             Disconnects every player and deletes the party. Cannot be undone.
           </p>
-        </section>
-      {/if}
+        {:else}
+          <button
+            type="button"
+            class="w-full border border-amber-700/60 bg-amber-900/20 px-3 py-1.5 text-sm font-semibold tracking-wider text-amber-200 uppercase hover:bg-amber-900/40"
+            onclick={leaveParty}
+          >
+            Leave Party
+          </button>
+          <p class="mt-1 text-xs text-amber-200/60">
+            Returns you to party selection. The party stays alive for other
+            players; you can rejoin later with the same party ID.
+          </p>
+        {/if}
+      </section>
     </div>
   </div>
 </div>
