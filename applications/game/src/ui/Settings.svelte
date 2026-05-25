@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    disbandParty as disbandPartyRpc,
-    leaveParty as leavePartyRpc,
+    disbandRealm as disbandRealmRpc,
+    leaveRealm as leaveRealmRpc,
   } from '../realm.svelte';
   import { settings } from '../settings.svelte';
   import { world } from '../world.svelte';
@@ -27,20 +27,20 @@
     world.ownerId !== null && world.ownerId === world.localPlayerId,
   );
 
-  function disbandParty() {
+  function disbandRealm() {
     // Calls the owner-only Disband RPC. The button is owner-gated so
     // we don't expect NotOwnerError in practice; realm.svelte.ts
     // swallows it just in case. The server's Disbanded stream fires,
     // every client (including this one) sees the redirect.
-    disbandPartyRpc();
+    disbandRealmRpc();
     onClose();
   }
 
-  function leaveParty() {
+  function leaveRealm() {
     // Non-owner counterpart. No server RPC — closing the WS triggers
-    // PartyRoom's webSocketClose handler which removes this player
-    // from the world. Other players stay; the party persists.
-    leavePartyRpc();
+    // RealmRoom's webSocketClose handler which removes this player
+    // from the world. Other players stay; the realm persists.
+    leaveRealmRpc();
     onClose();
   }
 </script>
@@ -126,30 +126,30 @@
         <h3
           class="mb-2 text-xs font-semibold tracking-widest text-amber-200/80 uppercase"
         >
-          Party
+          Realm
         </h3>
         {#if isOwner}
           <button
             type="button"
             class="w-full border border-red-700/60 bg-red-900/30 px-3 py-1.5 text-sm font-semibold tracking-wider text-red-200 uppercase hover:bg-red-900/60"
-            onclick={disbandParty}
+            onclick={disbandRealm}
           >
-            Disband Party
+            Disband Realm
           </button>
           <p class="mt-1 text-xs text-amber-200/60">
-            Disconnects every player and deletes the party. Cannot be undone.
+            Disconnects every player and deletes the realm. Cannot be undone.
           </p>
         {:else}
           <button
             type="button"
             class="w-full border border-amber-700/60 bg-amber-900/20 px-3 py-1.5 text-sm font-semibold tracking-wider text-amber-200 uppercase hover:bg-amber-900/40"
-            onclick={leaveParty}
+            onclick={leaveRealm}
           >
-            Leave Party
+            Leave Realm
           </button>
           <p class="mt-1 text-xs text-amber-200/60">
-            Returns you to party selection. The party stays alive for other
-            players; you can rejoin later with the same party ID.
+            Returns you to realm selection. The realm stays alive for other
+            players; you can rejoin later with the same realm ID.
           </p>
         {/if}
       </section>

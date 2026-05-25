@@ -8,7 +8,7 @@
 //   testable (swap in a virtual clock).
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts:148-178 setInterval(…, 50) for the
+//   - services/realm/src/RealmRoom.ts:148-178 setInterval(…, 50) for the
 //     20 Hz tick → `Effect.forkScoped(tickLoop)` with
 //     `Schedule.spaced(Duration.millis(50))`. Closing the DO scope kills
 //     the fiber automatically — no manual `stopTickLoop()` needed.

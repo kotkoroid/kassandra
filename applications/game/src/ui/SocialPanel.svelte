@@ -2,19 +2,19 @@
   import { socialOpen } from '../social.svelte';
   import { world } from '../world.svelte';
 
-  // Four collapsible sections — Favorites (account-scoped), Party
-  // (current realm's owner-anchored party), Group (an ad-hoc roster
-  // smaller than the party, e.g. a dungeon team), Blocked (suppressed
-  // chat/visibility). The taxonomy aligns with ADR-002: Party is
-  // per-realm (matches PartyRoom membership); Favorites is the
+  // Four collapsible sections — Favorites (account-scoped), Realm
+  // (current realm's roster), Group (an ad-hoc roster
+  // smaller than the realm, e.g. a dungeon team), Blocked (suppressed
+  // chat/visibility). The taxonomy aligns with ADR-002: Realm is
+  // per-realm (matches RealmRoom membership); Favorites is the
   // account-wide social graph that won't exist until an
   // account-scoped DO is reintroduced.
   //
-  // Party is the only live-data section today — it mirrors
+  // Realm is the only live-data section today — it mirrors
   // `world.players`, which the realm rebuilds from every snapshot.
   // Players present in the snapshot are by definition connected, so
   // every entry is "online" until they disconnect (at which point
-  // PartyRoom drops them from the world). Favorites / Group / Blocked
+  // RealmRoom drops them from the world). Favorites / Group / Blocked
   // still render "Empty" until their backing state lands.
   interface Entry {
     name: string;
@@ -22,7 +22,7 @@
   }
 
   interface Section {
-    key: 'favorites' | 'party' | 'group' | 'blocked';
+    key: 'favorites' | 'realm' | 'group' | 'blocked';
     label: string;
     entries: Entry[];
   }
@@ -31,7 +31,7 @@
   // is technically in the world but hasn't picked an identity yet,
   // so showing them in the social roster is just visual noise. Sort
   // by name for deterministic ordering across rerenders.
-  const partyEntries = $derived<Entry[]>(
+  const realmEntries = $derived<Entry[]>(
     Object.values(world.players)
       .filter((p) => p.name.trim().length > 0)
       .map((p) => ({ name: p.name, online: true }))
@@ -40,7 +40,7 @@
 
   const sections = $derived<Section[]>([
     { key: 'favorites', label: 'Favorites', entries: [] },
-    { key: 'party', label: 'Party', entries: partyEntries },
+    { key: 'realm', label: 'Realm', entries: realmEntries },
     { key: 'group', label: 'Group', entries: [] },
     { key: 'blocked', label: 'Blocked', entries: [] },
   ]);
@@ -49,7 +49,7 @@
   // header with a chevron, so let users collapse individually.
   let collapsed = $state<Record<Section['key'], boolean>>({
     favorites: false,
-    party: false,
+    realm: false,
     group: false,
     blocked: false,
   });

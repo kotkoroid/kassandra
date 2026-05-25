@@ -1,7 +1,7 @@
 // SessionsRef — wraps the per-DO connected-clients map.
 //
-// Replaces `const sessions = new Map<…>()` at old PartyRoom.ts:126
-// plus the `broadcast(text)` helper at old PartyRoom.ts:140-145.
+// Replaces `const sessions = new Map<…>()` at old RealmRoom.ts:126
+// plus the `broadcast(text)` helper at old RealmRoom.ts:140-145.
 // Operations go through a Ref to serialize concurrent reads/writes from
 // the tick fiber (which reads `all` once per tick) and the message
 // handlers (which add/remove).

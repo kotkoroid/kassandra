@@ -7,8 +7,8 @@
 //   module-level `let` / `Set<Handler>` / `Map`.
 //
 // What it replaces in Kassandra (as of this PR):
-//   - services/realm/src/PartyRoom.ts:125 `const world = createWorld()`
-//   - services/realm/src/PartyRoom.ts:126-128 three `new Map()` lines
+//   - services/realm/src/RealmRoom.ts:125 `const world = createWorld()`
+//   - services/realm/src/RealmRoom.ts:126-128 three `new Map()` lines
 //   - libraries/domain/simulation/src/events.ts `Set<Handler>` —
 //     replaced in PR-D3d.3 by per-world `world.recentEvents` shipped
 //     via snapshot

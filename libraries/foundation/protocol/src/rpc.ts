@@ -1,6 +1,6 @@
 // Typed RPC contract between the game client and the realm DO.
 //
-// Single source of truth for the wire surface. Both PartyRoom (server)
+// Single source of truth for the wire surface. Both RealmRoom (server)
 // and applications/game/src/lib/realm-client (client) import this group
 // and the matching schemas; framing, serialization, and routing are
 // all derived from these definitions.
@@ -13,10 +13,10 @@
 //     ride through SendEvent's discriminated payload — each variant
 //     stays typed, but we don't need 13 handler functions doing the
 //     same "look up the player, push into their queue" boilerplate.
-//   - SimEvent's `disband_party` variant is REPLACED by the dedicated
+//   - SimEvent's `disband_realm` variant is REPLACED by the dedicated
 //     `Disband` RPC (which surfaces `NotOwnerError` on the error
 //     channel — much cleaner than silently ignoring non-owner sends).
-//   - All RPCs are gated by `PartySession` middleware, which reads the
+//   - All RPCs are gated by `RealmSession` middleware, which reads the
 //     `?playerId=` query param at WebSocket upgrade time and exposes a
 //     `PlayerSession` service to every handler.
 
@@ -33,7 +33,7 @@ import { Snapshot } from './snapshot';
 // ---------------------------------------------------------------------
 
 /**
- * Raised by `Disband` when the calling player is not the party owner.
+ * Raised by `Disband` when the calling player is not the realm owner.
  * Silently-ignored-on-server is the wrong default — turning this into
  * a typed error makes "who can disband?" part of the client contract.
  */
@@ -62,10 +62,10 @@ export class PlayerSession extends Context.Service<
  * synthesizes this from the WebSocket upgrade URL on accept and
  * threads it through `onSocket(socket, headers)`.
  */
-export class PartySession extends RpcMiddleware.Service<
-  PartySession,
+export class RealmSession extends RpcMiddleware.Service<
+  RealmSession,
   { provides: PlayerSession }
->()('kassandra/realm/PartySession') {}
+>()('kassandra/realm/RealmSession') {}
 
 // ---------------------------------------------------------------------
 // RPC group
@@ -112,7 +112,7 @@ export class RealmRpc extends RpcGroup.make(
    * Server-streamed disband signal. Emits exactly once when the room
    * is disbanded (by the owner via `Disband`, or — in future PRs — by
    * automatic expiry). Every connected client subscribes; on emit they
-   * disconnect and bounce back to PartySetup.
+   * disconnect and bounce back to RealmSetup.
    */
   Rpc.make('Disbanded', {
     payload: Schema.Void,
@@ -122,7 +122,7 @@ export class RealmRpc extends RpcGroup.make(
 
   /**
    * Owner-only. Triggers the disband flow:
-   *   1. Verify caller is the party owner; reject with NotOwnerError otherwise.
+   *   1. Verify caller is the realm owner; reject with NotOwnerError otherwise.
    *   2. Emit on the `Disbanded` stream (every client wakes up).
    *   3. Server closes every socket, wipes DO storage.
    */
@@ -131,4 +131,4 @@ export class RealmRpc extends RpcGroup.make(
     success: Schema.Void,
     error: NotOwnerError,
   }),
-).middleware(PartySession) {}
+).middleware(RealmSession) {}

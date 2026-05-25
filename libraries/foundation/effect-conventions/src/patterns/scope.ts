@@ -7,7 +7,7 @@
 //   Three.js disposables.
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts:316-318 manual sessions.delete()
+//   - services/realm/src/RealmRoom.ts:316-318 manual sessions.delete()
 //     cleanup at webSocketClose → becomes a Scope finalizer registered
 //     at acquire-time. webSocketClose just closes the scope.
 //   - applications/game/src/realm.svelte.ts:12-14,82-83 manual

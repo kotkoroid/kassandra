@@ -20,7 +20,7 @@ import * as HttpRouter from 'effect/unstable/http/HttpRouter';
 import * as HttpApiBuilder from 'effect/unstable/httpapi/HttpApiBuilder';
 import * as Path from 'effect/Path';
 import { ApiDefinition } from './api/api.definition.ts';
-import { CreatePartySuccess } from './api/parties/create-party.schema.ts';
+import { CreateRealmSuccess } from './api/realms/create-realm.schema.ts';
 import {
   CreateSessionRequest,
   CreateSessionSuccess,
@@ -124,21 +124,21 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
     const sessionsResource = yield* SessionsKvNamespace;
     const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
 
-    // HttpApi router for /parties. The CORS layer needs a static
+    // HttpApi router for /realms. The CORS layer needs a static
     // origin list at build time; we pass the union of dev + prod so
     // the router handles preflight + response headers for both
     // environments. The hand-rolled /sessions branch below does its
     // own per-request origin check (tighter, host-aware) for the
     // CSRF defense — the static union here is just so HttpApi's CORS
     // middleware can echo back the right Allow-Origin.
-    const partiesApi = HttpApiBuilder.group(ApiDefinition, 'Parties', (handlers) =>
-      handlers.handle('create-party', () =>
-        Effect.sync(() => new CreatePartySuccess({ id: crypto.randomUUID() })),
+    const realmsApi = HttpApiBuilder.group(ApiDefinition, 'Realms', (handlers) =>
+      handlers.handle('create-realm', () =>
+        Effect.sync(() => new CreateRealmSuccess({ id: crypto.randomUUID() })),
       ),
     );
 
     const httpApiFetch = yield* HttpApiBuilder.layer(ApiDefinition).pipe(
-      Layer.provide([partiesApi]),
+      Layer.provide([realmsApi]),
       Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
       Layer.provide(
         HttpRouter.cors({
@@ -240,7 +240,7 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
         }
 
         // Everything else: delegate to the HttpApi router (currently
-        // just /parties).
+        // just /realms).
         return yield* httpApiFetch;
       }),
     };

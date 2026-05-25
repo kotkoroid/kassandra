@@ -8,7 +8,7 @@
 //
 // The Service shape is the same Effect-style API the realm has been
 // using since PR-B: `get`, `modify` for mutation, `snapshot` for the
-// wire-form. Co-locating snapshot derivation here keeps PartyRoom free
+// wire-form. Co-locating snapshot derivation here keeps RealmRoom free
 // of conversion boilerplate.
 
 import type { Snapshot } from '@kassandra/protocol-foundation-library';

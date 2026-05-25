@@ -1,5 +1,5 @@
 // PR-E: schema for the persisted world. The realm DO writes one row
-// per party to its SQLite storage on last-disconnect and on a 30s
+// per realm to its SQLite storage on last-disconnect and on a 30s
 // alarm; on next connect we decode it back and resume the simulation
 // from where it left off.
 //
@@ -16,14 +16,14 @@
 //     special-casing.
 //   - Mulberry32 state collapses to the `rngSeed: number` field at
 //     the top of the envelope. Restore returns it alongside the
-//     rehydrated world so PartyRoom can build the `RandomState`
+//     rehydrated world so RealmRoom can build the `RandomState`
 //     service (PR-D3e.3) at exactly that seed and rebind
 //     `world.rng` to the shared callable.
 //
 // Versioning: the top-level envelope carries `version: 1`. On a
 // breaking schema change, bump the literal + (later) add a migrator.
 // For now an old payload that fails to decode falls back to
-// `createWorld()` cleanly via PartyStorage.restore returning `None`.
+// `createWorld()` cleanly via RealmStorage.restore returning `None`.
 
 import * as Schema from 'effect/Schema';
 
@@ -330,7 +330,7 @@ const ChatMessage = Schema.Struct({
 
 export const PersistentWorld = Schema.Struct({
   version: Schema.Literal(1),
-  // Mulberry32 seed; PartyRoom feeds it to `makeRandomLayer(seed)`
+  // Mulberry32 seed; RealmRoom feeds it to `makeRandomLayer(seed)`
   // on restore (PR-D3e.3).
   rngSeed: Schema.Number,
   time: Schema.Number,

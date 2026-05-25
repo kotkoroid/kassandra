@@ -2,7 +2,7 @@
 // ----------------------------------------------------------------------
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts current shape — Effect.gen
+//   - services/realm/src/RealmRoom.ts current shape — Effect.gen
 //     scaffold but with mutable Maps + setInterval inside. PR-B rewrites
 //     this to the template below: services for state, forkScoped for
 //     timers, scope-based session lifecycle.

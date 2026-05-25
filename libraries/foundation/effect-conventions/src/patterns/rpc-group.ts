@@ -7,7 +7,7 @@
 //     RpcGroup with typed contracts.
 //   - applications/game/src/realm.svelte.ts WS code → `RpcClient.make`
 //     over an Effect Socket.
-//   - services/realm/src/PartyRoom.ts message handling → a handler
+//   - services/realm/src/RealmRoom.ts message handling → a handler
 //     layer attached to RpcServer.
 //
 // Anatomy of an RPC:

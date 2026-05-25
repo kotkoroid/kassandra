@@ -92,7 +92,7 @@ export function defaultPlayer(): Player {
 
 // PR-D3e.3: createWorld carries an inline Mulberry32 closure as
 // `world.rng` so sim functions stay self-sufficient (tests + dev can
-// drive the sim without wiring `RandomState` themselves). PartyRoom
+// drive the sim without wiring `RandomState` themselves). RealmRoom
 // (and PR-F integration tests) override `world.rng` after restore so
 // the same Mulberry32 state is shared with the `effect/Random`
 // Reference for property-replay determinism.

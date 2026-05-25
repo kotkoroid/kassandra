@@ -7,7 +7,7 @@
 //   that pulls on its own schedule.
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts:129-130 `pendingInputs` +
+//   - services/realm/src/RealmRoom.ts:129-130 `pendingInputs` +
 //     `pendingEvents` Maps → per-session `Queue<ClientMessage>`,
 //     drained at the top of each tick. The manual reset at lines
 //     163-164 disappears — Queue.takeAll empties atomically.

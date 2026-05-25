@@ -8,7 +8,7 @@
 //   that came off the wire, it's a missing schema decode.
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts:226-230 silent `JSON.parse` +
+//   - services/realm/src/RealmRoom.ts:226-230 silent `JSON.parse` +
 //     `as ClientMessageType` cast → `Schema.fromJsonString(ClientMessage)`
 //     piped to a tagged error.
 //   - applications/game/src/realm.svelte.ts:184-251 applySnapshot with

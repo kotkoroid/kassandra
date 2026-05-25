@@ -21,7 +21,7 @@
 //   Secure          — TLS only (omitted in dev; localhost is exempt)
 //   SameSite=Strict — closes the CSRF surface, including top-level
 //                     cross-site navigation
-//   Path=/          — travels to /parties, /profiles, /sessions
+//   Path=/          — travels to /realms, /sessions
 //   Domain=eTLD+1   — shared across api/realm/app subdomains in prod
 //   __Secure- pref. — enforces Secure + same-origin on modern browsers
 //                     (prod only; the prefix demands Secure)

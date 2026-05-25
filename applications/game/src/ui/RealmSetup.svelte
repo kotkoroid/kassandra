@@ -1,46 +1,46 @@
 <script lang="ts">
   interface Props {
-    onReady: (partyId: string) => void;
+    onReady: (realmId: string) => void;
   }
   const { onReady }: Props = $props();
 
-  // If the URL already has ?party=... skip the setup screen entirely.
+  // If the URL already has ?realm=... skip the setup screen entirely.
   $effect(() => {
-    const urlParty = new URLSearchParams(window.location.search).get('party');
-    if (urlParty) onReady(urlParty);
+    const urlRealm = new URLSearchParams(window.location.search).get('realm');
+    if (urlRealm) onReady(urlRealm);
   });
 
   let joinCode = $state('');
   let error = $state('');
   let creating = $state(false);
 
-  async function createParty() {
+  async function createRealm() {
     creating = true;
     error = '';
     try {
       const apiBase = import.meta.env.DEV ? '/api' : import.meta.env.VITE_GATEWAY_URL;
-      const res = await fetch(`${apiBase}/parties`, {
+      const res = await fetch(`${apiBase}/realms`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error(`${res.status}`);
       const { id } = (await res.json()) as { id: string };
-      applyParty(id);
+      applyRealm(id);
     } catch {
-      error = 'Could not create party. Is the server running?';
+      error = 'Could not create realm. Is the server running?';
     } finally {
       creating = false;
     }
   }
 
-  function joinParty() {
+  function joinRealm() {
     const id = joinCode.trim();
-    if (!id) { error = 'Enter a party ID.'; return; }
-    applyParty(id);
+    if (!id) { error = 'Enter a realm ID.'; return; }
+    applyRealm(id);
   }
 
-  function applyParty(id: string) {
+  function applyRealm(id: string) {
     const url = new URL(window.location.href);
-    url.searchParams.set('party', id);
+    url.searchParams.set('realm', id);
     window.history.replaceState(null, '', url.toString());
     onReady(id);
   }
@@ -50,20 +50,20 @@
   <h1>Kassandra</h1>
 
   <div class="card">
-    <button onclick={createParty} disabled={creating}>
-      {creating ? 'Creating…' : 'Create Party'}
+    <button onclick={createRealm} disabled={creating}>
+      {creating ? 'Creating…' : 'Create Realm'}
     </button>
     <p class="divider">— or join one —</p>
     <input
       type="text"
-      placeholder="Party ID"
+      placeholder="Realm ID"
       bind:value={joinCode}
-      onkeydown={(e) => e.key === 'Enter' && joinParty()}
+      onkeydown={(e) => e.key === 'Enter' && joinRealm()}
       spellcheck={false}
       autocomplete="off"
     />
     {#if error}<p class="error">{error}</p>{/if}
-    <button onclick={joinParty} disabled={!joinCode.trim()}>Join Party</button>
+    <button onclick={joinRealm} disabled={!joinCode.trim()}>Join Realm</button>
   </div>
 </div>
 

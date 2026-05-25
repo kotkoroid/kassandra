@@ -16,7 +16,7 @@ if (!target) {
 }
 
 // Settle the auth identity before the Svelte tree mounts. ADR-002:
-// character identity lives per-realm inside each PartyRoom DO; the
+// character identity lives per-realm inside each RealmRoom DO; the
 // browser-side `auth.accountId` is just the cookie-backed identity
 // used to gate realm WS upgrades. `world.localPlayerId` is rebound
 // here so any pre-connect UI render reads from a player record keyed

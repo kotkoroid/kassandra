@@ -91,8 +91,8 @@
     activating = true;
     const { sex, hairColor, armor, playerClass } = player;
     // ADR-002: the realm WS is already open (App.svelte connect'd on
-    // party-ready before showing this view). Ship the create_character
-    // SimEvent so PartyRoom stamps identity into its world; the next
+    // realm-ready before showing this view). Ship the create_character
+    // SimEvent so RealmRoom stamps identity into its world; the next
     // snapshot rehydrates `world.players[localPlayerId]` with the
     // chosen name + cosmetics. ACTIVATION_DURATION_MS gives the
     // platform animation its full beat before the view swap.

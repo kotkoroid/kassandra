@@ -15,7 +15,7 @@
 //   - Both are backed by ONE shared mutable Mulberry32 state — the
 //     Random Reference advances the same `s` that getSeed() reads.
 //   - `makeRandomLayer(seed)` returns a Layer that provides both,
-//     seeded from `seed`. PartyRoom calls this with the persisted
+//     seeded from `seed`. RealmRoom calls this with the persisted
 //     seed at boot and reads getSeed() at save time.
 //
 // The Mulberry32 algorithm matches what used to live in `rng.ts` —
@@ -31,7 +31,7 @@ export interface RandomStateShape {
   readonly getSeed: () => number;
   /**
    * Sync rng callable shared with the `effect/Random.Random` Reference.
-   * Used to bind `world.rng` at PartyRoom boot so sync sim impls and
+   * Used to bind `world.rng` at RealmRoom boot so sync sim impls and
    * Effect-yielding sites advance the same stream.
    */
   readonly next: () => number;

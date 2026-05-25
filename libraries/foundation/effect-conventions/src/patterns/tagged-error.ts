@@ -9,7 +9,7 @@
 //   `Effect.die`.
 //
 // What it replaces in Kassandra:
-//   - services/realm/src/PartyRoom.ts:226-230 silent JSON.parse try/catch
+//   - services/realm/src/RealmRoom.ts:226-230 silent JSON.parse try/catch
 //   - applications/game/src/realm.svelte.ts:53-57 warn-and-continue parse
 //   Both become `Schema.fromJsonString(ClientMessage)` returning
 //   `Effect<…, WorldDecodeError>`, handled with `Effect.catchTag`.

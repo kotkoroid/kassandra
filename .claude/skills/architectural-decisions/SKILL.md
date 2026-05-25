@@ -76,3 +76,29 @@ Reference prior work by **commit hash** (linked to the GitHub commit), not by `P
 - `App.svelte` no longer has a "skip creation" cached path — the snapshot decides, not a client-side flag.
 
 **Revisit when** account-wide persistent data is needed (cosmetics inventory, cross-realm friend list, ranked-mode rating) AND the natural shape of that data is a single struct co-located with character identity. Until then, the per-realm `PartyRoom` storage is sufficient and a separate per-account DO would only be reintroducing the problem this ADR solved.
+
+> **Naming note (added 2026-05-25, per ADR-003):** `PartyRoom` was renamed to `RealmRoom`; `partyId` to `realmId`; the URL routes `/parties/:id/ws` and `POST /parties` to `/realms/:id/ws` and `POST /realms`; the UI labels "Create Party" / "Disband Party" / "Leave Party" to their "…Realm" equivalents. The decision in this ADR is unchanged — the rename just made the code match the language ADR-002 already used.
+
+
+### ADR-003 — Rename Party → Realm across the codebase
+
+**Date:** 2026-05-25
+**Status:** Accepted
+
+**Context.** ADR-002 settled "character is per-realm, not per-account" and consistently used the word "realm" for the storage unit (the DO that holds the world for a group of players). But the codebase itself still used `PartyRoom`, `partyId`, `/parties/:id/ws`, "Create Party", etc. — vocabulary inherited from an earlier moment when the DO was conceived as an ad-hoc grouping rather than a persistent world. Every reader had to do a mental translation from ADR language to code language. Worse, the social roster section was now called "Party" too (PR after PR-G renamed "Guild" → "Party" for the "people I'm playing with right now" list), which collided with the storage-unit "Party" and added a second layer of overload.
+
+**Decision.** Rename everywhere. `PartyRoom` → `RealmRoom`; `PartyStorage` → `RealmStorage`; `PartySession` → `RealmSession`; `partyId` → `realmId`; `/parties/:id/ws` → `/realms/:id/ws`; `POST /parties` → `POST /realms`; `?party=<id>` → `?realm=<id>`; "Create/Disband/Leave Party" UI labels → "…Realm"; `disbandParty()` / `leaveParty()` client funcs → `disbandRealm()` / `leaveRealm()`; SocialPanel section "Party" → "Realm". File renames: `services/realm/src/PartyRoom.ts` → `RealmRoom.ts`; `services/realm/src/services/PartyStorage.ts` → `RealmStorage.ts`; `applications/game/src/ui/PartySetup.svelte` → `RealmSetup.svelte`; `orchestrators/gateway/src/api/parties/create-party.schema.ts` → `api/realms/create-realm.schema.ts`. The View enum variant `'party'` in `App.svelte` becomes `'realm-select'` to read sensibly (the screen where the user picks a realm to enter).
+
+**Rationale.** Three independent reasons converged:
+1. ADR-002's prose was already canonical — the rename closes the code-to-doc gap rather than the other way around.
+2. The Worker subdomain shipped today is `realm.kassandra.kotkoroid.com`. Treating the DO it routes to as anything other than a realm forces a mental translation at the most-read code boundary (the URL).
+3. The "Party" social-panel section had become the second meaning of "party" in the codebase — keeping the original would have required either renaming the social section again (low-value churn) or accepting a permanent overload.
+
+Considered: keep "Party" as the user-facing label for backwards-compatible UX. Rejected because there is no UX backwards-compatibility constraint yet (pre-launch), and the marginal user familiarity gain ("party" as MMO jargon) was outweighed by the cost of permanent code/doc/UI disagreement on what the unit is called.
+
+**Consequences (the painful parts).**
+- DO class rename → state migration. The Cloudflare DO class name keys all persistent state. Renaming `PartyRoom` → `RealmRoom` orphans every existing `PartyRoom` DO instance. Pre-launch, no real user state to lose; `bun run destroy && bun run dev` clears local state cleanly. Production: the just-deployed `PartyRoom` instances on Cloudflare are orphaned by this commit — anyone who'd created a test realm before today would lose it on next deploy. Accepted because there are no real users yet.
+- `RealmStorage` interface still exports an internal shape typed as `RealmStorageShape` and the file lives at `services/realm/src/services/RealmStorage.ts`. The protocol library's `PersistentWorld` schema kept its name (it describes a *world*, not a realm — narrower scope).
+- The `realm.svelte.ts` client module already used "realm" for the WebSocket-connection state; that file didn't need renaming, which means the client distinguishes `realm.realmId` (the realm we're connected to) from `realm.connected` (whether the WS is open). Slightly redundant-looking on the surface; semantically tight (the `realm` $state is the *connection state*, the `realmId` is the *room identifier*).
+
+**Revisit when** the rename ever causes confusion that the old name didn't (e.g. external tooling, third-party docs, MMO-genre users who expect "party" terminology specifically). None of those exist today.

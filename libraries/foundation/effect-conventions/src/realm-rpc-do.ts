@@ -21,7 +21,7 @@
 //
 //   2. `makeRealmRpcProtocol(serialization)` — implements RpcServer's
 //      `Protocol` interface directly against DurableWebSocket. Used by
-//      PartyRoom (PR-B2) to mount an RpcServer over its many connected
+//      RealmRoom (PR-B2) to mount an RpcServer over its many connected
 //      sockets without going through Socket. Less indirection, fewer
 //      moving parts; the same approach the upstream
 //      `makeProtocolWithHttpEffect` takes for its HTTP transport.
@@ -97,12 +97,12 @@ export const socketFromDurableWebSocket = (
   });
 
 // =====================================================================
-// 2. Direct RpcServer Protocol — for PartyRoom in PR-B2.
+// 2. Direct RpcServer Protocol — for RealmRoom in PR-B2.
 // =====================================================================
 
 /**
  * Operations the bridge exposes to the DO lifecycle handlers. Each
- * accepted DurableWebSocket produces a clientId; PartyRoom keeps a
+ * accepted DurableWebSocket produces a clientId; RealmRoom keeps a
  * `Map<DurableWebSocket, clientId>` so the runtime's three callbacks
  * (fetch's upgrade, webSocketMessage, webSocketClose) can drive the
  * protocol.
@@ -117,7 +117,7 @@ export interface RealmRpcBridge {
    *
    * `headers` is concatenated onto every inbound RPC Request from this
    * connection — that's where per-connection identity (e.g., the
-   * `playerid` header read by `PartySession` middleware) lives.
+   * `playerid` header read by `RealmSession` middleware) lives.
    */
   readonly acceptSocket: (
     ws: Cloudflare.DurableWebSocket,
@@ -155,7 +155,7 @@ interface ClientEntry {
  *   - No HttpServerRequest — DOs don't have a per-request scope.
  *   - acceptSocket is callable from outside the protocol's Effect
  *     scope; the underlying state is held in module-scoped Maps so
- *     PartyRoom can drive the protocol from its imperative handlers.
+ *     RealmRoom can drive the protocol from its imperative handlers.
  *   - Per-connection headers are passed at accept-time (synthesized
  *     from the WebSocket upgrade URL), not per-request.
  */

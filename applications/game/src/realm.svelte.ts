@@ -16,16 +16,16 @@ import { makeRealmClientLayer, RealmClient } from './lib/realm-client';
 
 export const realm = $state({
   connected: false,
-  partyId: null as string | null,
+  realmId: null as string | null,
   // Monotonic counter bumped each time the active session ends — either
   // the owner disbanded (server's Disbanded stream emitted) or the local
-  // player chose to leave (`leaveParty()` below). App.svelte watches
-  // this to redirect back to PartySetup; both end-of-session reasons
+  // player chose to leave (`leaveRealm()` below). App.svelte watches
+  // this to redirect back to RealmSetup; both end-of-session reasons
   // funnel through one signal because the consumer doesn't care which.
   sessionEndCount: 0,
 });
 
-// One ManagedRuntime per party connection. Synchronous-constructed,
+// One ManagedRuntime per realm connection. Synchronous-constructed,
 // holds the WebSocket + RPC client for its lifetime; `dispose()` closes
 // everything. Module-scoped so `sendFrame` (called from Threlte's
 // useTask, outside any Effect context) can drive it.
@@ -40,7 +40,7 @@ export function connect(id: string) {
     throw new Error('realm.connect called before auth bootstrap completed');
   }
 
-  realm.partyId = id;
+  realm.realmId = id;
 
   runtime = ManagedRuntime.make(makeRealmClientLayer(id));
 
@@ -79,7 +79,7 @@ export function connect(id: string) {
           realm.sessionEndCount += 1;
           disconnect();
           const url = new URL(window.location.href);
-          url.searchParams.delete('party');
+          url.searchParams.delete('realm');
           window.history.replaceState(null, '', url.toString());
         }),
       );
@@ -96,7 +96,7 @@ export function disconnect() {
   }
   pendingEvents = [];
   realm.connected = false;
-  realm.partyId = null;
+  realm.realmId = null;
 }
 
 /**
@@ -123,7 +123,7 @@ export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
 }
 
 /**
- * Owner-only. Asks the realm to tear down the party. The server
+ * Owner-only. Asks the realm to tear down the realm. The server
  * verifies ownership and, if accepted, emits on the Disbanded stream
  * (which this client also subscribes to → triggers disconnect +
  * redirect via the subscription above). Non-owner senders get a typed
@@ -132,7 +132,7 @@ export function sendFrame(moveX: number, moveZ: number, events: SimEvent[]) {
  * race where ownership changes between render and click can get here,
  * and silently ignoring is the right UX.
  */
-export function disbandParty() {
+export function disbandRealm() {
   if (!runtime) return;
   runtime.runFork(
     Effect.gen(function* () {
@@ -145,22 +145,22 @@ export function disbandParty() {
 }
 
 /**
- * Non-owner counterpart to `disbandParty`. The local player walks away
- * from the party without tearing it down for everyone else. No
+ * Non-owner counterpart to `disbandRealm`. The local player walks away
+ * from the realm without tearing it down for everyone else. No
  * dedicated RPC is needed — closing the WebSocket is the canonical
- * leave signal: PartyRoom's `webSocketClose` handler removes this
+ * leave signal: RealmRoom's `webSocketClose` handler removes this
  * player's record from the world, persists the snapshot (PR-E), and
- * notes the departure in chat. The party stays alive for whoever's
+ * notes the departure in chat. The realm stays alive for whoever's
  * left; the owner role does NOT transfer (current design — owner
- * leaving without disbanding leaves the party orphaned, which is an
+ * leaving without disbanding leaves the realm orphaned, which is an
  * accepted limitation until a "promote new owner on owner-leave" PR
  * lands).
  */
-export function leaveParty() {
+export function leaveRealm() {
   if (!runtime) return;
   realm.sessionEndCount += 1;
   disconnect();
   const url = new URL(window.location.href);
-  url.searchParams.delete('party');
+  url.searchParams.delete('realm');
   window.history.replaceState(null, '', url.toString());
 }

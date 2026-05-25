@@ -5,7 +5,7 @@
 // automatically on the upgrade (same-site, same-eTLD+1 between app
 // and realm in prod; same `localhost` in dev). The realm parses the
 // `Cookie` header, looks the session up in KV, and forwards to the
-// PartyRoom DO with `?playerId=<accountId>` derived from the verified
+// RealmRoom DO with `?playerId=<accountId>` derived from the verified
 // session record.
 
 import { RealmRpc } from '@kassandra/protocol-foundation-library';
@@ -35,7 +35,7 @@ export class RealmClient extends Context.Service<
 }
 
 /**
- * Build the WebSocket URL for a party connection.
+ * Build the WebSocket URL for a realm connection.
  *
  * PR-G5: the WS rides the page's own origin so the HttpOnly session
  * cookie attaches automatically — dev hits Vite's `/realm` proxy
@@ -44,17 +44,17 @@ export class RealmClient extends Context.Service<
  * cookie scoping (cookies are host-locked in dev so all traffic must
  * share the page origin).
  */
-const wsUrlFor = (partyId: string): string => {
+const wsUrlFor = (realmId: string): string => {
   const base = import.meta.env.DEV
     ? `ws://${window.location.host}/realm`
     : import.meta.env.VITE_REALM_URL.replace(/\/$/, '')
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://');
-  return `${base}/parties/${partyId}/ws`;
+  return `${base}/realms/${realmId}/ws`;
 };
 
 /**
- * Full layer stack for one party connection. Compose: serialization
+ * Full layer stack for one realm connection. Compose: serialization
  * (must match the server — JSON), WebSocket constructor (browser
  * global), Socket from the URL, RPC protocol over that Socket, then
  * the RealmClient itself.
@@ -64,13 +64,13 @@ const wsUrlFor = (partyId: string): string => {
  *
  * The returned layer is scoped: building it opens the WebSocket and
  * starts the protocol fiber; closing the scope closes both. Use with
- * a long-lived scope tied to the party's lifetime — typically an
+ * a long-lived scope tied to the realm's lifetime — typically an
  * `Effect.runFork` of a program piped through this layer.
  */
-export const makeRealmClientLayer = (partyId: string) =>
+export const makeRealmClientLayer = (realmId: string) =>
   RealmClient.layer.pipe(
     Layer.provide(RpcClient.layerProtocolSocket()),
-    Layer.provide(Socket.layerWebSocket(wsUrlFor(partyId))),
+    Layer.provide(Socket.layerWebSocket(wsUrlFor(realmId))),
     Layer.provide(Socket.layerWebSocketConstructorGlobal),
     Layer.provide(RpcSerialization.layerJson),
   );

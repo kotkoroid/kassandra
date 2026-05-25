@@ -10,7 +10,7 @@
 // What it replaces in Kassandra:
 //   - applications/game/src/realm.svelte.ts:40,43,61,69 — scattered
 //     `console.log('[realm] …')` strings → `Effect.logDebug/Info/Warn`
-//     with `{ partyId, playerId }` annotations.
+//     with `{ realmId, playerId }` annotations.
 //   - applications/game/src/consoleBridge.ts entirely — the
 //     console.* monkey-patch becomes a custom Effect Logger that
 //     pushes structured records into the chat (PR-C).
@@ -37,17 +37,17 @@ import * as Effect from 'effect/Effect';
 // a single tail combinator. Annotations are applied via `.pipe` after
 // the generator — they decorate every log call inside.
 export const handleMessage = Effect.fn('patterns/Logger/handleMessage')(
-  function* (sessionId: string, partyId: string) {
+  function* (sessionId: string, realmId: string) {
     yield* Effect.logDebug('inbound');
     // ... business logic would yield here ...
     yield* Effect.logInfo('processed');
     void sessionId;
-    void partyId;
+    void realmId;
   },
   // Apply annotations as an operator. Every log record emitted by this
-  // fn carries `{ sessionId, partyId }` — cheap, structured, no string
+  // fn carries `{ sessionId, realmId }` — cheap, structured, no string
   // formatting at the call sites.
-  (eff, sessionId, partyId) => eff.pipe(Effect.annotateLogs({ sessionId, partyId })),
+  (eff, sessionId, realmId) => eff.pipe(Effect.annotateLogs({ sessionId, realmId })),
   // Tail combinator: catch any cause, log it, swallow. The name in
   // Effect.fn shows up in the cause's stack so the operator knows which
   // handler failed without us having to repeat the string.

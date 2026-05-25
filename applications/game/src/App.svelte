@@ -6,19 +6,19 @@
   import Scene from './scene/Scene.svelte';
   import CharacterCreation from './ui/CharacterCreation.svelte';
   import Hud from './ui/Hud.svelte';
-  import PartySetup from './ui/PartySetup.svelte';
+  import RealmSetup from './ui/RealmSetup.svelte';
   import { world } from './world.svelte';
 
-  type View = 'party' | 'connecting' | 'creation' | 'game';
-  let view = $state<View>('party');
+  type View = 'realm-select' | 'connecting' | 'creation' | 'game';
+  let view = $state<View>('realm-select');
 
   // ADR-002: character is per-realm. The only way to know whether
   // THIS realm already has a character for THIS account is to connect
   // and inspect the first snapshot. Empty name on the local player =
-  // PartyRoom just `addPlayer`'d a default record → show creation.
-  // Non-empty name = PartyRoom restored a saved world (PR-E) → skip
+  // RealmRoom just `addPlayer`'d a default record → show creation.
+  // Non-empty name = RealmRoom restored a saved world (PR-E) → skip
   // straight to game.
-  function onPartyReady(id: string) {
+  function onRealmReady(id: string) {
     view = 'connecting';
     connect(id);
   }
@@ -53,7 +53,7 @@
 
   // Listen for end-of-session events from the realm. `sessionEndCount`
   // is bumped on both server-initiated disbands and client-initiated
-  // leaves (see realm.svelte's `disbandParty` / `leaveParty`); the local
+  // leaves (see realm.svelte's `disbandRealm` / `leaveRealm`); the local
   // `seenEnds` cursor (plain `let`, intentionally NOT $state — writing
   // to it must not retrigger this effect) tracks which bumps we've
   // already handled.
@@ -61,14 +61,14 @@
   $effect(() => {
     if (realm.sessionEndCount > seenEnds) {
       seenEnds = realm.sessionEndCount;
-      view = 'party';
+      view = 'realm-select';
     }
   });
 </script>
 
 <div class="stage">
-  {#if view === 'party'}
-    <PartySetup onReady={onPartyReady} />
+  {#if view === 'realm-select'}
+    <RealmSetup onReady={onRealmReady} />
   {:else if view === 'connecting'}
     <div class="connecting">Joining realm…</div>
   {:else if view === 'creation'}

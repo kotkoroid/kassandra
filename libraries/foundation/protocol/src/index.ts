@@ -12,7 +12,7 @@ export {
   Snapshot,
 } from './snapshot';
 
-export { NotOwnerError, PartySession, PlayerSession, RealmRpc } from './rpc';
+export { NotOwnerError, RealmSession, PlayerSession, RealmRpc } from './rpc';
 
 // PR-E: persistence schema for the realm DO's stored world.
 export { PersistentWorld } from './persistentWorld';

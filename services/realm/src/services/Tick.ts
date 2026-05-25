@@ -1,6 +1,6 @@
 // Tick — the authoritative 20 Hz simulation loop.
 //
-// Replaces the setInterval-driven loop at old PartyRoom.ts:148-178
+// Replaces the setInterval-driven loop at old RealmRoom.ts:148-178
 // (startTickLoop/stopTickLoop). One Effect-native loop: drain the
 // input buffer, run one sim step, broadcast the new snapshot.
 //
@@ -45,7 +45,7 @@ export class Tick extends Context.Service<Tick, TickShape>()(
 
 /**
  * Build a Tick orchestrator over the given services. Yields sim's
- * `Tick` service (the actual per-step orchestration); PartyRoom
+ * `Tick` service (the actual per-step orchestration); RealmRoom
  * provides it via SimLayer when constructing this.
  *
  * What this layer adds on top of sim's Tick:

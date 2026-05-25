@@ -484,7 +484,7 @@ export type GameEvent =
 // --- The world --------------------------------------------------
 
 export interface World {
-  // PR-D3e.3: rng is now a `() => number` callable bound by PartyRoom
+  // PR-D3e.3: rng is now a `() => number` callable bound by RealmRoom
   // (server) or test setup (client) to the shared Mulberry32 state in
   // `services/RandomState.ts`. The Effect-side equivalent
   // (`effect/Random.Random` Reference) is provided by the same Layer,
@@ -499,9 +499,9 @@ export interface World {
 
   players: Record<PlayerId, Player>;
   localPlayerId: PlayerId;
-  // The party owner. Set on the realm side when the first player connects
-  // to a fresh party (persisted in DO storage). Null for solo / pre-connect
-  // worlds. Only the owner is allowed to disband the party.
+  // The realm owner. Set on the realm side when the first player connects
+  // to a fresh realm (persisted in DO storage). Null for solo / pre-connect
+  // worlds. Only the owner is allowed to disband the realm.
   ownerId: PlayerId | null;
   entities: Entity[];
   // O(1) entity lookup by id. Mirrors `entities` — kept in sync by

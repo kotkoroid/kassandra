@@ -1,7 +1,7 @@
-// PartyRoom — the Durable Object that owns one party's authoritative
+// RealmRoom — the Durable Object that owns one realm's authoritative
 // world. Each connected player gets a hibernating WebSocket; the DO
 // runs a 20 Hz fixed-step tick, broadcasts a full snapshot per tick
-// via effect/unstable/rpc, and persists the party owner across
+// via effect/unstable/rpc, and persists the realm owner across
 // hibernation.
 //
 // PR-B2 rewrite: the JSON wire envelope is gone. Inbound traffic flows
@@ -10,7 +10,7 @@
 // typed handlers defined here. Snapshots fan out via a per-DO
 // `PubSub<Snapshot>` consumed by `SnapshotStream`; disband signals fan
 // out via `PubSub<void>` consumed by `Disbanded`. The
-// previously-special-cased `disband_party` SimEvent is replaced by the
+// previously-special-cased `disband_realm` SimEvent is replaced by the
 // owner-only `Disband` RPC (which raises `NotOwnerError` instead of
 // silently dropping non-owner requests).
 //
@@ -23,7 +23,7 @@
 
 import {
   NotOwnerError,
-  PartySession,
+  RealmSession,
   PlayerSession,
   RealmRpc,
   type Snapshot,
@@ -53,11 +53,11 @@ import * as RpcServer from 'effect/unstable/rpc/RpcServer';
 import { makeRealmRpcProtocol } from '@kassandra/effect-conventions-foundation-library';
 
 import { makeInputBuffer } from './services/InputBuffer.ts';
-import { makePartyStorage } from './services/PartyStorage.ts';
+import { makeRealmStorage } from './services/RealmStorage.ts';
 import { makeSessionsRef } from './services/SessionsRef.ts';
 import { makeTick } from './services/Tick.ts';
 
-// PR-E: save cadence while the party is occupied. 30 s is short enough
+// PR-E: save cadence while the realm is occupied. 30 s is short enough
 // that a crash / DO-eviction loses at most ~600 ticks (30 s × 20 Hz)
 // of progression and long enough that storage I/O isn't a hot path.
 const SAVE_ALARM_INTERVAL_MS = 30_000;
@@ -73,20 +73,20 @@ interface SessionData {
   clientId: number;
 }
 
-export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRoom>()(
-  'PartyRoom',
+export default class RealmRoom extends Cloudflare.DurableObjectNamespace<RealmRoom>()(
+  'RealmRoom',
   Effect.gen(function* () {
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
       // -- per-instance state --------------------------------------------
-      // PR-E: persistence. PartyStorage wraps state.storage.put/get for
+      // PR-E: persistence. RealmStorage wraps state.storage.put/get for
       // the world payload. On boot we try restore (returns None on
       // first-ever construction or a schema-bumped payload); fall back
       // to a fresh world. The legacy single-key `state.storage.get('ownerId')`
       // is gone — ownerId now travels inside the persisted world.
-      const partyStorage = yield* makePartyStorage(state);
-      const restored = yield* partyStorage.restore;
+      const realmStorage = yield* makeRealmStorage(state);
+      const restored = yield* realmStorage.restore;
       const initialWorld = Option.match(restored, {
         onNone: () => createWorld(),
         onSome: (r) => r.world,
@@ -189,11 +189,11 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       }
 
       // -- middleware impl -------------------------------------------------
-      // PartySession reads `playerid` from per-request headers (set by
+      // RealmSession reads `playerid` from per-request headers (set by
       // the bridge at acceptSocket time) and provides PlayerSession to
       // every handler downstream.
-      const partySessionLayer = Layer.succeed(PartySession)(
-        PartySession.of((effect, options) => {
+      const realmSessionLayer = Layer.succeed(RealmSession)(
+        RealmSession.of((effect, options) => {
           const playerId = Option.getOrElse(
             Headers.get(options.headers, 'playerid'),
             () => '',
@@ -267,7 +267,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
                 const all = yield* sessionsRef.all;
                 yield* Effect.forEach(
                   all,
-                  ([, s]) => s.socket.close(1000, 'party disbanded'),
+                  ([, s]) => s.socket.close(1000, 'realm disbanded'),
                   { discard: true },
                 );
                 yield* sessionsRef.clear;
@@ -276,7 +276,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
                 // `deleteAll` covers any forgotten side keys and any
                 // future ScheduledEvents bookkeeping.
                 yield* state.storage.deleteAlarm();
-                yield* partyStorage.clear;
+                yield* realmStorage.clear;
                 yield* state.storage.deleteAll();
               }),
           });
@@ -293,7 +293,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
       }).pipe(
         Layer.provide([
           handlersLayer,
-          partySessionLayer,
+          realmSessionLayer,
           Layer.succeed(RpcServer.Protocol)(bridge.protocol),
           RpcSerialization.layerJson,
         ]),
@@ -322,7 +322,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
         // Register the socket with the RPC bridge. The synthesized
         // `playerid` header threads through every inbound Request so
-        // the PartySession middleware can provide PlayerSession to
+        // the RealmSession middleware can provide PlayerSession to
         // every handler invocation.
         const clientId = yield* bridge.acceptSocket(socket, [
           ['playerid', playerId],
@@ -356,10 +356,10 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
           });
         }
 
-        // Anchor the party owner on first-ever connect. PR-E: the
+        // Anchor the realm owner on first-ever connect. PR-E: the
         // owner travels inside the persisted world (ownerId is a
         // field on the World struct), so we no longer need a separate
-        // 'ownerId' key in storage — `partyStorage.save` writes the
+        // 'ownerId' key in storage — `realmStorage.save` writes the
         // whole world on disconnect + alarm.
         const currentWorld = yield* worldRef.get;
         if (!currentWorld.ownerId) {
@@ -429,7 +429,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
             const world = yield* worldRef.get;
             yield* Effect.gen(function* () {
               const rs = yield* RandomState;
-              yield* partyStorage.save(world, rs.getSeed());
+              yield* realmStorage.save(world, rs.getSeed());
             }).pipe(Effect.provide(randomLayer));
             yield* state.storage.deleteAlarm();
           }
@@ -441,7 +441,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
 
       // PR-E: periodic save handler. The DO runtime invokes `alarm`
       // when state.storage.setAlarm fires; we save the world and
-      // reschedule the next save iff the party is still occupied
+      // reschedule the next save iff the realm is still occupied
       // (the alarm chain self-terminates when the last socket closes).
       const onAlarm = Effect.gen(function* () {
         const count = yield* sessionsRef.count;
@@ -449,7 +449,7 @@ export default class PartyRoom extends Cloudflare.DurableObjectNamespace<PartyRo
         const world = yield* worldRef.get;
         yield* Effect.gen(function* () {
           const rs = yield* RandomState;
-          yield* partyStorage.save(world, rs.getSeed());
+          yield* realmStorage.save(world, rs.getSeed());
         }).pipe(Effect.provide(randomLayer));
         yield* state.storage.setAlarm(Date.now() + SAVE_ALARM_INTERVAL_MS);
       });

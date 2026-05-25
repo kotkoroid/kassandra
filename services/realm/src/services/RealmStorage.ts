@@ -1,6 +1,6 @@
-// PartyStorage — DO-backed persistence for the realm world.
+// RealmStorage — DO-backed persistence for the realm world.
 //
-// PR-E: a party's full simulation state is serialized to the DO's
+// PR-E: a realm's full simulation state is serialized to the DO's
 // SQLite storage on every save (alarm-driven + on last-disconnect),
 // then rehydrated on next connect. While the DO instance is
 // unloaded, no tick runs — `world.time` advances only while there's
@@ -15,14 +15,14 @@
 //
 // PR-D3e.3: the Mulberry32 state moved from `world.rng` to the
 // `RandomState` service. `save` now takes an explicit `rngSeed` arg
-// (PartyRoom yields `RandomState.getSeed()` before calling) and
+// (RealmRoom yields `RandomState.getSeed()` before calling) and
 // `restore` returns both the rehydrated world AND the persisted
-// seed so PartyRoom can wire `makeRandomLayer(seed)` and bind
+// seed so RealmRoom can wire `makeRandomLayer(seed)` and bind
 // `world.rng` to the shared callable.
 //
 // Versioning: payloads carry `version: 1`. A schema-changing PR
 // bumps the literal and adds a migrator (or, simpler, returns None
-// from restore on a mismatch so the party gets a fresh world).
+// from restore on a mismatch so the realm gets a fresh world).
 
 import { PersistentWorld } from '@kassandra/protocol-foundation-library';
 import { createWorld, type World } from '@kassandra/simulation-domain-library';
@@ -43,18 +43,18 @@ export interface RestoredWorld {
   readonly rngSeed: number;
 }
 
-export interface PartyStorageShape {
+export interface RealmStorageShape {
   /**
    * Serialize the current world + Mulberry32 seed to DO storage.
-   * Caller (PartyRoom) yields `RandomState.getSeed()` before this so
+   * Caller (RealmRoom) yields `RandomState.getSeed()` before this so
    * the persisted seed reflects exactly the post-last-tick state.
    */
   readonly save: (world: World, rngSeed: number) => Effect.Effect<void>;
   /**
    * Read the persisted world + rng seed from DO storage. Returns
    * `None` when nothing has been stored yet OR when the stored
-   * payload fails to decode (treated as "fresh party") so the
-   * bug-on-schema-bump cost is at worst a party reset, not a crash
+   * payload fails to decode (treated as "fresh realm") so the
+   * bug-on-schema-bump cost is at worst a realm reset, not a crash
    * loop.
    */
   readonly restore: Effect.Effect<Option.Option<RestoredWorld>>;
@@ -62,8 +62,8 @@ export interface PartyStorageShape {
   readonly clear: Effect.Effect<void>;
 }
 
-export class PartyStorage extends Context.Service<PartyStorage, PartyStorageShape>()(
-  'kassandra/realm/PartyStorage',
+export class RealmStorage extends Context.Service<RealmStorage, RealmStorageShape>()(
+  'kassandra/realm/RealmStorage',
 ) {}
 
 /**
@@ -71,11 +71,11 @@ export class PartyStorage extends Context.Service<PartyStorage, PartyStorageShap
  * Construction is cheap; the encode/decode work happens at the
  * call sites, not here.
  */
-export const makePartyStorage = (
+export const makeRealmStorage = (
   state: Cloudflare.DurableObjectState['Service'],
-): Effect.Effect<PartyStorageShape> =>
+): Effect.Effect<RealmStorageShape> =>
   Effect.succeed({
-    save: Effect.fn('PartyStorage.save')(function* (world, rngSeed) {
+    save: Effect.fn('RealmStorage.save')(function* (world, rngSeed) {
       const payload: typeof PersistentWorld.Type = {
         version: 1,
         rngSeed,
@@ -109,8 +109,8 @@ export const makePartyStorage = (
         // Corrupt or version-mismatched payload. Drop it and start
         // fresh — better than crashing the DO on every fetch. The
         // alternative (return Some(crashing-world)) would prevent
-        // even an owner disband from recovering the party.
-        yield* Effect.logWarning('PartyStorage.restore: payload failed to decode, dropping', {
+        // even an owner disband from recovering the realm.
+        yield* Effect.logWarning('RealmStorage.restore: payload failed to decode, dropping', {
           error: String(decoded.failure),
         });
         return Option.none<RestoredWorld>();
@@ -123,7 +123,7 @@ export const makePartyStorage = (
       // persisted fields — this keeps the shape additive (new
       // optional World fields keep their defaults instead of being
       // `undefined`). `world.rng` here is the default Mulberry32
-      // closure baked into createWorld; PartyRoom rebinds it to the
+      // closure baked into createWorld; RealmRoom rebinds it to the
       // shared `RandomState` callable after this returns, using the
       // `rngSeed` we hand back below.
       const world = createWorld();
@@ -153,12 +153,12 @@ export const makePartyStorage = (
       world.recentEvents = [];
 
       return Option.some<RestoredWorld>({ world, rngSeed: persisted.rngSeed });
-    }).pipe(Effect.annotateLogs({ service: 'PartyStorage' })),
+    }).pipe(Effect.annotateLogs({ service: 'RealmStorage' })),
 
     clear: Effect.gen(function* () {
       yield* state.storage.delete(STORAGE_KEY);
     }),
   });
 
-export const PartyStorageLayer = (state: Cloudflare.DurableObjectState['Service']) =>
-  Layer.effect(PartyStorage)(makePartyStorage(state));
+export const RealmStorageLayer = (state: Cloudflare.DurableObjectState['Service']) =>
+  Layer.effect(RealmStorage)(makeRealmStorage(state));

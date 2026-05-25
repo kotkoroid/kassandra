@@ -9,12 +9,12 @@ import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse';
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest';
-import PartyRoom from './PartyRoom.ts';
+import RealmRoom from './RealmRoom.ts';
 
 // Realm Worker — entry point for all game-server traffic.
 //
 // Routing:
-//   GET /parties/:partyId/ws?upgrade=websocket → PartyRoom DO
+//   GET /realms/:realmId/ws?upgrade=websocket → RealmRoom DO
 //   *                                          → 404
 //
 // PR-G5: every WS upgrade is authenticated by SESSION COOKIE. The
@@ -29,11 +29,11 @@ import PartyRoom from './PartyRoom.ts';
 //   - slides the session TTL on every successful upgrade (active
 //     players never time out; idle ones reclaim automatically)
 //   - rewrites the forwarded URL with `?playerId=<accountId>` so the
-//     PartyRoom DO sees a realm-controlled player identity, never
+//     RealmRoom DO sees a realm-controlled player identity, never
 //     client-controlled
 //
 // ADR-002: PlayerProfile DO + /profiles route are gone. Character
-// identity is per-realm and lives inside each PartyRoom's persisted
+// identity is per-realm and lives inside each RealmRoom's persisted
 // world.
 
 const PROD_APP_HOST = 'kassandra.kotkoroid.com';
@@ -93,7 +93,7 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
     const sessionsResource = yield* SessionsKvNamespace;
     const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
 
-    const rooms = yield* PartyRoom;
+    const rooms = yield* RealmRoom;
 
     return {
       fetch: Effect.gen(function* () {
@@ -101,8 +101,8 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
         const url = new URL(request.url, 'http://localhost');
         const pathname = url.pathname;
 
-        const partyMatch = pathname.match(/^\/parties\/([^/]+)\/ws$/);
-        if (!partyMatch) {
+        const realmMatch = pathname.match(/^\/realms\/([^/]+)\/ws$/);
+        if (!realmMatch) {
           return HttpServerResponse.text('Not Found', { status: 404 });
         }
 
@@ -158,14 +158,14 @@ export default class Realm extends Cloudflare.Worker<Realm>()(
 
         // Parties: rewrite the URL so the DO sees the verified
         // playerId (= session.accountId) as a query parameter.
-        // PartyRoom keeps its existing `?playerId=` parsing — but
+        // RealmRoom keeps its existing `?playerId=` parsing — but
         // the value is now realm-controlled. Any client query string
         // is discarded.
-        const partyId = partyMatch[1]!;
+        const realmId = realmMatch[1]!;
         const forwardedUrl = new URL(url);
         forwardedUrl.searchParams.set('playerId', record.accountId);
         const forwarded = request.modify({ url: forwardedUrl.toString() });
-        const room = rooms.getByName(partyId);
+        const room = rooms.getByName(realmId);
         return yield* room.fetch(forwarded);
       }),
     };
