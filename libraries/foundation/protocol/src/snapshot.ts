@@ -262,6 +262,14 @@ export const Snapshot = Schema.Struct({
   // has not yet accepted its first session (rare; clients normally see
   // this populated by the first snapshot they receive).
   ownerId: Schema.NullOr(Schema.String),
+  // Server-authoritative identity for the receiving client. Equal to
+  // the session.accountId the realm read from the session cookie. The
+  // client uses this to set world.localPlayerId instead of relying on
+  // its own auth.accountId — the two can diverge when a stale session
+  // cookie is present (different accountId than the current localStorage
+  // value). Per-subscriber: the tick publishes a selfId-less snapshot to
+  // the PubSub; each SnapshotStream handler maps in the player's own id.
+  selfId: Schema.String,
   players: Schema.Array(PlayerSnapshot),
   entities: Schema.Array(EntitySnapshot),
   projectiles: Schema.Array(ProjectileSnapshot),

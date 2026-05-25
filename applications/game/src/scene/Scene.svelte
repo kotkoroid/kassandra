@@ -26,6 +26,7 @@
   import { CITY_RADIUS, CITY_X, CITY_Z, BAG_PICKUP_RADIUS, NIGHT_END, NIGHT_START, dispatch, currentHour, localPlayer } from '@kassandra/simulation-domain-library';
   import { sendFrame } from '../realm.svelte';
   import { hover } from '../hover.svelte';
+  import { tickInterpolation } from '../lib/interpolation';
   import { clearSelection, getSelectionView, selection } from '../selection.svelte';
   import { world } from '../world.svelte';
   const player = $derived(localPlayer(world));
@@ -388,6 +389,13 @@
   }
 
   useTask((_frameDt) => {
+    // Snapshot interpolation: pull every entity's rendered position
+    // toward the latest server-authoritative snapshot. Must run BEFORE
+    // any code below that reads `player.x/z`, entity positions, etc.
+    // so the camera, model, nameplate, and selection rings all read a
+    // consistent lerped frame.
+    tickInterpolation(_frameDt);
+
     // Drain events queued by dispatch() calls this frame and send them
     // along with the movement vector to the realm server. The server
     // runs the authoritative tick and broadcasts snapshots back.

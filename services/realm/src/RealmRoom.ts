@@ -244,10 +244,23 @@ export default class RealmRoom extends Cloudflare.DurableObjectNamespace<RealmRo
                 yield* inputBuffer.appendEvents(session.playerId, [event]);
               }),
 
-            // Server-streamed snapshots. Subscribing creates a new
-            // subscription to the PubSub; closing the stream
-            // (client unsubscribes) tears it down.
-            SnapshotStream: () => Stream.fromPubSub(snapshotPubSub),
+            // Server-streamed snapshots. Each emission is stamped with
+            // the subscriber's own playerId (selfId) so the client
+            // knows which player record is "it" — independently of
+            // the client's local auth.accountId, which can drift if a
+            // stale session cookie is in play.
+            SnapshotStream: () =>
+              Stream.fromEffect(
+                Effect.gen(function* () {
+                  return (yield* PlayerSession).playerId;
+                }),
+              ).pipe(
+                Stream.flatMap((selfId) =>
+                  Stream.fromPubSub(snapshotPubSub).pipe(
+                    Stream.map((snapshot) => ({ ...snapshot, selfId })),
+                  ),
+                ),
+              ),
 
             // Server-streamed disband signal. Emits exactly once then
             // completes — clients use this as a "redirect to setup" cue.

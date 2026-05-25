@@ -26,6 +26,13 @@ import type {
 
 import { dispatchSimEvent } from '../damageNumbers.svelte';
 import { world } from '../world.svelte';
+import {
+  isNewEntity,
+  isNewHealingCircle,
+  isNewPlayer,
+  isNewProjectile,
+  recordTargets,
+} from './interpolation';
 
 // PR-H: lock the local player slot while CharacterCreation is mounted.
 // `applySnapshot` runs every tick (20 Hz) and replaces `world.players`
@@ -53,6 +60,15 @@ export function applySnapshot(s: Snapshot): void {
 
   const nextPlayers: Record<string, Player> = {};
   for (const p of s.players) {
+    // PR-Movement: snapshot interpolation. The snapshot's x/z/rotation
+    // are the *authoritative* server positions; the world's x/z/rotation
+    // are the *rendered* (mid-lerp) positions. Carry the prior frame's
+    // rendered position forward here so the lerp in tickInterpolation
+    // continues smoothly toward the new target. Fresh joiners (no prior
+    // record) snap directly to the snapshot — otherwise they'd appear
+    // to slide in from (0, 0) on their first frame.
+    const prior = world.players[p.id];
+    const fresh = prior === undefined || isNewPlayer(p.id);
     nextPlayers[p.id] = {
       name: p.name,
       sex: p.sex as Sex,
@@ -64,9 +80,9 @@ export function applySnapshot(s: Snapshot): void {
       health: p.health,
       mana: p.mana,
       stamina: p.stamina,
-      x: p.x,
-      z: p.z,
-      rotation: p.rotation,
+      x: fresh ? p.x : prior!.x,
+      z: fresh ? p.z : prior!.z,
+      rotation: fresh ? p.rotation : prior!.rotation,
       attackSpeed: p.attackSpeed,
       healthRegen: p.healthRegen,
       damage: p.damage,
@@ -131,45 +147,64 @@ export function applySnapshot(s: Snapshot): void {
 
   world.players = nextPlayers;
 
-  // PR-G5 dev guard: surface (and self-heal) the case where a snapshot's
-  // players don't include world.localPlayerId. The intended invariant
-  // post-PR-G2 is:
-  //   auth.accountId === cookie.sid → KV.accountId === ?playerId
-  //                                === server world.players key
-  //                                === client world.localPlayerId
-  // If this fails, every `$derived(localPlayer(world))` in the tree
-  // throws on the next reactivity tick. Re-anchoring to the first
-  // available key (the server's authoritative view) keeps the UI alive
-  // and the warning makes the mismatch visible in the in-game console
-  // bridge instead of an opaque cascade of invariant errors.
-  if (
-    world.localPlayerId &&
-    nextPlayers[world.localPlayerId] === undefined
-  ) {
-    const keys = Object.keys(nextPlayers);
-    console.warn(
-      '[applySnapshot] world.localPlayerId is not in snapshot.players —',
-      'localPlayerId=', world.localPlayerId,
-      'snapshot.players keys=', keys,
-    );
-    if (keys.length > 0) {
-      world.localPlayerId = keys[0]!;
-    }
-  }
+  // Server-authoritative identity. The realm stamps each subscriber's
+  // SnapshotStream with their own playerId (from the verified session
+  // cookie). Anchoring here eliminates any drift between auth.accountId
+  // (client-side localStorage) and the actual session accountId the
+  // realm is using as the player key.
+  world.localPlayerId = s.selfId;
 
-  world.entities = s.entities.map((e) => ({
-    id: e.id,
-    kind: e.kind as EntityKind,
-    monsterId: e.monsterId,
-    x: e.x,
-    z: e.z,
-    rotation: e.rotation,
-    hp: e.hp,
-    maxHp: e.maxHp,
-    saying: e.saying,
-  })) as typeof world.entities;
-  world.projectiles = s.projectiles.map((p) => ({ ...p })) as Projectile[];
-  world.healingCircles = s.healingCircles.map((h) => ({ ...h })) as HealingCircle[];
+  // PR-Movement: preserve rendered positions for known entities, snap
+  // newly-spawned ones to their snapshot position. The lerp in
+  // tickInterpolation pulls toward the targets recorded below.
+  const priorEntities = new Map<string, { x: number; z: number; rotation: number }>();
+  for (let i = 0; i < world.entities.length; i++) {
+    const e = world.entities[i]!;
+    priorEntities.set(e.id, { x: e.x, z: e.z, rotation: e.rotation });
+  }
+  world.entities = s.entities.map((e) => {
+    const prior = priorEntities.get(e.id);
+    const fresh = prior === undefined || isNewEntity(e.id);
+    return {
+      id: e.id,
+      kind: e.kind as EntityKind,
+      monsterId: e.monsterId,
+      x: fresh ? e.x : prior!.x,
+      z: fresh ? e.z : prior!.z,
+      rotation: fresh ? e.rotation : prior!.rotation,
+      hp: e.hp,
+      maxHp: e.maxHp,
+      saying: e.saying,
+    };
+  }) as typeof world.entities;
+
+  const priorProjectiles = new Map<string, { x: number; z: number }>();
+  for (let i = 0; i < world.projectiles.length; i++) {
+    const proj = world.projectiles[i]!;
+    priorProjectiles.set(proj.id, { x: proj.x, z: proj.z });
+  }
+  world.projectiles = s.projectiles.map((p) => {
+    const prior = priorProjectiles.get(p.id);
+    const fresh = prior === undefined || isNewProjectile(p.id);
+    return { ...p, x: fresh ? p.x : prior!.x, z: fresh ? p.z : prior!.z };
+  }) as Projectile[];
+
+  const priorCircles = new Map<string, { x: number; z: number }>();
+  for (let i = 0; i < world.healingCircles.length; i++) {
+    const hc = world.healingCircles[i]!;
+    priorCircles.set(hc.id, { x: hc.x, z: hc.z });
+  }
+  world.healingCircles = s.healingCircles.map((h) => {
+    const prior = priorCircles.get(h.id);
+    const fresh = prior === undefined || isNewHealingCircle(h.id);
+    return { ...h, x: fresh ? h.x : prior!.x, z: fresh ? h.z : prior!.z };
+  }) as HealingCircle[];
+
+  // Register the snapshot's authoritative positions as the lerp
+  // targets. tickInterpolation (driven from Scene.svelte's useTask)
+  // pulls the rendered positions above toward these every frame.
+  recordTargets(s);
+
   world.lootBags = s.lootBags.map((b) => ({
     ...b,
     items: b.items.map((i) => ({ ...i })),
