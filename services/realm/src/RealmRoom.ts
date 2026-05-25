@@ -173,6 +173,16 @@ export default class RealmRoom extends Cloudflare.DurableObjectNamespace<RealmRo
         }
       }
 
+      // -- disband flag -------------------------------------------------------
+      // Set to true by the Disband RPC before it clears storage. The
+      // webSocketClose DO callback fires as a *separate* event after
+      // Disband completes — if we don't guard here, onClose sees
+      // `sessionsRef.count === 0` (cleared by Disband) and re-writes
+      // the world back into storage, undoing the deleteAll. The flag
+      // also lets onFetch detect a same-DO-instance rejoin after disband
+      // and start from a clean world rather than stale in-memory state.
+      let disbanded = false;
+
       // -- tick fiber bookkeeping -----------------------------------------
       let tickFiber: ReturnType<typeof Effect.runFork> | null = null;
       const ensureTickRunning = Effect.sync(() => {
@@ -284,6 +294,18 @@ export default class RealmRoom extends Cloudflare.DurableObjectNamespace<RealmRo
                   { discard: true },
                 );
                 yield* sessionsRef.clear;
+
+                // Mark disbanded BEFORE clearing storage so that the
+                // webSocketClose callbacks fired by socket.close() above
+                // (which Cloudflare delivers as separate DO events) do
+                // NOT trigger the "last-disconnect save" in onClose.
+                disbanded = true;
+
+                // Reset the in-memory world so that a same-DO-instance
+                // rejoin (before Cloudflare evicts the DO) starts from a
+                // clean state rather than the just-disbanded world.
+                yield* worldRef.modify(() => createWorld());
+
                 // PR-E: clear persisted world + cancel the alarm so a
                 // dormant disbanded DO doesn't wake up to re-save.
                 // `deleteAll` covers any forgotten side keys and any
@@ -435,16 +457,21 @@ export default class RealmRoom extends Cloudflare.DurableObjectNamespace<RealmRo
           }
           if ((yield* sessionsRef.count) === 0) {
             yield* stopTick;
-            // PR-E: last-disconnect save. The world has just finished
-            // its last tick (stopTick interrupted the loop *before*
-            // this point), so the snapshot here is consistent. Also
-            // drop the periodic alarm — nothing to save while empty.
-            const world = yield* worldRef.get;
-            yield* Effect.gen(function* () {
-              const rs = yield* RandomState;
-              yield* realmStorage.save(world, rs.getSeed());
-            }).pipe(Effect.provide(randomLayer));
-            yield* state.storage.deleteAlarm();
+            // PR-E: last-disconnect save — but NOT after a Disband.
+            // When the realm is disbanded, Disband already called
+            // sessionsRef.clear + state.storage.deleteAll(). The
+            // webSocketClose callbacks that arrive afterward see count
+            // === 0 because Disband cleared the ref, not because the
+            // last player naturally left. Saving here would undo the
+            // deleteAll and resurrect the disbanded world on next load.
+            if (!disbanded) {
+              const world = yield* worldRef.get;
+              yield* Effect.gen(function* () {
+                const rs = yield* RandomState;
+                yield* realmStorage.save(world, rs.getSeed());
+              }).pipe(Effect.provide(randomLayer));
+              yield* state.storage.deleteAlarm();
+            }
           }
 
           // RFC 6455 reserved-code clamp — see commit a877205.
