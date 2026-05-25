@@ -17,6 +17,11 @@ tsconfig.tsbuildinfo
 # Alchemy
 .alchemy/
 
+# Local secrets / env
+.env
+.env.*
+!.env.example
+
 # Agents — ignore everything in .claude EXCEPT shared Claude Skills,
 # which are repo-level architectural assets. Note: gitignore can't
 # re-include a file under an ignored *directory*, so we ignore the

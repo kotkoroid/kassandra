@@ -14,6 +14,7 @@
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
+    "nuke:realms": "bun scripts/nuke-realms.ts",
     "graph": "nx graph",
     "types:check": "nx run-many -t types:check",
     "format": "vp fmt",
