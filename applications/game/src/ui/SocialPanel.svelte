@@ -1,15 +1,21 @@
 <script lang="ts">
   import { socialOpen } from '../social.svelte';
+  import { world } from '../world.svelte';
 
   // Four collapsible sections — Favorites (account-scoped), Party
   // (current realm's owner-anchored party), Group (an ad-hoc roster
   // smaller than the party, e.g. a dungeon team), Blocked (suppressed
-  // chat/visibility). None of these are backed by real sim state yet,
-  // so every section renders "Empty" until the social features
-  // actually land. The taxonomy aligns with ADR-002: Party is
+  // chat/visibility). The taxonomy aligns with ADR-002: Party is
   // per-realm (matches PartyRoom membership); Favorites is the
   // account-wide social graph that won't exist until an
   // account-scoped DO is reintroduced.
+  //
+  // Party is the only live-data section today — it mirrors
+  // `world.players`, which the realm rebuilds from every snapshot.
+  // Players present in the snapshot are by definition connected, so
+  // every entry is "online" until they disconnect (at which point
+  // PartyRoom drops them from the world). Favorites / Group / Blocked
+  // still render "Empty" until their backing state lands.
   interface Entry {
     name: string;
     online: boolean;
@@ -21,12 +27,23 @@
     entries: Entry[];
   }
 
-  const sections: Section[] = [
+  // Skip pre-create_character placeholders (empty name): the player
+  // is technically in the world but hasn't picked an identity yet,
+  // so showing them in the social roster is just visual noise. Sort
+  // by name for deterministic ordering across rerenders.
+  const partyEntries = $derived<Entry[]>(
+    Object.values(world.players)
+      .filter((p) => p.name.trim().length > 0)
+      .map((p) => ({ name: p.name, online: true }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  );
+
+  const sections = $derived<Section[]>([
     { key: 'favorites', label: 'Favorites', entries: [] },
-    { key: 'party', label: 'Party', entries: [] },
+    { key: 'party', label: 'Party', entries: partyEntries },
     { key: 'group', label: 'Group', entries: [] },
     { key: 'blocked', label: 'Blocked', entries: [] },
-  ];
+  ]);
 
   // All sections expanded by default — the inspiration shows every
   // header with a chevron, so let users collapse individually.
