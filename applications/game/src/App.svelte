@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Canvas } from '@threlte/core';
   import { ACESFilmicToneMapping, PCFSoftShadowMap } from 'three';
+  import { setLocalPlayerLocked } from './lib/applySnapshot';
   import { connect, realm } from './realm.svelte';
   import Scene from './scene/Scene.svelte';
   import CharacterCreation from './ui/CharacterCreation.svelte';
@@ -32,6 +33,17 @@
     const me = world.players[world.localPlayerId];
     if (!me) return;
     view = me.name ? 'game' : 'creation';
+  });
+
+  // PR-H: lock the local player slot inside applySnapshot while the
+  // creation form is mounted — otherwise the 20 Hz snapshot stream
+  // overwrites every form mutation on the next tick. The lock is
+  // released the moment the view leaves 'creation'; the snapshot that
+  // follows the create_character SimEvent then rehydrates the player
+  // record with the server's authoritative view (server-confirmed name
+  // / cosmetics / starting pools).
+  $effect(() => {
+    setLocalPlayerLocked(view === 'creation');
   });
 
   // Cap render DPR. Low-poly art doesn't benefit from the 2-3x fill

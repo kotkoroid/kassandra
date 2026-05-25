@@ -27,6 +27,25 @@ import type {
 import { dispatchSimEvent } from '../damageNumbers.svelte';
 import { world } from '../world.svelte';
 
+// PR-H: lock the local player slot while CharacterCreation is mounted.
+// `applySnapshot` runs every tick (20 Hz) and replaces `world.players`
+// wholesale — without this guard, every keystroke / cosmetic change in
+// the creation form is overwritten on the next snapshot. The lock is
+// scoped to the local player only; other players, entities, chat, etc.
+// keep streaming in normally so the rest of the world stays live behind
+// the modal.
+//
+// App.svelte toggles via `setLocalPlayerLocked(true)` when entering the
+// creation view and `setLocalPlayerLocked(false)` after submit (when
+// view transitions to 'game'). The very next snapshot after unlock
+// rehydrates the server's authoritative view of the player, which is
+// the desired hand-off — the form's local edits travel server-side via
+// the `create_character` SimEvent dispatched at submit.
+let localPlayerLocked = false;
+export function setLocalPlayerLocked(locked: boolean): void {
+  localPlayerLocked = locked;
+}
+
 export function applySnapshot(s: Snapshot): void {
   world.tick = s.tick;
   world.time = s.time;
@@ -98,6 +117,18 @@ export function applySnapshot(s: Snapshot): void {
       bug: p.bug ? { ...p.bug } : null,
     };
   }
+
+  // PR-H: while CharacterCreation owns the local player record, preserve
+  // whatever the form has mutated locally instead of clobbering it with
+  // the server's (still-empty) snapshot. Other player records flow
+  // through normally — only the localPlayerId slot is held back.
+  if (localPlayerLocked && world.localPlayerId) {
+    const existing = world.players[world.localPlayerId];
+    if (existing !== undefined) {
+      nextPlayers[world.localPlayerId] = existing;
+    }
+  }
+
   world.players = nextPlayers;
 
   // PR-G5 dev guard: surface (and self-heal) the case where a snapshot's
