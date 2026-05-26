@@ -17,6 +17,7 @@
 //   - `sessionsKv.ts` — the shared `Cloudflare.KVNamespace('Sessions')`
 //     declaration so both Workers bind to the same physical namespace.
 
+export * from './authConfig';
 export * from './realm-rpc-do';
 export * from './session';
 export * from './sessionsKv';

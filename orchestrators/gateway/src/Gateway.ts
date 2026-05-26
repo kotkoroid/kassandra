@@ -3,11 +3,12 @@ import {
   buildSetCookie,
   createSession,
   DEFAULT_TTL_SECONDS,
+  deriveAuthConfig,
   parseSessionCookie,
+  PROD_APP_HOST,
   revokeSession,
   SessionsKvNamespace,
 } from '@kassandra/effect-conventions-foundation-library';
-import { AlchemyContext } from 'alchemy';
 import * as Cloudflare from 'alchemy/Cloudflare';
 import { KVNamespaceBindingLive } from 'alchemy/Cloudflare';
 import * as Effect from 'effect/Effect';
@@ -27,107 +28,39 @@ import {
   CreateSessionSuccess,
 } from './api/sessions/create-session.schema.ts';
 
+// Gateway Worker — `/sessions` cookie endpoints + `/realms` HttpApi.
+//
+// Auth config (cookie domain, secure flag, allowed origins) is derived
+// per-request from the `Host` header via the shared `deriveAuthConfig`
+// helper. See the long comment in authConfig.ts for why this isn't
+// deploy-time env injection.
+
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   fileResponse: () => Effect.die('HttpPlatform.fileResponse not supported'),
   fileWebResponse: () => Effect.die('HttpPlatform.fileWebResponse not supported'),
 });
 
-// PR-G5 cookie/origin config — derived from the incoming request's host
-// at runtime so the same code works in dev (localhost) and prod
-// (api.kassandra.kotkoroid.com) without env files or stage flags.
-//
-//   Dev request: Host=api.localhost:1337 → host-only cookie, no Secure
-//                flag, SameSite=Lax, ALLOW http://localhost:* origins
-//   Prod request: Host=api.kassandra.kotkoroid.com → cookie scoped to
-//                 .kassandra.kotkoroid.com, Secure, SameSite=Strict,
-//                 ALLOW https://kassandra.kotkoroid.com origin
-//
-// The site=eTLD+1 derivation strips the first DNS label off the Host
-// (e.g. api.kassandra.kotkoroid.com → kassandra.kotkoroid.com), then
-// prepends a dot so the cookie scopes across every sibling subdomain.
-// The origin allow-list is built from the same site (https://<site>)
-// plus the static localhost dev set.
-
-const PROD_APP_HOST = 'kassandra.kotkoroid.com';
-const DEV_ORIGINS = [
-  // Bun single-origin entry proxy (`scripts/ws-proxy.ts`) — recommended
-  // dev path; sidesteps alchemy's local-subdomain WS forwarding bug.
-  'http://localhost:5555',
-  // Standalone Vite + its fallback ports (alchemy dev's embedded Vite
-  // holds 5173, so a second Vite lands on 5174+).
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:5176',
-  // alchemy dev's bundled-asset endpoint.
-  'http://game.localhost:1337',
-];
-
-interface RequestScope {
-  isSecure: boolean;
-  cookieDomain: string;
-  allowedOrigins: string[];
-}
-
-function isLocalDevHost(host: string): boolean {
-  // Local dev variants: localhost, *.localhost, anything on the alchemy
-  // local-subdomain proxy port (:1337), and the common Vite dev ports
-  // a *standalone* Vite picks (5173..5176, plus the Bun proxy 5555).
-  if (host === '') return true;
-  const bare = host.split(':')[0]!;
-  if (bare === 'localhost' || bare.endsWith('.localhost')) return true;
-  if (host.includes(':1337')) return true;
-  if (/:5(17[3-6]|555)$/.test(host)) return true;
-  return false;
-}
-
-function deriveScope(hostHeader: string | undefined): RequestScope {
-  const host = (hostHeader ?? '').toLowerCase();
-  if (isLocalDevHost(host)) {
-    return { isSecure: false, cookieDomain: '', allowedOrigins: DEV_ORIGINS };
-  }
-  // Production custom-domain request. Cloudflare terminates TLS for us,
-  // so any non-localhost host means HTTPS at the edge (and we trust the
-  // request's own Host header because Cloudflare's edge sets it). Derive
-  // the cookie's parent site by dropping the first DNS label
-  // (api.kassandra.kotkoroid.com → kassandra.kotkoroid.com); the app
-  // origin we accept is https://<site>.
-  const labels = host.split(':')[0]!.split('.');
-  const site = labels.length >= 3 ? labels.slice(1).join('.') : labels.join('.');
-  return {
-    isSecure: true,
-    cookieDomain: '.' + site,
-    allowedOrigins: [`https://${site}`],
-  };
-}
-
 const decodeSessionRequest = Schema.decodeUnknownEffect(CreateSessionRequest);
 
-class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
+export default class Gateway extends Cloudflare.Worker<Gateway>()(
   'Api',
   {
     main: import.meta.path,
     compatibility: {
       flags: ['nodejs_compat'],
     },
-    // Production custom hostname. Alchemy infers the Cloudflare Zone
-    // from the suffix; the kotkoroid.com zone must already exist on
-    // the account (it does). Dev mode (`alchemy dev`) ignores this
-    // field — LocalWorkerProvider sets `domains: []` unconditionally.
     domain: `api.${PROD_APP_HOST}`,
   },
   Effect.gen(function* () {
     // PR-G5: bind the shared KV namespace that stores opaque session
     // records. Realm yields the SAME `SessionsKvNamespace` constant so
     // both Workers end up bound to one physical KV namespace.
-    // `KVNamespaceBindingLive` is provided below so the `.bind(...)`
-    // call resolves its KVNamespaceBinding requirement.
     const sessionsResource = yield* SessionsKvNamespace;
     const sessionsKv = yield* Cloudflare.KVNamespace.bind(sessionsResource);
 
     // HttpApi router for /realms. CORS is applied by the outer fetch
-    // handler (not a Layer) so it follows the same per-request
-    // host-derived scope that /sessions uses.
+    // handler (not a Layer) so every route goes through one consistent
+    // CSRF/CORS path keyed off the per-request auth config.
     const realmsApi = HttpApiBuilder.group(ApiDefinition, 'Realms', (handlers) =>
       handlers.handle('create-realm', () =>
         Effect.sync(() => new CreateRealmSuccess({ id: crypto.randomUUID() })),
@@ -143,33 +76,34 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        const auth = deriveAuthConfig(request.headers['host']);
         const url = new URL(request.url, 'http://localhost');
         const originHeader = request.headers['origin'] as string | undefined;
-        const hostHeader = request.headers['host'] as string | undefined;
 
-        // Per-request scope derivation. The same Worker binary serves
-        // dev (api.localhost:1337) and prod (api.kassandra.kotkoroid.com);
-        // the request's own Host tells us which.
-        const scope = deriveScope(hostHeader);
+        const sameSite = auth.isSecure ? ('Strict' as const) : ('Lax' as const);
         const cookieOpts = {
-          secure: scope.isSecure,
+          secure: auth.isSecure,
           // Strict over TLS, Lax on localhost — dodges a Chromium quirk
           // where Strict cookies don't attach to ws:// upgrades even
-          // from same-origin pages. Origin allow-list below is the
+          // from same-origin pages. The Origin allow-list below is the
           // substantive CSRF defense; SameSite is belt-and-suspenders.
-          sameSite: scope.isSecure ? ('Strict' as const) : ('Lax' as const),
-          ...(scope.cookieDomain.length > 0 ? { domain: scope.cookieDomain } : {}),
+          sameSite,
+          ...(auth.cookieDomain.length > 0 ? { domain: auth.cookieDomain } : {}),
           maxAge: DEFAULT_TTL_SECONDS,
         };
         const clearCookieOpts = {
-          secure: scope.isSecure,
-          sameSite: scope.isSecure ? ('Strict' as const) : ('Lax' as const),
-          ...(scope.cookieDomain.length > 0 ? { domain: scope.cookieDomain } : {}),
+          secure: auth.isSecure,
+          sameSite,
+          ...(auth.cookieDomain.length > 0 ? { domain: auth.cookieDomain } : {}),
         };
+
+        // Echo the request's Origin when allow-listed, otherwise fall
+        // back to the first allowed origin so the CORS response is
+        // well-formed even on rejected requests.
         const allowed =
-          originHeader && scope.allowedOrigins.includes(originHeader)
+          originHeader && auth.allowedOrigins.includes(originHeader)
             ? originHeader
-            : scope.allowedOrigins[0]!;
+            : auth.allowedOrigins[0]!;
         const cors = {
           'Access-Control-Allow-Origin': allowed,
           'Access-Control-Allow-Credentials': 'true',
@@ -177,38 +111,26 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
           'Access-Control-Allow-Headers': 'content-type',
           Vary: 'Origin',
         };
-        // Production CSRF guard. Only enforced when scope.isSecure=true
-        // (i.e. a real HTTPS Cloudflare edge request, not localhost dev).
-        // In local dev the proxy chain (browser → ws-proxy → alchemy)
-        // can mangle, strip, or rewrite the Origin header in ways that
-        // make an exact-match check unreliable. Localhost CSRF is not a
-        // real threat, so we skip the check there entirely.
+        // Production CSRF guard. Only enforced when isSecure=true
+        // (real HTTPS Cloudflare edge request). In local dev the proxy
+        // chain (browser → ws-proxy → alchemy) can mangle or rewrite
+        // the Origin header in ways that make an exact-match check
+        // unreliable; localhost CSRF is not a real threat, so we skip
+        // the check there entirely.
         const originAllowed = (h: string | undefined): boolean =>
-          typeof h === 'string' && scope.allowedOrigins.includes(h);
+          typeof h === 'string' && auth.allowedOrigins.includes(h);
 
         // ----- Global CORS preflight -----
-        // All credentialed endpoints (/sessions, /realms, …) trigger an
-        // OPTIONS preflight from the browser. Handle it once here so each
-        // route branch doesn't have to repeat it. The per-request `cors`
-        // object already holds the right Allow-Origin for this request.
+        // All credentialed endpoints (/sessions, /realms, …) trigger
+        // an OPTIONS preflight. Handle it once here so each route
+        // branch doesn't have to repeat it.
         if (request.method === 'OPTIONS') {
           return HttpServerResponse.empty({ status: 204, headers: cors });
         }
 
         // ----- /sessions: cookie-flow endpoints -----
         if (url.pathname === '/sessions') {
-          // Temporary dev diagnostic — log once per request so the
-          // alchemy terminal shows exactly what the Gateway receives.
-          // Remove after the 403 investigation is closed.
-          if (!scope.isSecure) {
-            console.log('[Gateway /sessions]', {
-              method: request.method,
-              origin: originHeader ?? '(none)',
-              host: hostHeader ?? '(none)',
-            });
-          }
-
-          if (scope.isSecure && !originAllowed(originHeader)) {
+          if (auth.isSecure && !originAllowed(originHeader)) {
             return HttpServerResponse.text('Forbidden', { status: 403, headers: cors });
           }
 
@@ -251,24 +173,10 @@ class GatewayWorker extends Cloudflare.Worker<GatewayWorker>()(
         }
 
         // Everything else: delegate to the HttpApi router (currently
-        // just /realms). Inject CORS headers onto the response here —
-        // HttpRouter.cors as a provided Layer doesn't fire for these
-        // requests, so we apply them the same way /sessions does.
+        // just /realms). Inject CORS headers onto the response here.
         const apiResponse = yield* httpApiFetch;
         return HttpServerResponse.setHeaders(cors)(apiResponse);
       }),
     };
   }).pipe(Effect.provide(KVNamespaceBindingLive)),
 ) {}
-
-// Public URL of this Worker. In dev, alchemy's LocalWorkerProvider
-// serves under http://api.localhost:<port>; in deploy the custom
-// domain is live. The stack file just reads `.url` and never has to
-// know which mode it's in.
-const PROD_URL = `https://api.${PROD_APP_HOST}`;
-
-export default Effect.gen(function* () {
-  const { dev } = yield* AlchemyContext;
-  const worker = yield* GatewayWorker;
-  return { url: dev ? worker.url : PROD_URL };
-});
